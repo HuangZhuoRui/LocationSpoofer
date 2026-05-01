@@ -11,9 +11,6 @@ import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam
 import org.json.JSONObject
 import java.io.File
-import java.lang.reflect.InvocationHandler
-import java.lang.reflect.Method
-import java.lang.reflect.Proxy
 import java.util.ArrayList
 
 class LocationHooker : IXposedHookLoadPackage {
@@ -30,7 +27,7 @@ class LocationHooker : IXposedHookLoadPackage {
             "com.autonavi.minimap",     // 高德地图
             "com.tencent.map",          // 腾讯地图
             "com.android.systemui",     // 系统UI（覆盖系统级定位弹窗）
-            "com.google.android.gms",   // GooglePlay服务（覆盖Fused Location Provider）
+            "com.google.android.gms",   // Google Play 服务（覆盖 Fused Location Provider）
         )
 
         // 需要返回 GCJ-02 的应用包名（高德/腾讯等国内地图生态）
@@ -77,12 +74,10 @@ class LocationHooker : IXposedHookLoadPackage {
         val configActive = flags.active
         val hookAllPackages = globalMode || configActive
 
-        // 系统进程：默认只Hook Location API，开启全局模式时追加网络/基站接管与底层上报阻断
+        // 系统进程：默认只Hook Location API，开启全局模式时追加网络/基站接管
         if (SYSTEM_PACKAGES.contains(pkg)) {
-            val useGcj = false
-            hookLocationAPIs(lpparam.classLoader, useGcj)
-            hookLocationManagerOverrides(lpparam.classLoader, useGcj)
-            hookSystemLocationService(lpparam.classLoader, useGcj)
+            hookLocationAPIs(lpparam.classLoader, useGcj = false)
+            hookLocationManagerOverrides(lpparam.classLoader, useGcj = false)
             if (hookAllPackages) {
                 hookNetworkAndCellAPIs(lpparam.classLoader)
                 hookBluetoothLE(lpparam.classLoader)
@@ -103,9 +98,6 @@ class LocationHooker : IXposedHookLoadPackage {
         val useGcj = isGcjPackage(pkg)
         hookLocationAPIs(lpparam.classLoader, useGcj)
         hookLocationManagerOverrides(lpparam.classLoader, useGcj)
-        hookLocationListeners(lpparam.classLoader, useGcj)
-        hookGnssAndNmea(lpparam.classLoader)
-        hookAMapListeners(lpparam.classLoader, useGcj)
         hookNetworkAndCellAPIs(lpparam.classLoader)
         hookBluetoothLE(lpparam.classLoader)
     }
@@ -167,244 +159,6 @@ class LocationHooker : IXposedHookLoadPackage {
             XposedHelpers.findClassIfExists(name, classLoader)
         } catch (e: Throwable) {
             null
-        }
-    }
-
-    private fun modifyLocationObjectFields(
-        location: Location,
-        config: JSONObject,
-        useGcj: Boolean
-    ) {
-        val (baseLat, baseLng) = resolveBaseLatLng(
-            config,
-            location.latitude,
-            location.longitude,
-            useGcj
-        )
-        val (lat, lng) = getJitteredLocation(baseLat, baseLng)
-        val accuracy = getJitteredAccuracy()
-        val bearing = config.optDouble("sim_bearing", location.bearing.toDouble()).toFloat()
-
-        try {
-            XposedHelpers.setDoubleField(location, "mLatitude", lat)
-            XposedHelpers.setDoubleField(location, "mLongitude", lng)
-            XposedHelpers.setFloatField(location, "mHorizontalAccuracyMeters", accuracy)
-            XposedHelpers.setFloatField(location, "mBearing", bearing)
-            XposedHelpers.setBooleanField(location, "mMock", false)
-            XposedHelpers.setBooleanField(location, "mIsFromMockProvider", false)
-            val extras = XposedHelpers.callMethod(location, "getExtras") as? android.os.Bundle
-            extras?.remove("mockLocation")
-            extras?.remove("isMock")
-        } catch (e: Throwable) {
-            // 兼容性回退：通过公开API修改
-            location.latitude = lat
-            location.longitude = lng
-            location.accuracy = accuracy
-            location.bearing = bearing
-            if (android.os.Build.VERSION.SDK_INT >= 31) {
-                location.isMock = false
-            }
-        }
-    }
-
-    // ★ 路径三：系统级真实位置上报阻断
-    private fun hookSystemLocationService(classLoader: ClassLoader, useGcj: Boolean) {
-        try {
-            // 拦截Android系统底层位置服务提供者的上报入口，从源头阻断硬件真实数据的传递
-            XposedHelpers.findAndHookMethod(
-                "com.android.server.location.provider.LocationProviderManager",
-                classLoader,
-                "onReportLocation",
-                "android.location.Location",
-                object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
-                        val config = readConfig()
-                        if (config != null && config.optBoolean("active", false)) {
-                            val originalLocation = param.args[0] as? Location ?: return
-                            modifyLocationObjectFields(originalLocation, config, useGcj)
-                        }
-                    }
-                }
-            )
-        } catch (e: Throwable) {
-            // Android版本差异可能导致类或方法不存在，静默处理
-        }
-
-        try {
-            // 兼容老版本Android底层的上报接口
-            XposedHelpers.findAndHookMethod(
-                "com.android.server.location.LocationManagerService",
-                classLoader,
-                "reportLocation",
-                "android.location.Location",
-                Boolean::class.javaPrimitiveType,
-                object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
-                        val config = readConfig()
-                        if (config != null && config.optBoolean("active", false)) {
-                            val originalLocation = param.args[0] as? Location ?: return
-                            modifyLocationObjectFields(originalLocation, config, useGcj)
-                        }
-                    }
-                }
-            )
-        } catch (e: Throwable) {
-        }
-    }
-
-    // ★ 路径一：彻底拦截位置回调（动态代理绕过直接读取字段）
-    private fun hookLocationListeners(classLoader: ClassLoader, useGcj: Boolean) {
-        val listenerClass =
-            findClassIfExists("android.location.LocationListener", classLoader) ?: return
-
-        val requestLocationUpdatesHook = object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
-                val config = readConfig()
-                if (config == null || !config.optBoolean("active", false)) return
-
-                // 遍历参数，寻找 LocationListener 并将其替换为动态代理
-                for (i in param.args.indices) {
-                    val arg = param.args[i]
-                    if (arg != null && listenerClass.isAssignableFrom(arg.javaClass)) {
-                        val originalListener = arg
-                        val proxyHandler = InvocationHandler { _, method, args ->
-                            if (method.name == "onLocationChanged" && args != null && args.isNotEmpty()) {
-                                val locationArg = args[0]
-                                if (locationArg is Location) {
-                                    // 在真实回调到达应用代码之前，强行篡改Location对象的底层字段
-                                    modifyLocationObjectFields(locationArg, config, useGcj)
-                                } else if (locationArg is List<*>) {
-                                    // 适配Android 12+的批量位置回调接口
-                                    locationArg.forEach { loc ->
-                                        if (loc is Location) {
-                                            modifyLocationObjectFields(loc, config, useGcj)
-                                        }
-                                    }
-                                }
-                            }
-                            method.invoke(originalListener, *args)
-                        }
-
-                        val proxy = Proxy.newProxyInstance(
-                            classLoader,
-                            arrayOf(listenerClass),
-                            proxyHandler
-                        )
-                        param.args[i] = proxy
-                    }
-                }
-            }
-        }
-
-        try {
-            // 拦截所有重载的 requestLocationUpdates 方法
-            val locationManagerClass =
-                XposedHelpers.findClass("android.location.LocationManager", classLoader)
-            for (method in locationManagerClass.declaredMethods) {
-                if (method.name == "requestLocationUpdates" || method.name == "requestSingleUpdate") {
-                    XposedBridge.hookMethod(method, requestLocationUpdatesHook)
-                }
-            }
-        } catch (e: Throwable) {
-            XposedBridge.log(e)
-        }
-    }
-
-    // ★ 路径二：全面屏蔽GNSS与NMEA卫星真实数据
-    private fun hookGnssAndNmea(classLoader: ClassLoader) {
-        val configCheckHook = object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
-                val config = readConfig()
-                if (config != null && config.optBoolean("active", false)) {
-                    // 直接返回true，欺骗应用认为注册监听器成功，但实际并不向系统服务注册
-                    // 从而彻底切断真实卫星信噪比(SNR)与方位角数据向地图SDK的传递
-                    param.result = true
-                }
-            }
-        }
-
-        try {
-            val locationManagerClass =
-                XposedHelpers.findClass("android.location.LocationManager", classLoader)
-            for (method in locationManagerClass.declaredMethods) {
-                when (method.name) {
-                    "registerGnssStatusCallback",
-                    "addNmeaListener",
-                    "addGpsStatusListener" -> {
-                        XposedBridge.hookMethod(method, configCheckHook)
-                    }
-                }
-            }
-        } catch (e: Throwable) {
-            XposedBridge.log(e)
-        }
-    }
-
-    // ★ 路径四：高德SDK持续定位回调拦截
-    private fun hookAMapListeners(classLoader: ClassLoader, useGcj: Boolean) {
-        val amapListenerClass =
-            findClassIfExists("com.amap.api.location.AMapLocationListener", classLoader) ?: return
-
-        try {
-            XposedHelpers.findAndHookMethod(
-                "com.amap.api.location.AMapLocationClient",
-                classLoader,
-                "setLocationListener",
-                amapListenerClass,
-                object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
-                        val config = readConfig()
-                        if (config == null || !config.optBoolean("active", false)) return
-
-                        val originalListener = param.args[0] ?: return
-                        val proxyHandler = InvocationHandler { _, method, args ->
-                            if (method.name == "onLocationChanged" && args != null && args.isNotEmpty()) {
-                                val amapLocation = args[0]
-                                if (amapLocation != null) {
-                                    val (baseLat, baseLng) = resolveBaseLatLng(
-                                        config,
-                                        0.0,
-                                        0.0,
-                                        useGcj
-                                    )
-                                    val (lat, lng) = getJitteredLocation(baseLat, baseLng)
-                                    val accuracy = getJitteredAccuracy()
-
-                                    // 深度篡改高德自定义Location对象的底层字段
-                                    try {
-                                        XposedHelpers.setDoubleField(amapLocation, "latitude", lat)
-                                        XposedHelpers.setDoubleField(amapLocation, "longitude", lng)
-                                        XposedHelpers.setFloatField(
-                                            amapLocation,
-                                            "accuracy",
-                                            accuracy
-                                        )
-                                        XposedHelpers.setObjectField(amapLocation, "mockData", null)
-                                        XposedHelpers.setIntField(amapLocation, "mockFlag", 0)
-                                        XposedHelpers.setIntField(amapLocation, "mockType", 0)
-                                        XposedHelpers.setBooleanField(
-                                            amapLocation,
-                                            "isMocked",
-                                            false
-                                        )
-                                        XposedHelpers.setIntField(amapLocation, "errorCode", 0)
-                                    } catch (e: Throwable) {
-                                    }
-                                }
-                            }
-                            method.invoke(originalListener, *args)
-                        }
-
-                        val proxy = Proxy.newProxyInstance(
-                            classLoader,
-                            arrayOf(amapListenerClass),
-                            proxyHandler
-                        )
-                        param.args[0] = proxy
-                    }
-                }
-            )
-        } catch (e: Throwable) {
         }
     }
 
@@ -627,8 +381,7 @@ class LocationHooker : IXposedHookLoadPackage {
                     }
                 }
             }
-            val amapLocationClass =
-                findClassIfExists("com.amap.api.location.AMapLocation", classLoader)
+            val amapLocationClass = findClassIfExists("com.amap.api.location.AMapLocation", classLoader)
             if (amapLocationClass != null) {
                 XposedHelpers.findAndHookMethod(
                     amapLocationClass,
@@ -825,8 +578,7 @@ class LocationHooker : IXposedHookLoadPackage {
             override fun beforeHookedMethod(param: MethodHookParam) {
                 val config = readConfig() ?: return
                 if (!config.optBoolean("active", false)) return
-                val provider = param.args.firstOrNull() as? String
-                    ?: android.location.LocationManager.GPS_PROVIDER
+                val provider = param.args.firstOrNull() as? String ?: android.location.LocationManager.GPS_PROVIDER
                 param.result = buildFakeLocation(config, provider, useGcj)
             }
         }
@@ -835,8 +587,7 @@ class LocationHooker : IXposedHookLoadPackage {
             override fun beforeHookedMethod(param: MethodHookParam) {
                 val config = readConfig() ?: return
                 if (!config.optBoolean("active", false)) return
-                param.result =
-                    buildFakeLocation(config, android.location.LocationManager.GPS_PROVIDER, useGcj)
+                param.result = buildFakeLocation(config, android.location.LocationManager.GPS_PROVIDER, useGcj)
             }
         }
 
@@ -850,7 +601,6 @@ class LocationHooker : IXposedHookLoadPackage {
                 val location = buildFakeLocation(config, provider, useGcj)
 
                 val executor = param.args.getOrNull(2) as? java.util.concurrent.Executor
-
                 @Suppress("UNCHECKED_CAST")
                 val consumer = param.args.getOrNull(3) as? java.util.function.Consumer<Location>
                 if (executor != null && consumer != null) {
@@ -897,8 +647,7 @@ class LocationHooker : IXposedHookLoadPackage {
         } catch (e: Throwable) {
         }
 
-        val locationRequestClass =
-            findClassIfExists("android.location.LocationRequest", classLoader)
+        val locationRequestClass = findClassIfExists("android.location.LocationRequest", classLoader)
         if (locationRequestClass != null) {
             try {
                 XposedHelpers.findAndHookMethod(
@@ -913,6 +662,67 @@ class LocationHooker : IXposedHookLoadPackage {
                 )
             } catch (e: Throwable) {
             }
+        }
+
+        // 拦截底层的 LocationListener 回调接收器
+        // 涵盖 Android 11- 的 ListenerTransport 和 Android 12+ 的 LocationListenerTransport
+        val onLocationChangedHook = object : XC_MethodHook() {
+            override fun beforeHookedMethod(param: MethodHookParam) {
+                val config = readConfig()
+                if (config != null && config.optBoolean("active", false)) {
+                    val args = param.args
+                    if (args.isNotEmpty()) {
+                        val firstArg = args[0]
+                        if (firstArg is android.location.Location) {
+                            // 单个 Location
+                            param.args[0] = buildFakeLocation(config, android.location.LocationManager.GPS_PROVIDER, useGcj)
+                        } else if (firstArg is java.util.List<*>) {
+                            // Android 12+ 引入的批量回调 List<Location>
+                            val fakeList = java.util.ArrayList<android.location.Location>()
+                            fakeList.add(buildFakeLocation(config, android.location.LocationManager.GPS_PROVIDER, useGcj))
+                            param.args[0] = fakeList
+                        }
+                    }
+                }
+            }
+        }
+
+        try {
+            val listenerTransportClass = XposedHelpers.findClassIfExists(
+                "android.location.LocationManager\$ListenerTransport", classLoader
+            )
+            if (listenerTransportClass != null) {
+                XposedHelpers.findAndHookMethod(
+                    listenerTransportClass,
+                    "onLocationChanged",
+                    android.location.Location::class.java,
+                    onLocationChangedHook
+                )
+            }
+        } catch (e: Throwable) {
+        }
+
+        try {
+            val locationListenerTransportClass = XposedHelpers.findClassIfExists(
+                "android.location.LocationManager\$LocationListenerTransport", classLoader
+            )
+            if (locationListenerTransportClass != null) {
+                XposedHelpers.findAndHookMethod(
+                    locationListenerTransportClass,
+                    "onLocationChanged",
+                    android.location.Location::class.java,
+                    onLocationChangedHook
+                )
+                try {
+                    XposedHelpers.findAndHookMethod(
+                        locationListenerTransportClass,
+                        "onLocationChanged",
+                        java.util.List::class.java,
+                        onLocationChangedHook
+                    )
+                } catch (e: Throwable) {}
+            }
+        } catch (e: Throwable) {
         }
     }
 
@@ -1210,13 +1020,7 @@ class LocationHooker : IXposedHookLoadPackage {
 
                     "getAllCellInfo" -> {
                         param.result =
-                            buildFakeCellInfoList(
-                                classLoader,
-                                snapshot.mcc,
-                                snapshot.mnc,
-                                ids,
-                                snapshot.networkType
-                            )
+                            buildFakeCellInfoList(classLoader, snapshot.mcc, snapshot.mnc, ids, snapshot.networkType)
                     }
 
                     "getNeighboringCellInfo" -> param.result = ArrayList<Any>()
@@ -1243,6 +1047,152 @@ class LocationHooker : IXposedHookLoadPackage {
                 "getNeighboringCellInfo",
                 cellHook
             )
+        } catch (e: Throwable) {
+            XposedBridge.log(e)
+        }
+
+        // 6. 拦截主动异步请求基站 (Android 10+ requestCellInfoUpdate)
+        try {
+            val cellInfoCallbackClass = XposedHelpers.findClassIfExists(
+                "android.telephony.TelephonyManager\$CellInfoCallback", 
+                classLoader
+            )
+            if (cellInfoCallbackClass != null) {
+                XposedHelpers.findAndHookMethod(
+                    "android.telephony.TelephonyManager",
+                    classLoader,
+                    "requestCellInfoUpdate",
+                    java.util.concurrent.Executor::class.java,
+                    cellInfoCallbackClass,
+                    object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            val config = readConfig()
+                            if (config != null && config.optBoolean("active", false)) {
+                                val executor = param.args[0] as? java.util.concurrent.Executor
+                                val callback = param.args[1]
+                                if (executor != null && callback != null) {
+                                    executor.execute {
+                                        try {
+                                            XposedHelpers.callMethod(callback, "onCellInfo", java.util.ArrayList<Any>())
+                                        } catch (e: Throwable) {
+                                            XposedBridge.log(e)
+                                        }
+                                    }
+                                }
+                                param.result = null // 拦截原方法调用
+                            }
+                        }
+                    }
+                )
+            }
+        } catch (e: Throwable) {
+            XposedBridge.log(e)
+        }
+
+        // 7. 拦截被动基站监听 (Android 11- PhoneStateListener)
+        try {
+            val phoneStateListenerClass = XposedHelpers.findClassIfExists(
+                "android.telephony.PhoneStateListener", 
+                classLoader
+            )
+            if (phoneStateListenerClass != null) {
+                XposedHelpers.findAndHookMethod(
+                    "android.telephony.TelephonyManager",
+                    classLoader,
+                    "listen",
+                    phoneStateListenerClass,
+                    Int::class.javaPrimitiveType,
+                    object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            val config = readConfig()
+                            if (config != null && config.optBoolean("active", false)) {
+                                var events = param.args[1] as Int
+                                // PhoneStateListener.LISTEN_CELL_LOCATION = 16
+                                // PhoneStateListener.LISTEN_CELL_INFO = 1024
+                                events = events and 16.inv()
+                                events = events and 1024.inv()
+                                param.args[1] = events
+                            }
+                        }
+                    }
+                )
+            }
+        } catch (e: Throwable) {
+            XposedBridge.log(e)
+        }
+
+        // 8. 拦截被动基站监听 (Android 12+ TelephonyCallback)
+        try {
+            val telephonyCallbackClass = XposedHelpers.findClassIfExists(
+                "android.telephony.TelephonyCallback",
+                classLoader
+            )
+            if (telephonyCallbackClass != null) {
+                val hookedTelephonyCallbackClasses = mutableSetOf<Class<*>>()
+                
+                XposedHelpers.findAndHookMethod(
+                    "android.telephony.TelephonyManager",
+                    classLoader,
+                    "registerTelephonyCallback",
+                    java.util.concurrent.Executor::class.java,
+                    telephonyCallbackClass,
+                    object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            val config = readConfig()
+                            if (config == null || !config.optBoolean("active", false)) return
+
+                            val callbackObj = param.args[1] ?: return
+                            val callbackClass = callbackObj.javaClass
+
+                            synchronized(hookedTelephonyCallbackClasses) {
+                                if (hookedTelephonyCallbackClasses.contains(callbackClass)) return
+                                hookedTelephonyCallbackClasses.add(callbackClass)
+                                
+                                try {
+                                    XposedHelpers.findAndHookMethod(
+                                        callbackClass,
+                                        "onCellInfoChanged",
+                                        java.util.List::class.java,
+                                        object : XC_MethodHook() {
+                                            override fun beforeHookedMethod(innerParam: MethodHookParam) {
+                                                if (readConfig()?.optBoolean("active", false) == true) {
+                                                    innerParam.args[0] = java.util.ArrayList<Any>()
+                                                }
+                                            }
+                                        }
+                                    )
+                                } catch (e: Throwable) {
+                                    // Ignore if method not implemented
+                                }
+
+                                try {
+                                    val cellLocationClass = XposedHelpers.findClassIfExists("android.telephony.CellLocation", classLoader)
+                                    if (cellLocationClass != null) {
+                                        XposedHelpers.findAndHookMethod(
+                                            callbackClass,
+                                            "onCellLocationChanged",
+                                            cellLocationClass,
+                                            object : XC_MethodHook() {
+                                                override fun beforeHookedMethod(innerParam: MethodHookParam) {
+                                                    val cfg = readConfig()
+                                                    if (cfg?.optBoolean("active", false) == true) {
+                                                        val lat = cfg.optDouble("lat", 0.0)
+                                                        val lng = cfg.optDouble("lng", 0.0)
+                                                        val ids = generateCellIds(lat, lng)
+                                                        innerParam.args[0] = buildFakeGsmCellLocation(classLoader, ids.lac, ids.cid)
+                                                    }
+                                                }
+                                            }
+                                        )
+                                    }
+                                } catch (e: Throwable) {
+                                    // Ignore if method not implemented
+                                }
+                            }
+                        }
+                    }
+                )
+            }
         } catch (e: Throwable) {
             XposedBridge.log(e)
         }
@@ -1503,8 +1453,7 @@ class LocationHooker : IXposedHookLoadPackage {
                         val mccIdx = it.getColumnIndex("mcc")
                         val mncIdx = it.getColumnIndex("mnc")
 
-                        val rawNetworkType =
-                            if (networkTypeIdx != -1) it.getInt(networkTypeIdx) else snapshot.networkType
+                        val rawNetworkType = if (networkTypeIdx != -1) it.getInt(networkTypeIdx) else snapshot.networkType
                         val mcc = if (mccIdx != -1) it.getInt(mccIdx) else snapshot.mcc
                         val mnc = if (mncIdx != -1) it.getInt(mncIdx) else snapshot.mnc
 
