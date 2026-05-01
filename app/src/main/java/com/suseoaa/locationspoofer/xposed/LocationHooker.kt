@@ -914,6 +914,66 @@ class LocationHooker : IXposedHookLoadPackage {
             } catch (e: Throwable) {
             }
         }
+
+        // 拦截底层的 LocationListener 回调接收器
+        // 涵盖 Android 11- 的 ListenerTransport 和 Android 12+ 的 LocationListenerTransport
+        val onLocationChangedHook = object : XC_MethodHook() {
+            override fun beforeHookedMethod(param: MethodHookParam) {
+                val config = readConfig()
+                if (config != null && config.optBoolean("active", false)) {
+                    val args = param.args
+                    if (args.isNotEmpty()) {
+                        val firstArg = args[0]
+                        if (firstArg is android.location.Location) {
+                            // 单个 Location
+                            param.args[0] = buildFakeLocation(config, android.location.LocationManager.GPS_PROVIDER, useGcj)
+                        } else if (firstArg is java.util.List<*>) {
+                            // Android 12+ 引入的批量回调 List<Location>
+                            val fakeList = java.util.ArrayList<android.location.Location>()
+                            fakeList.add(buildFakeLocation(config, android.location.LocationManager.GPS_PROVIDER, useGcj))
+                            param.args[0] = fakeList
+                        }
+                    }
+                }
+            }
+        }
+        try {
+            val listenerTransportClass = XposedHelpers.findClassIfExists(
+                "android.location.LocationManager\$ListenerTransport", classLoader
+            )
+            if (listenerTransportClass != null) {
+                XposedHelpers.findAndHookMethod(
+                    listenerTransportClass,
+                    "onLocationChanged",
+                    android.location.Location::class.java,
+                    onLocationChangedHook
+                )
+            }
+        } catch (e: Throwable) {
+        }
+        try {
+            val locationListenerTransportClass = XposedHelpers.findClassIfExists(
+                "android.location.LocationManager\$LocationListenerTransport", classLoader
+            )
+            if (locationListenerTransportClass != null) {
+                XposedHelpers.findAndHookMethod(
+                    locationListenerTransportClass,
+                    "onLocationChanged",
+                    android.location.Location::class.java,
+                    onLocationChangedHook
+                )
+                try {
+                    XposedHelpers.findAndHookMethod(
+                        locationListenerTransportClass,
+                        "onLocationChanged",
+                        java.util.List::class.java,
+                        onLocationChangedHook
+                    )
+                } catch (e: Throwable) {}
+            }
+        } catch (e: Throwable) {
+        }
+        
     }
 
     private fun buildFakeLocation(config: JSONObject, provider: String, useGcj: Boolean): Location {
@@ -1246,8 +1306,152 @@ class LocationHooker : IXposedHookLoadPackage {
         } catch (e: Throwable) {
             XposedBridge.log(e)
         }
+
+        // 6. 拦截主动异步请求基站 (Android 10+ requestCellInfoUpdate)
+        try {
+            val cellInfoCallbackClass = XposedHelpers.findClassIfExists(
+                "android.telephony.TelephonyManager\$CellInfoCallback", 
+                classLoader
+            )
+            if (cellInfoCallbackClass != null) {
+                XposedHelpers.findAndHookMethod(
+                    "android.telephony.TelephonyManager",
+                    classLoader,
+                    "requestCellInfoUpdate",
+                    java.util.concurrent.Executor::class.java,
+                    cellInfoCallbackClass,
+                    object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            val config = readConfig()
+                            if (config != null && config.optBoolean("active", false)) {
+                                val executor = param.args[0] as? java.util.concurrent.Executor
+                                val callback = param.args[1]
+                                if (executor != null && callback != null) {
+                                    executor.execute {
+                                        try {
+                                            XposedHelpers.callMethod(callback, "onCellInfo", java.util.ArrayList<Any>())
+                                        } catch (e: Throwable) {
+                                            XposedBridge.log(e)
+                                        }
+                                    }
+                                }
+                                param.result = null // 拦截原方法调用
+                            }
+                        }
+                    }
+                )
+            }
+        } catch (e: Throwable) {
+            XposedBridge.log(e)
+        }
+        // 7. 拦截被动基站监听 (Android 11- PhoneStateListener)
+        try {
+            val phoneStateListenerClass = XposedHelpers.findClassIfExists(
+                "android.telephony.PhoneStateListener", 
+                classLoader
+            )
+            if (phoneStateListenerClass != null) {
+                XposedHelpers.findAndHookMethod(
+                    "android.telephony.TelephonyManager",
+                    classLoader,
+                    "listen",
+                    phoneStateListenerClass,
+                    Int::class.javaPrimitiveType,
+                    object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            val config = readConfig()
+                            if (config != null && config.optBoolean("active", false)) {
+                                var events = param.args[1] as Int
+                                // PhoneStateListener.LISTEN_CELL_LOCATION = 16
+                                // PhoneStateListener.LISTEN_CELL_INFO = 1024
+                                events = events and 16.inv()
+                                events = events and 1024.inv()
+                                param.args[1] = events
+                            }
+                        }
+                    }
+                )
+            }
+        } catch (e: Throwable) {
+            XposedBridge.log(e)
+        }
+        // 8. 拦截被动基站监听 (Android 12+ TelephonyCallback)
+        try {
+            val telephonyCallbackClass = XposedHelpers.findClassIfExists(
+                "android.telephony.TelephonyCallback",
+                classLoader
+            )
+            if (telephonyCallbackClass != null) {
+                val hookedTelephonyCallbackClasses = mutableSetOf<Class<*>>()
+                
+                XposedHelpers.findAndHookMethod(
+                    "android.telephony.TelephonyManager",
+                    classLoader,
+                    "registerTelephonyCallback",
+                    java.util.concurrent.Executor::class.java,
+                    telephonyCallbackClass,
+                    object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            val config = readConfig()
+                            if (config == null || !config.optBoolean("active", false)) return
+                            val callbackObj = param.args[1] ?: return
+                            val callbackClass = callbackObj.javaClass
+                            synchronized(hookedTelephonyCallbackClasses) {
+                                if (hookedTelephonyCallbackClasses.contains(callbackClass)) return
+                                hookedTelephonyCallbackClasses.add(callbackClass)
+                                
+                                try {
+                                    XposedHelpers.findAndHookMethod(
+                                        callbackClass,
+                                        "onCellInfoChanged",
+                                        java.util.List::class.java,
+                                        object : XC_MethodHook() {
+                                            override fun beforeHookedMethod(innerParam: MethodHookParam) {
+                                                if (readConfig()?.optBoolean("active", false) == true) {
+                                                    innerParam.args[0] = java.util.ArrayList<Any>()
+                                                }
+                                            }
+                                        }
+                                    )
+                                } catch (e: Throwable) {
+                                    // Ignore if method not implemented
+                                }
+                                try {
+                                    val cellLocationClass = XposedHelpers.findClassIfExists("android.telephony.CellLocation", classLoader)
+                                    if (cellLocationClass != null) {
+                                        XposedHelpers.findAndHookMethod(
+                                            callbackClass,
+                                            "onCellLocationChanged",
+                                            cellLocationClass,
+                                            object : XC_MethodHook() {
+                                                override fun beforeHookedMethod(innerParam: MethodHookParam) {
+                                                    val cfg = readConfig()
+                                                    if (cfg?.optBoolean("active", false) == true) {
+                                                        val lat = cfg.optDouble("lat", 0.0)
+                                                        val lng = cfg.optDouble("lng", 0.0)
+                                                        val ids = generateCellIds(lat, lng)
+                                                        innerParam.args[0] = buildFakeGsmCellLocation(classLoader, ids.lac, ids.cid)
+                                                    }
+                                                }
+                                            }
+                                        )
+                                    }
+                                } catch (e: Throwable) {
+                                    // Ignore if method not implemented
+                                }
+                            }
+                        }
+                    }
+                )
+            }
+        } catch (e: Throwable) {
+            XposedBridge.log(e)
+        }
+        
     }
 
+
+    
     /**
      * 拦截蓝牙 BLE 扫描结果，防止通过附近 BLE 信标定位。
      * 当模拟激活时，返回空列表，屏蔽所有 iBeacon / Eddystone 信标探测。
