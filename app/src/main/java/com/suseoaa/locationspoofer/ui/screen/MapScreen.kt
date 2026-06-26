@@ -226,7 +226,8 @@ fun FullScreenMapPage(
                 isManual = isManual,
                 onBack = onClose,
                 canUndo = stage == RoutePlanStage.SELECTING && routePoints.isNotEmpty(),
-                onUndo = { viewModel.undoLastRoutePoint() }
+                onUndo = { viewModel.undoLastRoutePoint() },
+                onReset = { viewModel.resetRoutePoint() }
             )
             // 搜索栏
             if (stage == RoutePlanStage.SELECTING || stage == RoutePlanStage.IDLE) {
@@ -591,7 +592,8 @@ private fun TopBar(
     isManual: Boolean,
     onBack: () -> Unit,
     canUndo: Boolean,
-    onUndo: () -> Unit
+    onUndo: () -> Unit,
+    onReset: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -638,13 +640,25 @@ private fun TopBar(
         }
 
         AnimatedVisibility(visible = canUndo) {
-            MapFab(
-                icon = Icons.AutoMirrored.Rounded.Undo,
-                contentDescription = stringResource(R.string.undo),
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onBackground,
-                onClick = onUndo
-            )
+            Row (
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                MapFab(
+                    icon = Icons.AutoMirrored.Rounded.Undo,
+                    contentDescription = stringResource(R.string.undo),
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.onBackground,
+                    onClick = onUndo
+                )
+
+                MapFab(
+                    icon = Icons.Rounded.Delete,
+                    contentDescription = "重置",
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.error,
+                    onClick = onReset
+                )
+            }
         }
     }
 }

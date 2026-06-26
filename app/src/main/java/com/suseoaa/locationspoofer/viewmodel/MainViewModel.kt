@@ -972,6 +972,13 @@ class MainViewModel(
         }
     }
 
+    /** 重置路点 */
+    fun resetRoutePoint() {
+        _uiState.update { state ->
+            state.copy(routePoints = emptyList())
+        }
+    }
+
     /** 结束选点 → READY */
     fun finishSelectingPoints() {
         if (_uiState.value.routePoints.size < 2) return
