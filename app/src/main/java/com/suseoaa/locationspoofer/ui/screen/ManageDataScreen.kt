@@ -1,5 +1,6 @@
 package com.suseoaa.locationspoofer.ui.screen
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 
@@ -63,6 +64,12 @@ fun ManageDataScreen(
             val last = locations.last()
             controller.moveCamera(last.lat, last.lng, 15f)
         }
+    }
+
+    // 拦截返回键：如果处于选择模式，则先退出选择模式
+    BackHandler(enabled = isSelectionMode) {
+        isSelectionMode = false
+        selectedIds.clear()
     }
 
     Scaffold(
