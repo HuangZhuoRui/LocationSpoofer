@@ -79,23 +79,60 @@ class ConfigManager(private val rootManager: RootManager) {
             )
 
             // 使用 quoted heredoc 写入，避免 JSON 中的引号、美元符号等被 shell 解析。
-            // 每个目标都先写同目录临时文件再 rename，避免 hook 轮询线程读到半截 JSON。
+            // 两个目标都先完成 staging；发布任一副本后若后续步骤失败，则恢复旧副本，
+            // 避免 app hook 与 system hook 观察到一次失败写入的不同状态。
             val jsonText = json.toString()
             val command = """
             set -e
+            local_target=/data/local/tmp/locationspoofer_config.json
+            system_target=/data/system/locationspoofer_config.json
             local_tmp=/data/local/tmp/.locationspoofer_config.json.tmp.$$
             system_tmp=/data/system/.locationspoofer_config.json.tmp.$$
-            cleanup() {
-              rm -f "${'$'}local_tmp" "${'$'}system_tmp"
+            local_backup=/data/local/tmp/.locationspoofer_config.json.backup.$$
+            system_backup=/data/system/.locationspoofer_config.json.backup.$$
+            had_local=0
+            had_system=0
+            published_local=0
+            published_system=0
+            committed=0
+            finish() {
+              status=${'$'}?
+              trap - EXIT HUP INT TERM
+              set +e
+              if [ "${'$'}committed" -ne 1 ]; then
+                if [ "${'$'}published_local" -eq 1 ]; then
+                  if [ "${'$'}had_local" -eq 1 ]; then
+                    mv -f "${'$'}local_backup" "${'$'}local_target"
+                    chmod 666 "${'$'}local_target"
+                    chcon u:object_r:shell_data_file:s0 "${'$'}local_target" 2>/dev/null || true
+                  else
+                    rm -f "${'$'}local_target"
+                  fi
+                fi
+                if [ "${'$'}published_system" -eq 1 ]; then
+                  if [ "${'$'}had_system" -eq 1 ]; then
+                    mv -f "${'$'}system_backup" "${'$'}system_target"
+                    chown system:system "${'$'}system_target" 2>/dev/null || true
+                    chmod 644 "${'$'}system_target"
+                    chcon u:object_r:system_data_file:s0 "${'$'}system_target" 2>/dev/null || true
+                  else
+                    rm -f "${'$'}system_target"
+                  fi
+                fi
+              fi
+              rm -f "${'$'}local_tmp" "${'$'}system_tmp" "${'$'}local_backup" "${'$'}system_backup"
+              exit "${'$'}status"
             }
-            trap cleanup EXIT HUP INT TERM
+            trap finish EXIT
+            trap 'exit 129' HUP
+            trap 'exit 130' INT
+            trap 'exit 143' TERM
 
             cat > "${'$'}local_tmp" <<'LOCATIONSPOOFER_JSON'
             $jsonText
             LOCATIONSPOOFER_JSON
             chmod 666 "${'$'}local_tmp"
             chcon u:object_r:shell_data_file:s0 "${'$'}local_tmp" 2>/dev/null || true
-            mv -f "${'$'}local_tmp" /data/local/tmp/locationspoofer_config.json
 
             cat > "${'$'}system_tmp" <<'LOCATIONSPOOFER_JSON_SYSTEM'
             $jsonText
@@ -103,10 +140,21 @@ class ConfigManager(private val rootManager: RootManager) {
             chown system:system "${'$'}system_tmp" 2>/dev/null || true
             chmod 644 "${'$'}system_tmp"
             chcon u:object_r:system_data_file:s0 "${'$'}system_tmp" 2>/dev/null || true
-            mv -f "${'$'}system_tmp" /data/system/locationspoofer_config.json
 
-            trap - EXIT HUP INT TERM
-            cleanup
+            if [ -e "${'$'}local_target" ]; then
+              cp "${'$'}local_target" "${'$'}local_backup"
+              had_local=1
+            fi
+            if [ -e "${'$'}system_target" ]; then
+              cp "${'$'}system_target" "${'$'}system_backup"
+              had_system=1
+            fi
+
+            mv -f "${'$'}local_tmp" "${'$'}local_target"
+            published_local=1
+            mv -f "${'$'}system_tmp" "${'$'}system_target"
+            published_system=1
+            committed=1
             """.trimIndent()
 
         val result = rootManager.executeCommand(command)

@@ -15,6 +15,12 @@ data class EnvironmentJsonPayload(
 )
 
 object EnvironmentPayloads {
+    fun usableWifiOverride(json: String?): String? =
+        json?.takeIf { inspectWifi(it).hasData }
+
+    fun usableArrayOverride(json: String?): String? =
+        json?.takeIf { hasArrayItems(it) }
+
     fun merge(
         localWifiJson: String,
         localCellJson: String,

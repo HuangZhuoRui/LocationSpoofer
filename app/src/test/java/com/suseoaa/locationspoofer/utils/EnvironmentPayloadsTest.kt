@@ -67,19 +67,36 @@ class EnvironmentPayloadsTest {
     }
 
     @Test
-    fun explicitEmptySavedPayloadOverridesNonEmptyLocalCache() {
+    fun emptySavedPayloadInheritsNonEmptyLocalCache() {
         val merged = EnvironmentPayloads.merge(
             localWifiJson = """{"nearbyWifi":[{}]}""",
             localCellJson = "[{}]",
             localBluetoothJson = "[{}]",
-            wifiJsonOverride = "[]",
-            cellJsonOverride = "[]",
-            bluetoothJsonOverride = "[]"
+            wifiJsonOverride = EnvironmentPayloads.usableWifiOverride("[]"),
+            cellJsonOverride = EnvironmentPayloads.usableArrayOverride("[]"),
+            bluetoothJsonOverride = EnvironmentPayloads.usableArrayOverride("[]")
         )
 
-        assertEquals("[]", merged.wifiJson)
-        assertEquals("[]", merged.cellJson)
-        assertEquals("[]", merged.bluetoothJson)
+        assertEquals("""{"nearbyWifi":[{}]}""", merged.wifiJson)
+        assertEquals("[{}]", merged.cellJson)
+        assertEquals("[{}]", merged.bluetoothJson)
+    }
+
+    @Test
+    fun nonEmptySavedPayloadOverridesLocalCachePerChannel() {
+        val savedWifi = """{"connectedWifi":{"bssid":"00:11:22:33:44:55"},"nearbyWifi":[]}"""
+        val merged = EnvironmentPayloads.merge(
+            localWifiJson = "local-wifi",
+            localCellJson = "local-cell",
+            localBluetoothJson = "local-bluetooth",
+            wifiJsonOverride = EnvironmentPayloads.usableWifiOverride(savedWifi),
+            cellJsonOverride = EnvironmentPayloads.usableArrayOverride("[{}]"),
+            bluetoothJsonOverride = EnvironmentPayloads.usableArrayOverride("[{}]")
+        )
+
+        assertEquals(savedWifi, merged.wifiJson)
+        assertEquals("[{}]", merged.cellJson)
+        assertEquals("[{}]", merged.bluetoothJson)
     }
 
     @Test

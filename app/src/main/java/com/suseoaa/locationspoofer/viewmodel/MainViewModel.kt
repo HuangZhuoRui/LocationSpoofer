@@ -1351,7 +1351,11 @@ class MainViewModel(
     }
 
     fun loadSavedLocation(loc: SavedLocation) {
-        val overrides = EnvironmentOverrides(loc.wifiJson, loc.cellJson, loc.bluetoothJson)
+        val overrides = EnvironmentOverrides(
+            wifiJson = EnvironmentPayloads.usableWifiOverride(loc.wifiJson),
+            cellJson = EnvironmentPayloads.usableArrayOverride(loc.cellJson),
+            bluetoothJson = EnvironmentPayloads.usableArrayOverride(loc.bluetoothJson)
+        )
         updateSelectedLocation(loc.lat, loc.lng, overrides = overrides)
     }
 
