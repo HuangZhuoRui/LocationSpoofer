@@ -59,9 +59,15 @@ class SettingsManager(context: Context) {
         get() = prefs.getBoolean("is_spoofing_active", false)
         set(value) = prefs.edit().putBoolean("is_spoofing_active", value).apply()
 
-    var isRouteSpoofingActive: Boolean
+    val isRouteSpoofingActive: Boolean
         get() = prefs.getBoolean("is_route_spoofing_active", false)
-        set(value) = prefs.edit().putBoolean("is_route_spoofing_active", value).apply()
+
+    fun setSpoofingSession(active: Boolean, route: Boolean) {
+        prefs.edit()
+            .putBoolean("is_spoofing_active", active)
+            .putBoolean("is_route_spoofing_active", route)
+            .apply()
+    }
 
     var lastSpoofedLat: String
         get() = prefs.getString("last_spoofed_lat", "0") ?: "0"
