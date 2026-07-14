@@ -39,7 +39,16 @@ class LocationRepository(
         mockCell: Boolean = true,
         mockBluetooth: Boolean = true,
         enableJitter: Boolean = true
-    ) {
+    ): Boolean {
+        val alt = settingsManager.altitude.toDoubleOrNull() ?: 0.0
+        val satCount = settingsManager.satelliteCount.toIntOrNull() ?: 20
+        val configWritten = configManager.saveConfig(
+            lat, lng, true, simMode, simBearing, startTime, routePoints, isRouteMode,
+            wifiJson, appCoordinateSystems, cellJson, bluetoothJson,
+            mockWifi, mockCell, mockBluetooth, enableJitter, alt, satCount
+        )
+        if (!configWritten) return false
+
         SpooferProvider.isActive = true
         SpooferProvider.latitude = lat
         SpooferProvider.longitude = lng
@@ -52,10 +61,6 @@ class LocationRepository(
         SpooferProvider.routeJson = routePointsToJson(routePoints)
         SpooferProvider.isRouteMode = isRouteMode
         SpooferProvider.enableJitter = enableJitter
-
-        val alt = settingsManager.altitude.toDoubleOrNull() ?: 0.0
-        val satCount = settingsManager.satelliteCount.toIntOrNull() ?: 20
-        configManager.saveConfig(lat, lng, true, simMode, simBearing, startTime, routePoints, isRouteMode, SpooferProvider.wifiJson, appCoordinateSystems, SpooferProvider.cellJson, SpooferProvider.bluetoothJson, mockWifi, mockCell, mockBluetooth, enableJitter, alt, satCount)
         rootManager.grantMockLocation()
 
         context.startForegroundService(
@@ -65,20 +70,22 @@ class LocationRepository(
                 putExtra(SpoofingService.EXTRA_LNG, lng)
             }
         )
+        return true
     }
 
-    suspend fun stopSpoofing(context: Context) {
+    suspend fun stopSpoofing(context: Context): Boolean {
+        val configWritten = configManager.saveConfig(0.0, 0.0, false)
         SpooferProvider.isActive = false
         SpooferProvider.wifiJson = "[]"
         SpooferProvider.cellJson = "[]"
         SpooferProvider.bluetoothJson = "[]"
         SpooferProvider.routeJson = "[]"
         SpooferProvider.isRouteMode = false
-        configManager.saveConfig(0.0, 0.0, false)
         context.startService(Intent(context, SpoofingService::class.java).apply {
             action = SpoofingService.ACTION_STOP
         })
         rootManager.revokeMockLocation()
+        return configWritten
     }
 
     suspend fun updateConfig(
@@ -97,7 +104,16 @@ class LocationRepository(
         mockCell: Boolean = true,
         mockBluetooth: Boolean = true,
         enableJitter: Boolean = true
-    ) {
+    ): Boolean {
+        val alt = settingsManager.altitude.toDoubleOrNull() ?: 0.0
+        val satCount = settingsManager.satelliteCount.toIntOrNull() ?: 20
+        val configWritten = configManager.saveConfig(
+            lat, lng, true, simMode, simBearing, startTime, routePoints, isRouteMode,
+            wifiJson, appCoordinateSystems, cellJson, bluetoothJson,
+            mockWifi, mockCell, mockBluetooth, enableJitter, alt, satCount
+        )
+        if (!configWritten) return false
+
         SpooferProvider.latitude = lat
         SpooferProvider.longitude = lng
         SpooferProvider.startTimestamp = startTime
@@ -109,15 +125,12 @@ class LocationRepository(
         SpooferProvider.cellJson = cellJson
         SpooferProvider.bluetoothJson = bluetoothJson
         SpooferProvider.enableJitter = enableJitter
-        val alt = settingsManager.altitude.toDoubleOrNull() ?: 0.0
-        val satCount = settingsManager.satelliteCount.toIntOrNull() ?: 20
-        configManager.saveConfig(lat, lng, true, simMode, simBearing, startTime, routePoints, isRouteMode, SpooferProvider.wifiJson, appCoordinateSystems, SpooferProvider.cellJson, SpooferProvider.bluetoothJson, mockWifi, mockCell, mockBluetooth, enableJitter, alt, satCount)
+        return true
     }
 
-    suspend fun updateWifiJson(wifiJson: String, appCoordinateSystems: Map<String, String>) {
-        SpooferProvider.wifiJson = wifiJson
+    suspend fun updateWifiJson(wifiJson: String, appCoordinateSystems: Map<String, String>): Boolean {
         // 同步写入配置文件,确保Xposed端能读取到WiFi数据
-        configManager.saveConfig(
+        val configWritten = configManager.saveConfig(
             SpooferProvider.latitude,
             SpooferProvider.longitude,
             SpooferProvider.isActive,
@@ -131,6 +144,10 @@ class LocationRepository(
             altitude = settingsManager.altitude.toDoubleOrNull() ?: 0.0,
             satelliteCount = settingsManager.satelliteCount.toIntOrNull() ?: 20
         )
+        if (configWritten) {
+            SpooferProvider.wifiJson = wifiJson
+        }
+        return configWritten
     }
 
     private fun routePointsToJson(points: List<RoutePoint>): String {

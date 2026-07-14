@@ -126,5 +126,8 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
+
     debugImplementation(libs.androidx.ui.tooling)
 }

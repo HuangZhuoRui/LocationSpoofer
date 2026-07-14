@@ -528,7 +528,12 @@ fun FullScreenMapPage(
             onDismiss = { showSavedLocations = false },
             onSelect = { loc ->
                 showSavedLocations = false
-                mapRef?.animateCamera(loc.lat, loc.lng)
+                if (stage == RoutePlanStage.IDLE) {
+                    viewModel.loadSavedLocation(loc)
+                    onClose()
+                } else {
+                    mapRef?.animateCamera(loc.lat, loc.lng)
+                }
             },
             onDelete = { loc -> viewModel.removeSavedLocation(loc) }
         )

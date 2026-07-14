@@ -5,5 +5,6 @@ data class SavedLocation(
     val lat: Double, 
     val lng: Double,
     val wifiJson: String = "[]",
-    val cellJson: String = "[]"
+    val cellJson: String = "[]",
+    val bluetoothJson: String = "[]"
 )

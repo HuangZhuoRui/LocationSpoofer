@@ -93,17 +93,12 @@ class SettingsManager(context: Context) {
 
     fun getSavedLocations(): List<SavedLocation> {
         val jsonString = prefs.getString("saved_locations", "[]") ?: "[]"
-        val list = mutableListOf<SavedLocation>()
-        try {
-            val jsonArray = JSONArray(jsonString)
-            for (i in 0 until jsonArray.length()) {
-                val obj = jsonArray.getJSONObject(i)
-                list.add(SavedLocation(obj.getString("name"), obj.getDouble("lat"), obj.getDouble("lng")))
-            }
+        return try {
+            SavedLocationJsonCodec.decode(jsonString)
         } catch (e: Exception) {
             e.printStackTrace()
+            emptyList()
         }
-        return list
     }
 
     fun addSavedLocation(location: SavedLocation) {
@@ -119,15 +114,7 @@ class SettingsManager(context: Context) {
     }
 
     private fun saveLocationList(list: List<SavedLocation>) {
-        val jsonArray = JSONArray()
-        list.forEach {
-            val obj = JSONObject()
-            obj.put("name", it.name)
-            obj.put("lat", it.lat)
-            obj.put("lng", it.lng)
-            jsonArray.put(obj)
-        }
-        prefs.edit().putString("saved_locations", jsonArray.toString()).apply()
+        prefs.edit().putString("saved_locations", SavedLocationJsonCodec.encode(list)).apply()
     }
 
     fun getSavedRoutes(): List<SavedRoute> {
