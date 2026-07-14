@@ -152,7 +152,7 @@ class MainViewModel(
                             enableJitter = settingsRepository.enableJitter
                         )
                     }
-                    if (!generationCurrent || !repositoryStarted) {
+                    if (generationCurrent && !repositoryStarted) {
                         settingsRepository.setSpoofingSession(active = false, route = false)
                     }
                 } else {
@@ -1551,6 +1551,17 @@ class MainViewModel(
             return
         }
 
+        val stateBeforeSelection = _uiState.value
+        val previousOverrides = selectedEnvironmentOverrides
+        val previousPayload = EnvironmentPayload(
+            wifiJson = stateBeforeSelection.collectedWifiJson,
+            cellJson = stateBeforeSelection.collectedCellJson,
+            bluetoothJson = stateBeforeSelection.collectedBluetoothJson,
+            canMockWifi = stateBeforeSelection.canMockWifi,
+            canMockCell = stateBeforeSelection.canMockCell,
+            canMockBluetooth = stateBeforeSelection.canMockBluetooth,
+            wifiApCount = stateBeforeSelection.wifiApCount
+        )
         capabilityRequestId.incrementAndGet()
         selectedEnvironmentOverrides = overrides
         _uiState.update {
@@ -1562,17 +1573,18 @@ class MainViewModel(
             )
         }
 
-        if (overrides != EnvironmentOverrides()) {
-            applyEnvironmentPayload(mergeEnvironmentOverrides(EnvironmentPayload(), overrides))
-        }
-
         if (isFixedSpoofingActive()) {
             syncLiveFixedLocation(
                 lat,
                 lng,
-                overrides
+                overrides,
+                previousOverrides,
+                previousPayload
             )
         } else {
+            if (overrides != EnvironmentOverrides()) {
+                applyEnvironmentPayload(mergeEnvironmentOverrides(EnvironmentPayload(), overrides))
+            }
             evaluateMockCapabilities()
         }
     }
@@ -1598,14 +1610,16 @@ class MainViewModel(
     private fun syncLiveFixedLocation(
         lat: Double,
         lng: Double,
-        overrides: EnvironmentOverrides = EnvironmentOverrides()
+        overrides: EnvironmentOverrides = EnvironmentOverrides(),
+        previousOverrides: EnvironmentOverrides = EnvironmentOverrides(),
+        previousPayload: EnvironmentPayload = EnvironmentPayload()
     ) {
         if (!isFixedSpoofingActive()) {
             return
         }
 
-        settingsRepository.lastSpoofedLat = lat.toString()
-        settingsRepository.lastSpoofedLng = lng.toString()
+        val previousLat = settingsRepository.lastSpoofedLat.toDoubleOrNull()
+        val previousLng = settingsRepository.lastSpoofedLng.toDoubleOrNull()
 
         val requestId = liveFixedLocationRequestId.incrementAndGet()
         val configGeneration = configWriteGate.currentGeneration()
@@ -1620,16 +1634,16 @@ class MainViewModel(
             if (requestId != liveFixedLocationRequestId.get() || !isFixedSpoofingActive()) {
                 return@launch
             }
-            applyEnvironmentPayload(payload)
 
-            configWriteGate.runIfCurrent(configGeneration) {
+            var writeSucceeded = false
+            val generationCurrent = configWriteGate.runIfCurrent(configGeneration) {
                 if (requestId != liveFixedLocationRequestId.get() || !isFixedSpoofingActive()) {
                     return@runIfCurrent
                 }
 
                 val state = _uiState.value
                 val now = System.currentTimeMillis()
-                locationRepository.updateConfig(
+                writeSucceeded = locationRepository.updateConfig(
                     lat = lat,
                     lng = lng,
                     simMode = "STILL",
@@ -1646,6 +1660,28 @@ class MainViewModel(
                     mockBluetooth = state.mockBluetooth && payload.canMockBluetooth,
                     enableJitter = state.enableJitter
                 )
+            }
+
+            if (!generationCurrent || requestId != liveFixedLocationRequestId.get() || !isFixedSpoofingActive()) {
+                return@launch
+            }
+
+            if (writeSucceeded) {
+                settingsRepository.lastSpoofedLat = lat.toString()
+                settingsRepository.lastSpoofedLng = lng.toString()
+                applyEnvironmentPayload(payload)
+            } else {
+                selectedEnvironmentOverrides = previousOverrides
+                applyEnvironmentPayload(previousPayload)
+                if (previousLat != null && previousLng != null) {
+                    _uiState.update {
+                        it.copy(
+                            latitudeInput = String.format(Locale.US, "%.6f", previousLat),
+                            longitudeInput = String.format(Locale.US, "%.6f", previousLng),
+                            mapConfirmedPoint = Pair(previousLat, previousLng)
+                        )
+                    }
+                }
             }
         }
     }
