@@ -114,7 +114,15 @@ class MainViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             val root = locationRepository.checkRootAccess()
 
-            if (settingsRepository.isSpoofingActive) {
+            if (settingsRepository.isSpoofingActive && settingsRepository.isRouteSpoofingActive) {
+                // Route progress is not persisted, so restoring it as the last fixed point is wrong.
+                // Explicitly end the stale route session instead.
+                settingsRepository.isSpoofingActive = false
+                settingsRepository.isRouteSpoofingActive = false
+                configWriteGate.runIfCurrent(initializationGeneration) {
+                    locationRepository.stopSpoofing(context)
+                }
+            } else if (settingsRepository.isSpoofingActive) {
                 val lastLat = settingsRepository.lastSpoofedLat.toDoubleOrNull()
                 val lastLng = settingsRepository.lastSpoofedLng.toDoubleOrNull()
                 if (lastLat != null && lastLng != null &&
@@ -147,13 +155,18 @@ class MainViewModel(
                     }
                     if (!generationCurrent || !repositoryStarted) {
                         settingsRepository.isSpoofingActive = false
+                        settingsRepository.isRouteSpoofingActive = false
                     }
                 } else {
                     settingsRepository.isSpoofingActive = false
+                    settingsRepository.isRouteSpoofingActive = false
                 }
-            } else if (SpoofingService.isRunning) {
-                configWriteGate.runIfCurrent(initializationGeneration) {
-                    locationRepository.stopSpoofing(context)
+            } else {
+                settingsRepository.isRouteSpoofingActive = false
+                if (SpoofingService.isRunning) {
+                    configWriteGate.runIfCurrent(initializationGeneration) {
+                        locationRepository.stopSpoofing(context)
+                    }
                 }
             }
 
@@ -944,6 +957,7 @@ class MainViewModel(
         }
         
         settingsRepository.isSpoofingActive = true
+        settingsRepository.isRouteSpoofingActive = false
         settingsRepository.lastSpoofedLat = lat.toString()
         settingsRepository.lastSpoofedLng = lng.toString()
         cancelLiveFixedLocationSync()
@@ -984,6 +998,7 @@ class MainViewModel(
             if (!wroteConfig || !repositoryStarted) {
                 if (configGeneration == configWriteGate.currentGeneration()) {
                     settingsRepository.isSpoofingActive = false
+                    settingsRepository.isRouteSpoofingActive = false
                     _uiState.update { it.copy(isSpoofingActive = false, isSavingConfig = false) }
                 }
                 return@launch
@@ -1003,6 +1018,7 @@ class MainViewModel(
     fun stopSpoofing() {
         val configGeneration = configWriteGate.beginNewGeneration()
         settingsRepository.isSpoofingActive = false
+        settingsRepository.isRouteSpoofingActive = false
         cancelLiveFixedLocationSync()
         locationSyncJob?.cancel()
         locationSyncJob = null
@@ -1252,6 +1268,7 @@ class MainViewModel(
         cancelLiveFixedLocationSync()
         val configGeneration = configWriteGate.beginNewGeneration()
         settingsRepository.isSpoofingActive = true
+        settingsRepository.isRouteSpoofingActive = true
         val startPoint = pointsToRun.first()
 
         _uiState.update {
@@ -1290,6 +1307,7 @@ class MainViewModel(
                 }
             } else if (configGeneration == configWriteGate.currentGeneration()) {
                 settingsRepository.isSpoofingActive = false
+                settingsRepository.isRouteSpoofingActive = false
                 _uiState.update {
                     it.copy(isSpoofingActive = false, routePlanStage = RoutePlanStage.READY)
                 }
@@ -1311,6 +1329,7 @@ class MainViewModel(
     fun stopRoutePlanning() {
         val configGeneration = configWriteGate.beginNewGeneration()
         settingsRepository.isSpoofingActive = false
+        settingsRepository.isRouteSpoofingActive = false
         locationSyncJob?.cancel()
         locationSyncJob = null
         autoRouteJob?.cancel()

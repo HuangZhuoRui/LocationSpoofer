@@ -86,6 +86,10 @@ class SettingsRepository(private val settingsManager: SettingsManager) {
         get() = settingsManager.isSpoofingActive
         set(value) { settingsManager.isSpoofingActive = value }
 
+    var isRouteSpoofingActive: Boolean
+        get() = settingsManager.isRouteSpoofingActive
+        set(value) { settingsManager.isRouteSpoofingActive = value }
+
     var lastSpoofedLat: String
         get() = settingsManager.lastSpoofedLat
         set(value) { settingsManager.lastSpoofedLat = value }
