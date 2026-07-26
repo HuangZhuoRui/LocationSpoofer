@@ -25,7 +25,8 @@ android {
         System.getenv("GOOGLE_MAPS_API_KEY") ?: getLocalConfig("GOOGLE_MAPS_API_KEY") ?: ""
 
     defaultConfig {
-        applicationId = "com.suseoaa.locationspoofer"
+        // 修改了包名，增加 .clone 后缀，与原应用独立共存
+        applicationId = "com.suseoaa.locationspoofer.clone"
         minSdk = 26
         targetSdk = 35
         versionCode = 14031
