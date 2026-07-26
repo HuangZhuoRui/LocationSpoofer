@@ -6,7 +6,8 @@ plugins {
 }
 
 android {
-    namespace = "com.suseoaa.locationspoofer"
+    // 1. 修改命名空间，防止组件冲突
+    namespace = "com.suseoaa.locationspoofer.clone"
     compileSdk = 35
 
     fun getLocalConfig(key: String): String? {
@@ -25,12 +26,15 @@ android {
         System.getenv("GOOGLE_MAPS_API_KEY") ?: getLocalConfig("GOOGLE_MAPS_API_KEY") ?: ""
 
     defaultConfig {
-        // 修改了包名，增加 .clone 后缀，与原应用独立共存
+        // 2. 修改包名
         applicationId = "com.suseoaa.locationspoofer.clone"
         minSdk = 26
         targetSdk = 35
         versionCode = 14031
         versionName = "1.40.31"
+
+        // 3. 更改应用名称，防止重名混淆，同时给 Manifest 提供独立标识
+        resValue("string", "app_name", "LocationSpoofer分身")
 
         vectorDrawables {
             useSupportLibrary = true
