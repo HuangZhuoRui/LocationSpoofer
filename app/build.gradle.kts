@@ -6,7 +6,6 @@ plugins {
 }
 
 android {
-    // 还原原始命名空间，保证 R 类引用正常
     namespace = "com.suseoaa.locationspoofer"
     compileSdk = 35
 
@@ -22,26 +21,26 @@ android {
         return null
     }
 
-    val googleMapsApiKey =
-        System.getenv("GOOGLE_MAPS_API_KEY") ?: getLocalConfig("GOOGLE_MAPS_API_KEY") ?: ""
+    // 给 Google Maps API 填入一个假 Key 避开 Places SDK 初始化空指针崩溃
+    val realGoogleKey = System.getenv("GOOGLE_MAPS_API_KEY") ?: getLocalConfig("GOOGLE_MAPS_API_KEY")
+    val googleMapsApiKey = if (realGoogleKey.isNullOrBlank()) "DummyGoogleKeyForPreventingCrash123456" else realGoogleKey
+
+    // 已经为你填入高德 API Key
+    val amapApiKey = "7aa225eab5363f275979d4d6e089e216"
 
     defaultConfig {
         applicationId = "com.suseoaa.locationspoofer"
-        // 关键改动：使用包名后缀实现真正独立安装，不影响内部组件
-        applicationIdSuffix = ".clone"
-        
         minSdk = 26
         targetSdk = 35
         versionCode = 14031
         versionName = "1.40.31"
-
-        resValue("string", "app_name", "LocationSpoofer分身")
 
         vectorDrawables {
             useSupportLibrary = true
         }
 
         manifestPlaceholders["googleMapsApiKey"] = googleMapsApiKey
+        manifestPlaceholders["amapApiKey"] = amapApiKey
 
         ndk {
             abiFilters.add("arm64-v8a")
