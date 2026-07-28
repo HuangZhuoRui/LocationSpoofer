@@ -178,4 +178,9 @@
     <string name="opencellid_config">OpenCellID API Configuration</string>
     <string name="custom_opencellid_token">OpenCellID API Token</string>
     <string name="custom_opencellid_token_hint">Enter your OpenCellID token...</string>
+    <string name="start_collection">بدء الجمع</string>
+    <string name="stop_collection">إيقاف الجمع</string>
+    <string name="scanned_wifi_count">عدد Wi-Fi: %d</string>
+    <string name="scanned_cell_count">عدد الأبراج: %d</string>
+    <string name="scanned_bt_count">عدد البلوتوث: %d</string>
 </resources>

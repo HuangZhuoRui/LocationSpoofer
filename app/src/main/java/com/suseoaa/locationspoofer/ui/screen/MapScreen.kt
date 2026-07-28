@@ -10,6 +10,8 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -1028,10 +1030,13 @@ private fun RoutePlanConfigDialog(
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.horizontalScroll(rememberScrollState())
+                        ) {
                             listOf(
                                 SimMode.WALKING, SimMode.RUNNING,
-                                SimMode.CYCLING, SimMode.DRIVING
+                                SimMode.CYCLING, SimMode.DRIVING, SimMode.CUSTOM
                             ).forEach { mode ->
                                 FilterChip(
                                     selected = uiState.routeSimMode == mode,
@@ -1046,7 +1051,7 @@ private fun RoutePlanConfigDialog(
                                                     SimMode.DRIVING -> stringResource(R.string.driving)
                                                     else -> stringResource(R.string.custom)
                                                 }
-                                            }\n${mode.speedMs.toInt()}m/s",
+                                            }${if (mode == SimMode.CUSTOM) "" else "\n${mode.speedMs.toInt()}m/s"}",
                                             fontSize = 11.sp,
                                             textAlign = TextAlign.Center
                                         )

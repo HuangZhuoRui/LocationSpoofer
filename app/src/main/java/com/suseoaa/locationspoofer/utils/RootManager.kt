@@ -34,4 +34,20 @@ class RootManager {
             "ERROR"
         }
     }
+
+    fun executeCommandWithInput(command: String, input: String): String {
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
+            process.outputStream.bufferedWriter().use { writer ->
+                writer.write(input)
+                writer.flush()
+            }
+            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            val output = reader.readText()
+            process.waitFor()
+            output.ifEmpty { "SUCCESS" }
+        } catch (e: Exception) {
+            "ERROR"
+        }
+    }
 }

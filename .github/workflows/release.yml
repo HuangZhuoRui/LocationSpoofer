@@ -119,7 +119,14 @@ jobs:
           APK_DIR="app/build/outputs/apk/release"
           # 寻找构建出来的 apk 并重命名
           find $APK_DIR -name "*.apk" -print0 | while IFS= read -r -d '' file; do
-            mv "$file" "$APK_DIR/LocationSpoofer-${{ steps.check_version.outputs.tag }}.apk"
+            BASENAME=$(basename "$file")
+            if [[ "$BASENAME" == *"arm64-v8a"* ]]; then
+              mv "$file" "$APK_DIR/LocationSpoofer-arm64-v8a-${{ steps.check_version.outputs.tag }}.apk"
+            elif [[ "$BASENAME" == *"armeabi-v7a"* ]]; then
+              mv "$file" "$APK_DIR/LocationSpoofer-armeabi-v7a-${{ steps.check_version.outputs.tag }}.apk"
+            else
+              mv "$file" "$APK_DIR/LocationSpoofer-${{ steps.check_version.outputs.tag }}.apk"
+            fi
           done
 
       - name: Publish GitHub Release

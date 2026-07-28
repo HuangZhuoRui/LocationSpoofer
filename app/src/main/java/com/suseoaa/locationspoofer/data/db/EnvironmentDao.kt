@@ -42,6 +42,9 @@ interface EnvironmentDao {
         limit: Int = 3
     ): List<CompleteLocation>
 
+    @Query("SELECT * FROM location_records WHERE abs(lat - :lat) < :tolerance AND abs(lng - :lng) < :tolerance ORDER BY timestamp DESC LIMIT 1")
+    suspend fun findLocationByCoordinates(lat: Double, lng: Double, tolerance: Double = 0.0001): LocationRecord?
+
     @Query("SELECT * FROM location_records")
     suspend fun getAllLocations(): List<LocationRecord>
 
@@ -61,6 +64,6 @@ interface EnvironmentDao {
     @Query("DELETE FROM location_records WHERE id IN (:ids)")
     suspend fun deleteLocations(ids: List<Long>)
 
-    @Query("UPDATE location_records SET placeName = :placeName, remark = :remark WHERE id = :id")
-    suspend fun updateMetadata(id: Long, placeName: String, remark: String)
+    @Query("UPDATE location_records SET placeName = :placeName, remark = :remark, selectedWifiBssid = :selectedWifiBssid, selectedBluetoothAddress = :selectedBluetoothAddress, selectedCellKey = :selectedCellKey WHERE id = :id")
+    suspend fun updateMetadata(id: Long, placeName: String, remark: String, selectedWifiBssid: String?, selectedBluetoothAddress: String?, selectedCellKey: String?)
 }

@@ -188,4 +188,10 @@
     <string name="opencellid_config">OpenCellID API Configuration</string>
     <string name="custom_opencellid_token">OpenCellID API Token</string>
     <string name="custom_opencellid_token_hint">Enter your OpenCellID token...</string>
+    <string name="start_collection">Start Collection</string>
+    <string name="stop_collection">Stop Collection</string>
+    <string name="scanned_wifi_count">Wi-Fi: %d</string>
+    <string name="scanned_cell_count">Cells: %d</string>
+    <string name="scanned_bt_count">Bluetooth: %d</string>
+
 </resources>

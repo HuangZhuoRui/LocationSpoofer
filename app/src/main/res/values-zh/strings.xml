@@ -185,4 +185,9 @@
     <string name="opencellid_config">OpenCellID API 配置</string>
     <string name="custom_opencellid_token">OpenCellID API 密钥</string>
     <string name="custom_opencellid_token_hint">输入您的 OpenCellID 密钥...</string>
+    <string name="start_collection">开始采集</string>
+    <string name="stop_collection">停止采集</string>
+    <string name="scanned_wifi_count">Wi-Fi 数量: %d</string>
+    <string name="scanned_cell_count">基站数量: %d</string>
+    <string name="scanned_bt_count">蓝牙数量: %d</string>
 </resources>

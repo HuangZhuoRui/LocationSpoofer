@@ -3,6 +3,7 @@ package com.suseoaa.locationspoofer.ui.screen
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -238,12 +239,18 @@ fun ManageDataScreen(
     if (editingItem != null) {
         var placeName by remember { mutableStateOf(editingItem!!.location.placeName) }
         var remark by remember { mutableStateOf(editingItem!!.location.remark) }
+        var selectedWifi by remember { mutableStateOf(editingItem!!.location.selectedWifiBssid) }
+        var selectedBt by remember { mutableStateOf(editingItem!!.location.selectedBluetoothAddress) }
+        var selectedCell by remember { mutableStateOf(editingItem!!.location.selectedCellKey) }
 
         AlertDialog(
             onDismissRequest = { editingItem = null },
             title = { Text(stringResource(R.string.edit_location_data)) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Column(
+                    modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
                     OutlinedTextField(
                         value = placeName,
                         onValueChange = { placeName = it },
@@ -257,11 +264,119 @@ fun ManageDataScreen(
                         label = { Text(stringResource(R.string.remark_note)) },
                         modifier = Modifier.fillMaxWidth()
                     )
+                    
+                    Text("Select Connected Devices", style = MaterialTheme.typography.titleSmall)
+                    
+                    // Wi-Fi Selection
+                    val wifiOptions = listOf<Pair<String, String?>>("None" to null) + editingItem!!.wifis.map { "${it.device.ssid} (${it.device.bssid})" to it.device.bssid }
+                    var wifiExpanded by remember { mutableStateOf(false) }
+                    ExposedDropdownMenuBox(
+                        expanded = wifiExpanded,
+                        onExpandedChange = { wifiExpanded = !wifiExpanded },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = wifiOptions.find { it.second == selectedWifi }?.first ?: "None",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Connected Wi-Fi") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = wifiExpanded) },
+                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = wifiExpanded,
+                            onDismissRequest = { wifiExpanded = false }
+                        ) {
+                            wifiOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option.first, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    onClick = {
+                                        selectedWifi = option.second
+                                        wifiExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // Bluetooth Selection
+                    val btOptions = listOf<Pair<String, String?>>("None" to null) + editingItem!!.bluetooths.map { "${it.device.name} (${it.device.address})" to it.device.address }
+                    var btExpanded by remember { mutableStateOf(false) }
+                    ExposedDropdownMenuBox(
+                        expanded = btExpanded,
+                        onExpandedChange = { btExpanded = !btExpanded },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = btOptions.find { it.second == selectedBt }?.first ?: "None",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Connected Bluetooth") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = btExpanded) },
+                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = btExpanded,
+                            onDismissRequest = { btExpanded = false }
+                        ) {
+                            btOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option.first, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    onClick = {
+                                        selectedBt = option.second
+                                        btExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // Cell Selection
+                    val cellOptions = listOf<Pair<String, String?>>("None" to null) + editingItem!!.cells.map { "${it.device.type} (MNC:${it.device.mnc})" to it.device.cellKey }
+                    var cellExpanded by remember { mutableStateOf(false) }
+                    ExposedDropdownMenuBox(
+                        expanded = cellExpanded,
+                        onExpandedChange = { cellExpanded = !cellExpanded },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = cellOptions.find { it.second == selectedCell }?.first ?: "None",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Registered Cell") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = cellExpanded) },
+                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = cellExpanded,
+                            onDismissRequest = { cellExpanded = false }
+                        ) {
+                            cellOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option.first, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    onClick = {
+                                        selectedCell = option.second
+                                        cellExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.updateManageDataMetadata(editingItem!!.location.id, placeName, remark)
+                    viewModel.updateManageDataMetadata(
+                        editingItem!!.location.id, 
+                        placeName, 
+                        remark,
+                        selectedWifi,
+                        selectedBt,
+                        selectedCell
+                    )
                     editingItem = null
                 }) {
                     Text(stringResource(R.string.save))

@@ -174,8 +174,56 @@ class EnvironmentScanner(private val context: Context) {
             context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
         val jsonArray = JSONArray()
         try {
-            val allCellInfo = telephonyManager.allCellInfo
-            allCellInfo?.forEach { cellInfo ->
+            val allCellInfo = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                try {
+                    kotlinx.coroutines.withTimeoutOrNull(3000L) {
+                        suspendCancellableCoroutine { continuation ->
+                            telephonyManager.requestCellInfoUpdate(
+                                context.mainExecutor,
+                                object : android.telephony.TelephonyManager.CellInfoCallback() {
+                                    override fun onCellInfo(cellInfo: MutableList<CellInfo>) {
+                                        if (continuation.isActive) continuation.resume(cellInfo)
+                                    }
+                                    override fun onError(errorCode: Int, detail: Throwable?) {
+                                        if (continuation.isActive) continuation.resume(telephonyManager.allCellInfo ?: emptyList())
+                                    }
+                                }
+                            )
+                        }
+                    } ?: (telephonyManager.allCellInfo ?: emptyList())
+                } catch (e: Exception) {
+                    telephonyManager.allCellInfo ?: emptyList()
+                }
+            } else {
+                telephonyManager.allCellInfo ?: emptyList()
+            }
+            
+            if (allCellInfo.isEmpty()) {
+                val cellLoc = try { telephonyManager.cellLocation } catch (e: Exception) { null }
+                if (cellLoc is android.telephony.gsm.GsmCellLocation) {
+                    val obj = JSONObject()
+                    obj.put("isRegistered", true)
+                    obj.put("type", "GSM")
+                    obj.put("lac", cellLoc.lac)
+                    obj.put("cid", cellLoc.cid)
+                    obj.put("psc", cellLoc.psc)
+                    obj.put("dbm", -85) // 虚拟一个信号值
+                    obj.put("mcc", 460)
+                    obj.put("mnc", 0)
+                    jsonArray.put(obj)
+                } else if (cellLoc is android.telephony.cdma.CdmaCellLocation) {
+                    val obj = JSONObject()
+                    obj.put("isRegistered", true)
+                    obj.put("type", "CDMA")
+                    obj.put("networkId", cellLoc.networkId)
+                    obj.put("systemId", cellLoc.systemId)
+                    obj.put("basestationId", cellLoc.baseStationId)
+                    obj.put("dbm", -85)
+                    jsonArray.put(obj)
+                }
+            }
+
+            allCellInfo.forEach { cellInfo ->
                 val obj = JSONObject()
                 obj.put("isRegistered", cellInfo.isRegistered)
 

@@ -70,23 +70,20 @@ class ConfigManager(private val rootManager: RootManager) {
         }
         val cellCount = json.optJSONArray("cell_json")?.length() ?: 0
 
-        // 使用 quoted heredoc 写入，避免 JSON 中的引号、美元符号等被 shell 解析。
+        // 使用 stdin 写入，避免命令行过长 (ARG_MAX) 导致 su 执行失败，实现实时更新
         val jsonText = json.toString()
         val command = """
-            cat > /data/local/tmp/locationspoofer_config.json <<'LOCATIONSPOOFER_JSON'
-            $jsonText
-            LOCATIONSPOOFER_JSON
-            chmod 666 /data/local/tmp/locationspoofer_config.json
-            chcon u:object_r:shell_data_file:s0 /data/local/tmp/locationspoofer_config.json 2>/dev/null || true
-
-            cat > /data/system/locationspoofer_config.json <<'LOCATIONSPOOFER_JSON_SYSTEM'
-            $jsonText
-            LOCATIONSPOOFER_JSON_SYSTEM
-            chown system:system /data/system/locationspoofer_config.json 2>/dev/null || true
-            chmod 644 /data/system/locationspoofer_config.json
-            chcon u:object_r:system_data_file:s0 /data/system/locationspoofer_config.json 2>/dev/null || true
+            cat > /data/local/tmp/locationspoofer_config_tmp.json
+            chmod 666 /data/local/tmp/locationspoofer_config_tmp.json
+            chcon u:object_r:shell_data_file:s0 /data/local/tmp/locationspoofer_config_tmp.json 2>/dev/null || true
+            cp /data/local/tmp/locationspoofer_config_tmp.json /data/system/locationspoofer_config_tmp.json
+            chown system:system /data/system/locationspoofer_config_tmp.json 2>/dev/null || true
+            chmod 644 /data/system/locationspoofer_config_tmp.json
+            chcon u:object_r:system_data_file:s0 /data/system/locationspoofer_config_tmp.json 2>/dev/null || true
+            mv /data/local/tmp/locationspoofer_config_tmp.json /data/local/tmp/locationspoofer_config.json
+            mv /data/system/locationspoofer_config_tmp.json /data/system/locationspoofer_config.json
         """.trimIndent()
 
-        val result = rootManager.executeCommand(command)
+        val result = rootManager.executeCommandWithInput(command, jsonText)
     }
 }

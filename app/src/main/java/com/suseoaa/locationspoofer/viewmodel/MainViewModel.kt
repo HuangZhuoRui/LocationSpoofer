@@ -6,6 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.amap.api.location.AMapLocationClient
 import com.amap.api.location.AMapLocationClientOption
 import com.google.android.gms.location.LocationServices
+import com.suseoaa.locationspoofer.LocationApp
+import com.suseoaa.locationspoofer.data.db.EnvironmentDao
+import com.suseoaa.locationspoofer.data.db.LocationRecord
 import com.suseoaa.locationspoofer.data.model.AppState
 import com.suseoaa.locationspoofer.data.model.RoutePoint
 import com.suseoaa.locationspoofer.data.model.RoutePlanStage
@@ -13,10 +16,19 @@ import com.suseoaa.locationspoofer.data.model.RouteRunMode
 import com.suseoaa.locationspoofer.data.model.SavedLocation
 import com.suseoaa.locationspoofer.data.model.SimMode
 import com.suseoaa.locationspoofer.data.model.AppMapType
+import com.suseoaa.locationspoofer.data.model.MapEngine
+import com.suseoaa.locationspoofer.data.model.SearchMode
 import com.suseoaa.locationspoofer.data.repository.LocationRepository
 import com.suseoaa.locationspoofer.data.repository.SettingsRepository
+import com.suseoaa.locationspoofer.data.repository.WifiRepository
 import com.suseoaa.locationspoofer.provider.SpooferProvider
 import com.suseoaa.locationspoofer.service.SpoofingService
+import com.suseoaa.locationspoofer.ui.screen.AppPoiItem
+import com.suseoaa.locationspoofer.ui.screen.spoofing.SpoofingIntent
+import com.suseoaa.locationspoofer.ui.screen.spoofing.SpoofingUiState
+import com.suseoaa.locationspoofer.utils.EnvironmentScanner
+import com.suseoaa.locationspoofer.utils.LSPosedManager
+import com.suseoaa.locationspoofer.utils.OpenCellIdClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -36,13 +48,15 @@ import kotlin.coroutines.suspendCoroutine
 class MainViewModel(
     private val locationRepository: LocationRepository,
     private val settingsRepository: SettingsRepository,
-    private val lsposedManager: com.suseoaa.locationspoofer.utils.LSPosedManager,
-    private val environmentScanner: com.suseoaa.locationspoofer.utils.EnvironmentScanner,
-    private val environmentDao: com.suseoaa.locationspoofer.data.db.EnvironmentDao,
-    private val wifiRepository: com.suseoaa.locationspoofer.data.repository.WifiRepository,
-    private val opencellidClient: com.suseoaa.locationspoofer.utils.OpenCellIdClient,
+    private val lsposedManager: LSPosedManager,
+    private val environmentScanner: EnvironmentScanner,
+    private val environmentDao: EnvironmentDao,
+    private val wifiRepository: WifiRepository,
+    private val opencellidClient: OpenCellIdClient,
     private val context: Context
 ) : ViewModel() {
+    private var lastMapMoveTime = 0L
+    private var mapMoveJob: Job? = null
 
     private val _uiState = MutableStateFlow(
         AppState(
@@ -52,9 +66,9 @@ class MainViewModel(
                 AppMapType.NORMAL
             },
             mapEngine = try {
-                com.suseoaa.locationspoofer.data.model.MapEngine.valueOf(settingsRepository.getMapEngine())
+                MapEngine.valueOf(settingsRepository.getMapEngine())
             } catch (e: Exception) {
-                com.suseoaa.locationspoofer.data.model.MapEngine.AUTO
+                MapEngine.AUTO
             },
             savedLocations = settingsRepository.getSavedLocations(),
             savedRoutes = emptyList(), // 将由 Room Flow 填充
@@ -74,8 +88,8 @@ class MainViewModel(
     val uiState: StateFlow<AppState> = _uiState.asStateFlow()
 
     private val _spoofingUiState =
-        MutableStateFlow(com.suseoaa.locationspoofer.ui.screen.spoofing.SpoofingUiState())
-    val spoofingUiState: StateFlow<com.suseoaa.locationspoofer.ui.screen.spoofing.SpoofingUiState> =
+        MutableStateFlow(SpoofingUiState())
+    val spoofingUiState: StateFlow<SpoofingUiState> =
         _spoofingUiState.asStateFlow()
 
     private var locationSyncJob: Job? = null
@@ -90,6 +104,7 @@ class MainViewModel(
 
     private fun initialize() {
         viewModelScope.launch(Dispatchers.IO) {
+            mergeLegacyRecords()
             val root = locationRepository.checkRootAccess()
 
             if (settingsRepository.isSpoofingActive) {
@@ -133,7 +148,7 @@ class MainViewModel(
         }
 
         viewModelScope.launch {
-            com.suseoaa.locationspoofer.LocationApp.isModuleActive.collect { active ->
+            LocationApp.isModuleActive.collect { active ->
                 _uiState.update {
                     it.copy(
                         isLSPosedActive = active,
@@ -166,6 +181,47 @@ class MainViewModel(
         }
     }
 
+    private suspend fun mergeLegacyRecords() {
+        val allComplete = environmentDao.getAllCompleteLocations()
+        if (allComplete.isEmpty()) return
+        
+        // Group by approx coordinate (round to 4 decimals, about 11m)
+        val grouped = allComplete.groupBy { 
+            Pair(
+                String.format(java.util.Locale.US, "%.4f", it.location.lat),
+                String.format(java.util.Locale.US, "%.4f", it.location.lng)
+            )
+        }.filter { it.value.size > 1 }
+        
+        for ((_, group) in grouped) {
+            // Choose the one with the latest timestamp as primary
+            val primary = group.maxByOrNull { it.location.timestamp } ?: continue
+            val others = group.filter { it.location.id != primary.location.id }
+            
+            for (other in others) {
+                // Move connected wifi
+                other.connectedWifi?.let {
+                    environmentDao.insertConnectedWifi(it.copy(locationId = primary.location.id))
+                }
+                // Move wifis
+                other.wifis.forEach { lw ->
+                    environmentDao.insertLocationWifi(lw.locationWifi.copy(locationId = primary.location.id))
+                }
+                // Move bluetooths
+                other.bluetooths.forEach { lb ->
+                    environmentDao.insertLocationBluetooth(lb.locationBluetooth.copy(locationId = primary.location.id))
+                }
+                // Move cells
+                other.cells.forEach { lc ->
+                    environmentDao.insertLocationCell(lc.locationCell.copy(locationId = primary.location.id))
+                }
+                
+                // Delete the old separate record
+                environmentDao.deleteLocation(other.location.id)
+            }
+        }
+    }
+
     fun updateLanguage(langCode: String) {
         settingsRepository.setLanguage(langCode)
         _uiState.update { it.copy(currentLanguage = langCode) }
@@ -176,24 +232,24 @@ class MainViewModel(
         _uiState.update { it.copy(mapType = type) }
     }
 
-    fun setMapEngine(engine: com.suseoaa.locationspoofer.data.model.MapEngine) {
+    fun setMapEngine(engine: MapEngine) {
         settingsRepository.setMapEngine(engine.name)
         _uiState.update { it.copy(mapEngine = engine) }
     }
 
-    fun setSearchMode(mode: com.suseoaa.locationspoofer.data.model.SearchMode) {
+    fun setSearchMode(mode: SearchMode) {
         _uiState.update { it.copy(searchMode = mode) }
     }
 
     data class ClusterData(
-        val center: com.suseoaa.locationspoofer.data.db.LocationRecord,
+        val center: LocationRecord,
         var count: Int,
         var hasWifi: Boolean,
         var hasBluetooth: Boolean,
         var hasCell: Boolean
     )
 
-    suspend fun performLocalSearch(): List<com.suseoaa.locationspoofer.ui.screen.AppPoiItem> {
+    suspend fun performLocalSearch(): List<AppPoiItem> {
         val allRecords = environmentDao.getAllCompleteLocations()
         if (allRecords.isEmpty()) {
             return emptyList()
@@ -243,9 +299,15 @@ class MainViewModel(
             if (cluster.hasCell) tags.add("基站")
 
             val tagStr = if (tags.isNotEmpty()) " [${tags.joinToString(", ")}]" else ""
+            
+            val baseTitle = when {
+                cluster.center.remark.isNotEmpty() -> cluster.center.remark
+                cluster.center.placeName.isNotEmpty() -> cluster.center.placeName
+                else -> "本地采集热点"
+            }
 
             com.suseoaa.locationspoofer.ui.screen.AppPoiItem(
-                title = "本地采集热点$tagStr",
+                title = "$baseTitle$tagStr",
                 snippet = "包含 ${cluster.count} 条记录 (${
                     String.format(
                         "%.4f",
@@ -810,7 +872,8 @@ class MainViewModel(
                         environmentDao.updateMetadata(
                             newestLocation.id,
                             "WiGLE 导入",
-                            "经纬度: (${String.format("%.6f", lat)}, ${String.format("%.6f", lng)})"
+                            "经纬度: (${String.format("%.6f", lat)}, ${String.format("%.6f", lng)})",
+                            null, null, null
                         )
                     }
                 }
@@ -874,7 +937,8 @@ class MainViewModel(
                         environmentDao.updateMetadata(
                             newestLocation.id,
                             "OpenCellID 导入",
-                            "经纬度: (${String.format("%.6f", lat)}, ${String.format("%.6f", lng)})"
+                            "经纬度: (${String.format("%.6f", lat)}, ${String.format("%.6f", lng)})",
+                            null, null, null
                         )
                     }
                 }
@@ -1159,7 +1223,7 @@ class MainViewModel(
     }
 
     /** 首页地图确认选点 */
-    fun confirmMapPoint(lat: Double, lng: Double) {
+    fun confirmMapPoint(lat: Double, lng: Double, isDragging: Boolean = false) {
         _uiState.update {
             it.copy(
                 latitudeInput = String.format("%.6f", lat),
@@ -1169,6 +1233,38 @@ class MainViewModel(
             )
         }
         evaluateMockCapabilities()
+        val state = _uiState.value
+        if (state.isSpoofingActive) {
+            settingsRepository.lastSpoofedLat = lat.toString()
+            settingsRepository.lastSpoofedLng = lng.toString()
+            viewModelScope.launch {
+                if (state.mockWifi && !hasLocalWifiWithin50m(lat, lng) && !isDragging) {
+                    fetchWifiFromWigleSync(lat, lng)
+                }
+                if (state.mockCell && !hasLocalCellsWithin50m(lat, lng) && !isDragging) {
+                    fetchCellFromOpenCellIdSync(lat, lng)
+                }
+                evaluateMockCapabilitiesSuspend(lat, lng)
+                val updatedState = _uiState.value
+                locationRepository.updateConfig(
+                    lat = lat,
+                    lng = lng,
+                    simMode = "STILL",
+                    simBearing = 0f,
+                    startTime = SpooferProvider.startTimestamp,
+                    routePoints = emptyList(),
+                    isRouteMode = false,
+                    appCoordinateSystems = updatedState.appCoordinateSystems,
+                    wifiJson = updatedState.collectedWifiJson,
+                    cellJson = updatedState.collectedCellJson,
+                    bluetoothJson = updatedState.collectedBluetoothJson,
+                    mockWifi = updatedState.mockWifi && updatedState.canMockWifi,
+                    mockCell = updatedState.mockCell,
+                    mockBluetooth = updatedState.mockBluetooth && updatedState.canMockBluetooth,
+                    enableJitter = updatedState.enableJitter
+                )
+            }
+        }
     }
 
     /** 清除地图选点状态 */
@@ -1705,6 +1801,7 @@ class MainViewModel(
 
         if (!currentState) {
             // Start scanning
+            _uiState.update { it.copy(scannedWifiCount = 0, scannedCellCount = 0, scannedBluetoothCount = 0) }
             continuousScanJob = viewModelScope.launch(Dispatchers.IO) {
                 while (isActive) {
                     val realLoc = fetchRealLocationSilent(context)
@@ -1716,10 +1813,19 @@ class MainViewModel(
                         val cellJson = environmentScanner.scanCell()
                         val bluetoothJson = environmentScanner.scanBluetooth()
 
+                        val wCount = try { org.json.JSONArray(wifiJson).length() } catch (e: Exception) { 0 }
+                        val cCount = try { org.json.JSONArray(cellJson).length() } catch (e: Exception) { 0 }
+                        val bCount = try { org.json.JSONArray(bluetoothJson).length() } catch (e: Exception) { 0 }
+
                         saveEnvironmentData(lat, lng, wifiJson, cellJson, bluetoothJson)
 
                         val count = environmentDao.getRecordCount()
-                        _uiState.update { it.copy(environmentRecordCount = count) }
+                        _uiState.update { it.copy(
+                            environmentRecordCount = count,
+                            scannedWifiCount = it.scannedWifiCount + wCount,
+                            scannedCellCount = it.scannedCellCount + cCount,
+                            scannedBluetoothCount = it.scannedBluetoothCount + bCount
+                        ) }
                     }
 
                     // 扫描之间延迟 10 秒
@@ -1771,9 +1877,23 @@ class MainViewModel(
         }
     }
 
-    fun updateManageDataMetadata(id: Long, placeName: String, remark: String) {
+    fun updateManageDataMetadata(
+        id: Long,
+        placeName: String,
+        remark: String,
+        selectedWifiBssid: String?,
+        selectedBluetoothAddress: String?,
+        selectedCellKey: String?
+    ) {
         viewModelScope.launch(Dispatchers.IO) {
-            environmentDao.updateMetadata(id, placeName, remark)
+            environmentDao.updateMetadata(
+                id,
+                placeName,
+                remark,
+                selectedWifiBssid,
+                selectedBluetoothAddress,
+                selectedCellKey
+            )
             loadManageData()
         }
     }
@@ -1908,12 +2028,19 @@ class MainViewModel(
         cellJson: String,
         bluetoothJson: String
     ) {
-        val locId = environmentDao.insertLocation(
-            com.suseoaa.locationspoofer.data.db.LocationRecord(
-                lat = lat,
-                lng = lng
+        val existingLocation = environmentDao.findLocationByCoordinates(lat, lng)
+        val locId = if (existingLocation != null) {
+            val updated = existingLocation.copy(timestamp = System.currentTimeMillis())
+            environmentDao.insertLocation(updated)
+            updated.id
+        } else {
+            environmentDao.insertLocation(
+                com.suseoaa.locationspoofer.data.db.LocationRecord(
+                    lat = lat,
+                    lng = lng
+                )
             )
-        )
+        }
 
         try {
             val wifiObj = org.json.JSONObject(wifiJson)
@@ -2082,11 +2209,26 @@ class MainViewModel(
             1.0 / (safeDist * safeDist)
         }
 
-        // 1. 使用最近记录的 connectedWi-Fi 重构已连接的 Wi-Fi
         val closestRecord = records.firstOrNull()
-        val hasConnected = closestRecord?.connectedWifi != null
-        val connectedObj = if (hasConnected) {
-            val cw = closestRecord!!.connectedWifi!!
+        val explicitWifiBssid = closestRecord?.location?.selectedWifiBssid
+        val explicitWifi = if (explicitWifiBssid != null) closestRecord.wifis.find { it.device.bssid == explicitWifiBssid } else null
+
+        val connectedObj = if (explicitWifi != null) {
+            org.json.JSONObject().apply {
+                put("ssid", explicitWifi.device.ssid)
+                put("bssid", explicitWifi.device.bssid)
+                put("vendor", explicitWifi.device.vendor)
+                put("macAddress", explicitWifi.device.bssid)
+                put("frequency", explicitWifi.device.frequency)
+                put("channel", com.suseoaa.locationspoofer.utils.MacVendorHelper.frequencyToChannel(explicitWifi.device.frequency))
+                put("linkSpeed", 65)
+                put("level", explicitWifi.locationWifi.level)
+                put("capabilities", explicitWifi.device.capabilities)
+                put("networkId", 1)
+                put("wifiStandard", 6)
+            }
+        } else if (closestRecord?.connectedWifi != null) {
+            val cw = closestRecord.connectedWifi!!
             org.json.JSONObject().apply {
                 put("ssid", cw.ssid)
                 put("bssid", cw.bssid)
@@ -2140,6 +2282,7 @@ class MainViewModel(
             nearbyArr.put(obj)
         }
 
+        val hasConnected = connectedObj != null
         val wifiResultObj = org.json.JSONObject().apply {
             put("isConnected", hasConnected)
             put("connectedWifi", connectedObj ?: org.json.JSONObject.NULL)
@@ -2161,6 +2304,7 @@ class MainViewModel(
             }
         }
 
+        val explicitCellKey = closestRecord?.location?.selectedCellKey
         val cellArr = org.json.JSONArray()
         cellMap.forEach { (cellKey, rc) ->
             val w = cellWeights[cellKey]!!
@@ -2180,7 +2324,8 @@ class MainViewModel(
             obj.put("systemId", rc.device.systemId)
             obj.put("basestationId", rc.device.basestationId)
             obj.put("dbm", interpolatedDbm)
-            obj.put("isRegistered", rc.locationCell.isRegistered)
+            val isReg = if (explicitCellKey != null) cellKey == explicitCellKey else rc.locationCell.isRegistered
+            obj.put("isRegistered", isReg)
             cellArr.put(obj)
         }
 
@@ -2199,6 +2344,7 @@ class MainViewModel(
             }
         }
 
+        val explicitBtAddress = closestRecord?.location?.selectedBluetoothAddress
         val btArr = org.json.JSONArray()
         btMap.forEach { (address, rb) ->
             val w = btWeights[address]!!
@@ -2208,6 +2354,9 @@ class MainViewModel(
             obj.put("name", rb.device.name)
             obj.put("scanRecordHex", rb.device.scanRecordHex)
             obj.put("rssi", interpolatedRssi)
+            if (explicitBtAddress != null && explicitBtAddress == address) {
+                obj.put("isConnected", true)
+            }
             btArr.put(obj)
         }
 
@@ -2275,92 +2424,107 @@ class MainViewModel(
         settingsRepository.setIgnoredVersion(version)
     }
 
-    fun handleSpoofingIntent(intent: com.suseoaa.locationspoofer.ui.screen.spoofing.SpoofingIntent) {
+    fun handleSpoofingIntent(intent: SpoofingIntent) {
         when (intent) {
-            is com.suseoaa.locationspoofer.ui.screen.spoofing.SpoofingIntent.SetSaveDialogVisible -> _spoofingUiState.update {
+            is SpoofingIntent.SetSaveDialogVisible -> _spoofingUiState.update {
                 it.copy(
                     showSaveDialog = intent.visible
                 )
             }
 
-            is com.suseoaa.locationspoofer.ui.screen.spoofing.SpoofingIntent.SetSavedLocationsVisible -> _spoofingUiState.update {
+            is SpoofingIntent.SetSavedLocationsVisible -> _spoofingUiState.update {
                 it.copy(
                     showSavedLocationsDialog = intent.visible
                 )
             }
 
-            is com.suseoaa.locationspoofer.ui.screen.spoofing.SpoofingIntent.SetUpdateDialogVisible -> _spoofingUiState.update {
+            is SpoofingIntent.SetUpdateDialogVisible -> _spoofingUiState.update {
                 it.copy(
                     showUpdateDialog = intent.visible
                 )
             }
 
-            is com.suseoaa.locationspoofer.ui.screen.spoofing.SpoofingIntent.SetMapTypeDialogVisible -> _spoofingUiState.update {
+            is SpoofingIntent.SetMapTypeDialogVisible -> _spoofingUiState.update {
                 it.copy(
                     showMapTypeDialog = intent.visible
                 )
             }
 
-            is com.suseoaa.locationspoofer.ui.screen.spoofing.SpoofingIntent.SetCustomCoordDialogVisible -> _spoofingUiState.update {
+            is SpoofingIntent.SetCustomCoordDialogVisible -> _spoofingUiState.update {
                 it.copy(
                     showCustomCoordDialog = intent.visible
                 )
             }
 
-            is com.suseoaa.locationspoofer.ui.screen.spoofing.SpoofingIntent.SetStartSpoofingDialogVisible -> _spoofingUiState.update {
+            is SpoofingIntent.SetStartSpoofingDialogVisible -> _spoofingUiState.update {
                 it.copy(
                     showStartSpoofingDialog = intent.visible
                 )
             }
 
-            is com.suseoaa.locationspoofer.ui.screen.spoofing.SpoofingIntent.SetAppCoordinateScreenVisible -> _spoofingUiState.update {
+            is SpoofingIntent.SetAppCoordinateScreenVisible -> _spoofingUiState.update {
                 it.copy(
                     showAppCoordinateScreen = intent.visible
                 )
             }
 
-            is com.suseoaa.locationspoofer.ui.screen.spoofing.SpoofingIntent.SetSheetExpanded -> _spoofingUiState.update {
+            is SpoofingIntent.SetSheetExpanded -> _spoofingUiState.update {
                 it.copy(
                     isSheetExpanded = intent.expanded
                 )
             }
 
-            is com.suseoaa.locationspoofer.ui.screen.spoofing.SpoofingIntent.SetSearchActive -> _spoofingUiState.update {
+            is SpoofingIntent.SetSearchActive -> _spoofingUiState.update {
                 it.copy(
                     isSearchActive = intent.active
                 )
             }
 
-            is com.suseoaa.locationspoofer.ui.screen.spoofing.SpoofingIntent.UpdateSearchQuery -> _spoofingUiState.update {
+            is SpoofingIntent.UpdateSearchQuery -> _spoofingUiState.update {
                 it.copy(
                     searchQuery = intent.query
                 )
             }
 
-            is com.suseoaa.locationspoofer.ui.screen.spoofing.SpoofingIntent.PerformSearch -> {
+            is SpoofingIntent.PerformSearch -> {
                 // Implement search logic later via another intent or directly here if preferred
             }
 
-            is com.suseoaa.locationspoofer.ui.screen.spoofing.SpoofingIntent.ClearSearchResults -> _spoofingUiState.update {
+            is SpoofingIntent.ClearSearchResults -> _spoofingUiState.update {
                 it.copy(
                     searchResults = emptyList(),
                     showSearchResults = false
                 )
             }
 
-            is com.suseoaa.locationspoofer.ui.screen.spoofing.SpoofingIntent.SetSearchResults -> _spoofingUiState.update {
+            is SpoofingIntent.SetSearchResults -> _spoofingUiState.update {
                 it.copy(
                     searchResults = intent.results,
                     showSearchResults = intent.show
                 )
             }
 
-            is com.suseoaa.locationspoofer.ui.screen.spoofing.SpoofingIntent.ConfirmMapPoint -> confirmMapPoint(
+            is SpoofingIntent.ConfirmMapPoint -> confirmMapPoint(
                 intent.lat,
                 intent.lng
             )
 
-            is com.suseoaa.locationspoofer.ui.screen.spoofing.SpoofingIntent.RequestCurrentLocation -> {} // Typically requires Context, will pass to a callback instead
+            is SpoofingIntent.MapPointMoved -> {
+                val now = System.currentTimeMillis()
+                if (now - lastMapMoveTime > 500) {
+                    lastMapMoveTime = now
+                    confirmMapPoint(intent.lat, intent.lng, isDragging = true)
+                } else {
+                    mapMoveJob?.cancel()
+                    mapMoveJob = viewModelScope.launch {
+                        kotlinx.coroutines.delay(500 - (now - lastMapMoveTime))
+                        lastMapMoveTime = System.currentTimeMillis()
+                        confirmMapPoint(intent.lat, intent.lng, isDragging = true)
+                    }
+                }
+            }
+
+            is SpoofingIntent.RequestCurrentLocation -> {} // Typically requires Context, will pass to a callback instead
         }
     }
 }

@@ -61,13 +61,24 @@ class UpdateViewModel(private val context: Context) : ViewModel() {
                     val isPrerelease = obj.optBoolean("prerelease", false)
 
                     var downloadUrl: String? = null
+                    var downloadUrl32Bit: String? = null
                     val assets = obj.optJSONArray("assets")
                     if (assets != null) {
                         for (j in 0 until assets.length()) {
                             val asset = assets.getJSONObject(j)
-                            if (asset.optString("name", "").endsWith(".apk")) {
-                                downloadUrl = asset.optString("browser_download_url")
-                                break
+                            val assetName = asset.optString("name", "")
+                            if (assetName.endsWith(".apk")) {
+                                val url = asset.optString("browser_download_url")
+                                if (assetName.contains("armeabi-v7a") || assetName.contains("32")) {
+                                    downloadUrl32Bit = url
+                                } else if (assetName.contains("arm64-v8a")) {
+                                    downloadUrl = url
+                                } else {
+                                    // 通用安装包，如果没有专门的64位，就默认用通用包作为主链接
+                                    if (downloadUrl == null) {
+                                        downloadUrl = url
+                                    }
+                                }
                             }
                         }
                     }
@@ -77,6 +88,7 @@ class UpdateViewModel(private val context: Context) : ViewModel() {
                             tagName,
                             body,
                             downloadUrl,
+                            downloadUrl32Bit,
                             publishedAt,
                             isPrerelease
                         )

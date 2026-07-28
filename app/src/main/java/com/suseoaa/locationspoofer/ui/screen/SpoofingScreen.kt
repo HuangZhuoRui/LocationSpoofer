@@ -323,6 +323,9 @@ fun SpoofingScreen(
                         map.setOnCameraChangeListener { lat, lng ->
                             onIntent(SpoofingIntent.ConfirmMapPoint(lat, lng))
                         }
+                        map.setOnCameraMoveListener { lat, lng ->
+                            onIntent(SpoofingIntent.MapPointMoved(lat, lng))
+                        }
                     }
 
                     Icon(

@@ -94,6 +94,9 @@ data class AppState(
     val appCoordinateSystems: Map<String, String> = emptyMap(),
     val isContinuousScanning: Boolean = false,
     val environmentRecordCount: Int = 0,
+    val scannedWifiCount: Int = 0,
+    val scannedCellCount: Int = 0,
+    val scannedBluetoothCount: Int = 0,
     val hookedApps: List<AppInfoItem> = emptyList(),
     // 采集到的本地环境数据
     val collectedWifiJson: String = "[]",

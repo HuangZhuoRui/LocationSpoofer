@@ -27,5 +27,6 @@ sealed class SpoofingIntent {
 
     // Map Actions
     data class ConfirmMapPoint(val lat: Double, val lng: Double) : SpoofingIntent()
+    data class MapPointMoved(val lat: Double, val lng: Double) : SpoofingIntent()
     data object RequestCurrentLocation : SpoofingIntent()
 }

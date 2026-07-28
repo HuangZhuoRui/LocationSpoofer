@@ -35,3 +35,6 @@ google-services.json
 
 # ─── Builds / Outputs ────────────────────────────────────
 app/release/
+
+# Local Gradle user home/cache
+.gradle-home/

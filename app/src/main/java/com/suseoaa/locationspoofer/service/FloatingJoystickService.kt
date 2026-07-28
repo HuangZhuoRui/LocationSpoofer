@@ -37,11 +37,17 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.lifecycle.lifecycleScope
 import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.suseoaa.locationspoofer.data.repository.SettingsRepository
 import com.suseoaa.locationspoofer.provider.SpooferProvider
+import com.suseoaa.locationspoofer.utils.ConfigManager
+import com.suseoaa.locationspoofer.utils.RootManager
+import com.suseoaa.locationspoofer.utils.SettingsManager
+import kotlinx.coroutines.launch
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -62,11 +68,22 @@ class FloatingJoystickService : Service(), LifecycleOwner, ViewModelStoreOwner,
     override val viewModelStore: ViewModelStore get() = store
     override val savedStateRegistry: SavedStateRegistry get() = savedStateRegistryController.savedStateRegistry
 
+    private lateinit var rootManager: RootManager
+    private lateinit var configManager: ConfigManager
+    private lateinit var settingsRepo: SettingsRepository
+    
+    private var lastConfigSaveTime = 0L
+
     override fun onCreate() {
         super.onCreate()
         savedStateRegistryController.performRestore(null)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        
+        rootManager = RootManager()
+        configManager = ConfigManager(rootManager)
+        settingsRepo = SettingsRepository(SettingsManager(this))
+        
         showFloatingWindow()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
@@ -108,6 +125,30 @@ class FloatingJoystickService : Service(), LifecycleOwner, ViewModelStoreOwner,
                                 val bearing = (Math.toDegrees(angle) + 90 + 360) % 360
                                 SpooferProvider.simBearing = bearing.toFloat()
                                 updateLocationBasedOnJoystick(bearing, intensity)
+                            } else {
+                                lifecycleScope.launch {
+                                    val rootManager = RootManager()
+                                    val configManager = ConfigManager(rootManager)
+                                    val settingsRepo = SettingsRepository(
+                                        SettingsManager(this@FloatingJoystickService)
+                                    )
+                                    configManager.saveConfig(
+                                        lat = SpooferProvider.latitude,
+                                        lng = SpooferProvider.longitude,
+                                        active = SpooferProvider.isActive,
+                                        simMode = SpooferProvider.simMode,
+                                        simBearing = SpooferProvider.simBearing,
+                                        startTimestamp = SpooferProvider.startTimestamp,
+                                        wifiJson = SpooferProvider.wifiJson,
+                                        cellJson = SpooferProvider.cellJson,
+                                        bluetoothJson = SpooferProvider.bluetoothJson,
+                                        appCoordinateSystems = settingsRepo.getAppCoordinateSystems(),
+                                        mockWifi = settingsRepo.mockWifi,
+                                        mockCell = settingsRepo.mockCell,
+                                        mockBluetooth = settingsRepo.mockBluetooth,
+                                        enableJitter = settingsRepo.enableJitter
+                                    )
+                                }
                             }
                         },
                         onClose = { stopSelf() }
@@ -148,6 +189,30 @@ class FloatingJoystickService : Service(), LifecycleOwner, ViewModelStoreOwner,
         SpooferProvider.latitude = Math.toDegrees(newLatRad)
         SpooferProvider.longitude = Math.toDegrees(newLngRad)
         SpooferProvider.startTimestamp = now // 将模拟开始时间重置为当前时间，以避免位置跳跃
+        
+        if (now - lastConfigSaveTime > 1000) {
+            lastConfigSaveTime = now
+            lifecycleScope.launch {
+                configManager.saveConfig(
+                    lat = SpooferProvider.latitude,
+                    lng = SpooferProvider.longitude,
+                    active = SpooferProvider.isActive,
+                    simMode = SpooferProvider.simMode,
+                    simBearing = SpooferProvider.simBearing,
+                    startTimestamp = SpooferProvider.startTimestamp,
+                    wifiJson = SpooferProvider.wifiJson,
+                    cellJson = SpooferProvider.cellJson,
+                    bluetoothJson = SpooferProvider.bluetoothJson,
+                    appCoordinateSystems = settingsRepo.getAppCoordinateSystems(),
+                    mockWifi = settingsRepo.mockWifi,
+                    mockCell = settingsRepo.mockCell,
+                    mockBluetooth = settingsRepo.mockBluetooth,
+                    enableJitter = settingsRepo.enableJitter,
+                    altitude = settingsRepo.altitude.toDoubleOrNull() ?: 0.0,
+                    satelliteCount = settingsRepo.satelliteCount.toIntOrNull() ?: 20
+                )
+            }
+        }
     }
 
     override fun onDestroy() {

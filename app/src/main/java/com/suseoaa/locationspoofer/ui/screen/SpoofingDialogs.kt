@@ -203,8 +203,11 @@ fun UpdateDialog(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Spacer(Modifier.height(8.dp))
-                                if (release.downloadUrl != null) {
-                                    if (uiState.activeDownloadId != null && uiState.activeDownloadUrl == release.downloadUrl) {
+                                if (release.downloadUrl != null || release.downloadUrl32Bit != null) {
+                                    val isDownloadingThis = uiState.activeDownloadId != null && 
+                                        (uiState.activeDownloadUrl == release.downloadUrl || uiState.activeDownloadUrl == release.downloadUrl32Bit)
+                                        
+                                    if (isDownloadingThis) {
                                         if (uiState.downloadStatus == android.app.DownloadManager.STATUS_SUCCESSFUL) {
                                             Button(
                                                 onClick = onInstall,
@@ -228,7 +231,7 @@ fun UpdateDialog(
                                                     )
                                                     Spacer(Modifier.height(4.dp))
                                                     LinearProgressIndicator(
-                                                        progress = uiState.downloadProgress / 100f,
+                                                        progress = { uiState.downloadProgress / 100f },
                                                         modifier = Modifier.fillMaxWidth(),
                                                         color = AccentBlue
                                                     )
@@ -247,16 +250,41 @@ fun UpdateDialog(
                                             }
                                         }
                                     } else if (uiState.activeDownloadId == null) {
-                                        Button(
-                                            onClick = {
-                                                onDownload(
-                                                    release.downloadUrl,
-                                                    release.versionName
-                                                )
-                                            },
-                                            colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            Text(stringResource(R.string.download))
+                                            if (release.downloadUrl != null) {
+                                                Button(
+                                                    onClick = {
+                                                        onDownload(
+                                                            release.downloadUrl,
+                                                            release.versionName
+                                                        )
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+                                                ) {
+                                                    Text(
+                                                        if (release.downloadUrl32Bit != null) 
+                                                            stringResource(R.string.download) + " (64位/默认)" 
+                                                        else 
+                                                            stringResource(R.string.download)
+                                                    )
+                                                }
+                                            }
+                                            
+                                            if (release.downloadUrl32Bit != null) {
+                                                TextButton(
+                                                    onClick = {
+                                                        onDownload(
+                                                            release.downloadUrl32Bit,
+                                                            release.versionName + "_32bit"
+                                                        )
+                                                    }
+                                                ) {
+                                                    Text("下载 32位版本")
+                                                }
+                                            }
                                         }
                                     }
                                 }

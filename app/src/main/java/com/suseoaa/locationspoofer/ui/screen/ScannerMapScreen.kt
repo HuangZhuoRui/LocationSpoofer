@@ -3,6 +3,7 @@ package com.suseoaa.locationspoofer.ui.screen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Radar
@@ -123,16 +124,55 @@ fun ScannerMapScreen(
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 48.dp)
         ) {
-            FloatingActionButton(
+            androidx.compose.material3.ExtendedFloatingActionButton(
                 onClick = { viewModel.toggleContinuousScanning() },
                 containerColor = if (uiState.isContinuousScanning) MaterialTheme.colorScheme.surface else AccentGreen,
-                contentColor = if (uiState.isContinuousScanning) AccentGreen else Color.White
-            ) {
-                Icon(Icons.Rounded.Radar, null)
-            }
+                contentColor = if (uiState.isContinuousScanning) AccentGreen else Color.White,
+                icon = { Icon(Icons.Rounded.Radar, null) },
+                text = {
+                    Text(
+                        if (uiState.isContinuousScanning) androidx.compose.ui.res.stringResource(com.suseoaa.locationspoofer.R.string.stop_collection)
+                        else androidx.compose.ui.res.stringResource(com.suseoaa.locationspoofer.R.string.start_collection)
+                    )
+                }
+            )
         }
 
-        // 右侧悬浮按钮
+        // 右侧统计信息面板 (放在 Status Chip 下方)
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 96.dp, end = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalAlignment = Alignment.End
+        ) {
+            if (uiState.isContinuousScanning || uiState.scannedWifiCount > 0 || uiState.scannedCellCount > 0 || uiState.scannedBluetoothCount > 0) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                ) {
+                    Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = androidx.compose.ui.res.stringResource(com.suseoaa.locationspoofer.R.string.scanned_wifi_count, uiState.scannedWifiCount),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = androidx.compose.ui.res.stringResource(com.suseoaa.locationspoofer.R.string.scanned_cell_count, uiState.scannedCellCount),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = androidx.compose.ui.res.stringResource(com.suseoaa.locationspoofer.R.string.scanned_bt_count, uiState.scannedBluetoothCount),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+        
+        // 右侧悬浮按钮（地图图层等）
         Column(
             modifier = Modifier
                 .align(Alignment.CenterEnd)

@@ -32,8 +32,8 @@ android {
         applicationId = "com.suseoaa.locationspoofer"
         minSdk = 26
         targetSdk = 35
-        versionCode = 14031
-        versionName = "1.40.31"
+        versionCode = 14536
+        versionName = "1.45.36"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -42,8 +42,13 @@ android {
         manifestPlaceholders["googleMapsApiKey"] = googleMapsApiKey
         manifestPlaceholders["amapApiKey"] = amapApiKey
 
-        ndk {
-            abiFilters.add("arm64-v8a")
+        splits {
+            abi {
+                isEnable = true
+                reset()
+                include("arm64-v8a", "armeabi-v7a")
+                isUniversalApk = false
+            }
         }
     }
 

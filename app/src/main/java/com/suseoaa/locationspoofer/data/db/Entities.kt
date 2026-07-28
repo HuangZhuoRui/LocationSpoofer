@@ -19,7 +19,10 @@ data class LocationRecord(
     val lng: Double,
     val timestamp: Long = System.currentTimeMillis(),
     val placeName: String = "",
-    val remark: String = ""
+    val remark: String = "",
+    val selectedWifiBssid: String? = null,
+    val selectedBluetoothAddress: String? = null,
+    val selectedCellKey: String? = null
 )
 
 @Serializable
