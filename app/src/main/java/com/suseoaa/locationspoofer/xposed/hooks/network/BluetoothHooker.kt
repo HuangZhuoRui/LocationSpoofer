@@ -40,6 +40,10 @@ internal fun LocationHooker.hookBluetoothLE(
     classLoader: ClassLoader,
     isCoreSystemProcess: Boolean = false
 ) {
+    if (isCoreSystemProcess) {
+        XposedBridge.log("[LocationSpoofer] Skipping Bluetooth LE hooks in core system process")
+        return
+    }
 
     // BLE 扫描结果伪造的核心逻辑（复用于不同 startScan 重载）
     val buildAndDeliverBleResults = fun(config: JSONObject, callbackObj: Any, cl: ClassLoader) {

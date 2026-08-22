@@ -46,6 +46,10 @@ internal fun LocationHooker.hookCellEnvironment(
     classLoader: ClassLoader,
     isCoreSystemProcess: Boolean = false
 ) {
+    if (isCoreSystemProcess) {
+        XposedBridge.logOpenCellId("Skipping cell environment hooks in core system process")
+        return
+    }
     XposedBridge.logOpenCellId("Installing cell hooks classLoader=$classLoader")
 
     // 1. 基站信息伪造（CellLocation / AllCellInfo / NeighboringCellInfo）
@@ -429,12 +433,13 @@ internal fun LocationHooker.hookCellEnvironment(
             events = events and 0x10.inv()   // 监听基站位置
             events = events and 0x100.inv()  // 监听信号强度
             events = events and 0x400.inv()  // 监听基站信息
-            chain.args[1] = events
+            val newArgs = chain.args.toTypedArray()
+            newArgs[1] = events
             XposedBridge.logOpenCellIdEvery(
                 "listen:sanitized:$originalEvents:$events",
                 "TelephonyManager.listen sanitized events=0x${events.toString(16)}"
             )
-            return@hookMethod chain.proceed(chain.args.toTypedArray())
+            return@hookMethod chain.proceed(newArgs)
         }
         XposedBridge.logOpenCellId("Installed TelephonyManager.listen hook")
     } catch (e: Throwable) {

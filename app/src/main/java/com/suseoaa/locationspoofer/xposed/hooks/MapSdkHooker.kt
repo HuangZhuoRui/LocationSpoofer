@@ -989,7 +989,9 @@ internal fun LocationHooker.hookAMapSDK(classLoader: ClassLoader) {
             XposedHelpers.hookAllMethods(clientClazz, "setMockEnable") { chain, _ ->
                 val config = readConfig()
                 if (config != null && config.optBoolean("active", false) && chain.args.isNotEmpty()) {
-                    chain.args[0] = true
+                    val args = chain.args.toTypedArray()
+                    args[0] = true
+                    return@hookAllMethods chain.proceed(args)
                 }
                 return@hookAllMethods chain.proceed(chain.args.toTypedArray())
             }
