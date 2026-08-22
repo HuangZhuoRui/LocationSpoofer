@@ -31,9 +31,9 @@ jobs:
             exit 1
           fi
           
-          # 校验版本号格式（支持 x.y.z 或 x.y.z-beta-n / x.y.z-beta.n）
-          if ! echo "$VERSION_NAME" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-beta[-.][0-9]+)?$'; then
-            echo "警告：版本号 '$VERSION_NAME' 不符合标准语义化规范 (如 2.3.6 或 2.3.6-beta-1)，跳过发版。"
+          # 校验版本号格式（支持 x.y.z 或 x.y.z-beta / x.y.z-beta-n / x.y.z-alpha / x.y.z-rc 等）
+          if ! echo "$VERSION_NAME" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-(beta|alpha|rc)([-.]?[0-9]+)?)?$'; then
+            echo "警告：版本号 '$VERSION_NAME' 不符合标准语义化规范 (如 2.4.9, 2.4.9-beta 或 2.4.9-beta-1)，跳过发版。"
             echo "changed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
