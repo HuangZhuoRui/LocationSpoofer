@@ -71,6 +71,14 @@
             android:name=".service.FloatingJoystickService"
             android:enabled="true"
             android:exported="false" />
+        <receiver
+            android:name=".service.SpoofingControlReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.suseoaa.locationspoofer.START" />
+                <action android:name="com.suseoaa.locationspoofer.STOP" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>
