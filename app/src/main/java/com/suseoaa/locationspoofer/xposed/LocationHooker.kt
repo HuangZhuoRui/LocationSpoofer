@@ -43,12 +43,23 @@ class LocationHooker : XposedModule() {
     internal val bleScanTimers = ConcurrentHashMap<Any, java.util.Timer>()
     internal val hookedCallbackClasses = ConcurrentHashMap<Class<*>, Boolean>()
 
+    // 标记本进程内是否已经安装过一次环境级 Hook（WiFi/基站/连接层/蓝牙/位置/反检测等）。
+    // 这些 Hook 针对的是 ConnectivityManager/TelephonyManager/WifiManager/Location 等系统共享类，
+    // 同一个类在整个进程里只有一份，不需要也不能按 classloader 重复 Hook——
+    // WebView/MultiDex 等场景会让 handleLoadPackage 在同一进程内被多次调用（不同的"包名"），
+    // 如果重复安装，会在同一个方法上叠加两层拦截链，libxposed 在处理带基本类型参数的方法
+    // (如 ConnectivityManager.getNetworkInfo(int)) 时，叠加后的拦截链会抛出
+    // IllegalArgumentException: argument N has type int, got java.lang.Integer，导致目标 App 崩溃。
+    @Volatile
+    internal var environmentHooksInstalled = false
+
     // 用于跟踪活动的 Android LocationListener，实现动态主动欺骗
     // 使用 CopyOnWriteArrayList 和强引用，防止 GC 移除监听器
     internal val capturedLocationListeners = CopyOnWriteArrayList<Any>()
     internal val capturedAMapListeners = CopyOnWriteArrayList<Any>()
     internal val capturedBaiduListeners = CopyOnWriteArrayList<Any>()
     internal val capturedTencentListeners = CopyOnWriteArrayList<Any>()
+    internal val capturedFusedLocationCallbacks = CopyOnWriteArrayList<Any>()
 
     @Volatile
     internal var currentPackageName: String = ""
@@ -114,10 +125,12 @@ class LocationHooker : XposedModule() {
         bleScanTimers.values.forEach { it.cancel() }
         bleScanTimers.clear()
         hookedCallbackClasses.clear()
+        environmentHooksInstalled = false
         capturedLocationListeners.clear()
         capturedAMapListeners.clear()
         capturedBaiduListeners.clear()
         capturedTencentListeners.clear()
+        capturedFusedLocationCallbacks.clear()
         return true
     }
 
@@ -187,6 +200,15 @@ class LocationHooker : XposedModule() {
             return
         }
 
+        if (environmentHooksInstalled) {
+            // 同一进程内 handleLoadPackage 被再次触发（例如宿主 App 内嵌的 WebView 会作为独立的
+            // "包" 单独回调一次），但 ConnectivityManager/TelephonyManager/WifiManager/Location
+            // 这些系统类在整个进程里只有一份，不需要重复 Hook，见上面 environmentHooksInstalled 的注释。
+            readConfig()
+            return
+        }
+        environmentHooksInstalled = true
+
         XposedBridge.log("[LocationSpoofer] Hooking package: $pkg")
         android.util.Log.e(
             "LocationSpoofer",
@@ -247,6 +269,7 @@ class LocationHooker : XposedModule() {
         try { hookAMapSDK(cl) } catch (_: Throwable) {}
         try { hookTencentSDK(cl) } catch (_: Throwable) {}
         try { hookBaiduSDK(cl) } catch (_: Throwable) {}
+        try { hookGoogleFusedLocation(cl) } catch (_: Throwable) {}
     }
 
     /**
@@ -448,6 +471,7 @@ class LocationHooker : XposedModule() {
                                     val aCount = capturedAMapListeners.size
                                     val bCount = capturedBaiduListeners.size
                                     val tCount = capturedTencentListeners.size
+                                    val fCount = capturedFusedLocationCallbacks.size
 
                                     val isStationary = motion.speed <= 0.05
                                     val (targetLat, targetLng) = getAppTargetCoordinate(motion.lat, motion.lng, newConfig, "GCJ-02")
@@ -539,6 +563,57 @@ class LocationHooker : XposedModule() {
                                                             called = true
                                                         } catch (_: Throwable) {}
                                                     }
+                                                } catch (_: Throwable) {
+                                                }
+                                            }
+                                        }
+
+                                        // 1.5 Google FusedLocationProviderClient 的 LocationCallback
+                                        if (fCount > 0 && cl != null) {
+                                            val callbacksToNotify = capturedFusedLocationCallbacks.toList()
+                                            for (callback in callbacksToNotify) {
+                                                try {
+                                                    val callbackCl = callback.javaClass.classLoader ?: cl
+                                                    val locationClass = Class.forName(
+                                                        "android.location.Location",
+                                                        false,
+                                                        callbackCl
+                                                    )
+                                                    val mockLoc =
+                                                        locationClass.getConstructor(String::class.java)
+                                                            .newInstance(android.location.LocationManager.GPS_PROVIDER)
+                                                    XposedHelpers.callMethod(mockLoc, "setLatitude", pushLat)
+                                                    XposedHelpers.callMethod(mockLoc, "setLongitude", pushLng)
+                                                    XposedHelpers.callMethod(mockLoc, "setAccuracy", pushAccuracy)
+                                                    XposedHelpers.callMethod(mockLoc, "setSpeed", pushSpeed)
+                                                    XposedHelpers.callMethod(mockLoc, "setBearing", pushBearing)
+                                                    XposedHelpers.callMethod(mockLoc, "setAltitude", pushAltitude)
+                                                    XposedHelpers.callMethod(mockLoc, "setTime", timeNow)
+                                                    XposedHelpers.callMethod(
+                                                        mockLoc,
+                                                        "setElapsedRealtimeNanos",
+                                                        elapsedNanos
+                                                    )
+                                                    try {
+                                                        XposedHelpers.callMethod(
+                                                            mockLoc,
+                                                            "setIsFromMockProvider",
+                                                            false
+                                                        )
+                                                    } catch (_: Throwable) {}
+
+                                                    val locationResultClass = Class.forName(
+                                                        "com.google.android.gms.location.LocationResult",
+                                                        false,
+                                                        callbackCl
+                                                    )
+                                                    val locationsList = java.util.Collections.singletonList(mockLoc)
+                                                    val result = XposedHelpers.callStaticMethod(
+                                                        locationResultClass,
+                                                        "create",
+                                                        locationsList
+                                                    )
+                                                    XposedHelpers.callMethod(callback, "onLocationResult", result)
                                                 } catch (_: Throwable) {
                                                 }
                                             }
