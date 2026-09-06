@@ -2,6 +2,8 @@ package com.suseoaa.locationspoofer.ui.screen.tabs.route
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,7 +42,12 @@ fun RouteConfigDialog(
     onStopAtDestinationChange: (Boolean) -> Unit = {},
     onEnableStepSimulationChange: (Boolean) -> Unit = {},
     onStepCadenceChange: (Int) -> Unit = {},
-    onIsAutoCadenceChange: (Boolean) -> Unit = {}
+    onIsAutoCadenceChange: (Boolean) -> Unit = {},
+    onToggleWifi: () -> Unit = {},
+    onToggleCell: () -> Unit = {},
+    onToggleBluetooth: () -> Unit = {},
+    onToggleJitter: () -> Unit = {},
+    onSatelliteCountChange: (String) -> Unit = {}
 ) {
     Dialog(
         onDismissRequest = onDismiss,
@@ -523,6 +530,52 @@ fun RouteConfigDialog(
                     }
                 }
 
+
+                // 环境模拟（Wi-Fi / 基站 / 蓝牙 / 抖动 / 卫星数）
+                // 这些参数路线模拟本来就已经传给底层了，只是之前没有入口，
+                // 用户必须回定点模拟那边才能改（issue #50）。这里复用同一份 uiState 与回调。
+                Text(
+                    stringResource(R.string.env_simulation_section),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+
+                RouteEnvToggleRow(
+                    title = stringResource(R.string.mock_wifi_data),
+                    checked = uiState.mockWifi,
+                    onCheckedChange = { onToggleWifi() }
+                )
+                RouteEnvToggleRow(
+                    title = stringResource(R.string.mock_cell_data),
+                    checked = uiState.mockCell,
+                    onCheckedChange = { onToggleCell() }
+                )
+                RouteEnvToggleRow(
+                    title = stringResource(R.string.mock_bluetooth_data),
+                    checked = uiState.mockBluetooth,
+                    onCheckedChange = { onToggleBluetooth() }
+                )
+                RouteEnvToggleRow(
+                    title = stringResource(R.string.enable_slight_jitter),
+                    subtitle = stringResource(R.string.enable_slight_jitter_desc),
+                    checked = uiState.enableJitter,
+                    onCheckedChange = { onToggleJitter() }
+                )
+
+                OutlinedTextField(
+                    value = uiState.satelliteCountInput,
+                    onValueChange = onSatelliteCountChange,
+                    label = { Text(stringResource(R.string.satellite_count), fontSize = 12.sp) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = AccentBlue,
+                        focusedLabelColor = AccentBlue
+                    )
+                )
+
                 // 启动按钮
                 Button(
                     onClick = onStartRoute,
@@ -585,6 +638,53 @@ fun RouteSelectionCard(
                 fontSize = 10.5.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                 maxLines = 1
+            )
+        }
+    }
+}
+
+
+@Composable
+private fun RouteEnvToggleRow(
+    title: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    subtitle: String? = null
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    title,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                if (subtitle != null) {
+                    Text(
+                        subtitle,
+                        fontSize = 11.5.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                    )
+                }
+            }
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = AccentBlue
+                )
             )
         }
     }

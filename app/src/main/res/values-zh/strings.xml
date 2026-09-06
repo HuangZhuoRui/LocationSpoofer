@@ -470,4 +470,6 @@
     <string name="add_to_favorites">收藏</string>
     <string name="favorited_toast">已收藏“%1$s”</string>
     <string name="favorite_failed">收藏失败</string>
+    <string name="env_simulation_section">环境模拟</string>
+    <string name="enable_slight_jitter_desc">加入自然的 GPS 漂移，让轨迹不那么机械</string>
 </resources>

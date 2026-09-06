@@ -594,7 +594,12 @@ fun RouteTab(
             onStopAtDestinationChange = viewModel::setStopAtDestination,
             onEnableStepSimulationChange = viewModel::setEnableStepSimulation,
             onStepCadenceChange = viewModel::setStepCadenceSpm,
-            onIsAutoCadenceChange = viewModel::setIsAutoCadence
+            onIsAutoCadenceChange = viewModel::setIsAutoCadence,
+            onToggleWifi = viewModel::toggleMockWifi,
+            onToggleCell = viewModel::toggleMockCell,
+            onToggleBluetooth = viewModel::toggleMockBluetooth,
+            onToggleJitter = viewModel::toggleEnableJitter,
+            onSatelliteCountChange = viewModel::setSatelliteCount
         )
     }
 

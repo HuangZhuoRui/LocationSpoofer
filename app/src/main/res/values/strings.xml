@@ -470,4 +470,6 @@ Error details: %s</string>
     <string name="add_to_favorites">Favorite</string>
     <string name="favorited_toast">Added \"%1$s\" to favorites</string>
     <string name="favorite_failed">Failed to add to favorites</string>
+    <string name="env_simulation_section">Environment simulation</string>
+    <string name="enable_slight_jitter_desc">Adds natural GPS drift so the track looks less mechanical</string>
 </resources>
