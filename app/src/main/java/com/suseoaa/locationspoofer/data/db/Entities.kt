@@ -223,14 +223,49 @@ data class SavedRouteEntity(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+/**
+ * 可随数据包一起导出的软件设置（模拟参数与地图偏好）。
+ * 只放"换台设备也应该保持一致"的项；
+ * 运行时状态（isSpoofingActive/lastSpoofedLat/Lng）、本机偏好（语言、深色模式、忽略的版本）
+ * 一律不导出，跟着数据包走只会互相干扰。
+ */
+@Serializable
+data class ExportedSettings(
+    val mockWifi: Boolean = true,
+    val mockCell: Boolean = true,
+    val mockBluetooth: Boolean = true,
+    val enableJitter: Boolean = true,
+    val altitude: String = "",
+    val satelliteCount: String = "",
+    val mapType: String = "",
+    val mapEngine: String = ""
+)
+
+/**
+ * API 密钥属于个人凭据，与普通设置分开成一类，导出时默认不勾选：
+ * 分享给他人的文件里带上密钥，等于把自己实名认证的开发者配额交出去。
+ */
+@Serializable
+data class ExportedApiKeys(
+    val amapApiKey: String = "",
+    val baiduApiKey: String = "",
+    val googleApiKey: String = "",
+    val wigleApiToken: String = "",
+    val opencellidApiToken: String = ""
+)
+
 // 综合导出与导入数据包（支持全量多版本互通）
+// version 3 起新增 settings / apiKeys 两个可空字段，null 表示本次导出没有包含该分类；
+// 旧的 version 2 文件缺这两个字段时会落到默认值 null，无需特殊兼容处理。
 @Serializable
 data class LocationSpooferDataPackage(
-    val version: Int = 2,
+    val version: Int = 3,
     val exportTimestamp: Long = System.currentTimeMillis(),
     val appVersion: String = "2.0.0",
     val locations: List<CompleteLocation> = emptyList(),
     val savedLocations: List<SavedLocation> = emptyList(),
     val savedRoutes: List<SavedRouteEntity> = emptyList(),
-    val appCoordinateSystems: Map<String, String> = emptyMap()
+    val appCoordinateSystems: Map<String, String> = emptyMap(),
+    val settings: ExportedSettings? = null,
+    val apiKeys: ExportedApiKeys? = null
 )

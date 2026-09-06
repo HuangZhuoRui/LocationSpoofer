@@ -451,4 +451,20 @@ Error details: %s</string>
     <string name="save_bt">Save Bluetooth</string>
     <string name="edit_coordinates_title">Point Coordinates</string>
     <string name="edit_coordinates_desc">Modify the coordinates of this collected point to reuse its Wi-Fi, Cell, and Bluetooth environment data at the target location</string>
+    <string name="export_select_title">Select what to export</string>
+    <string name="export_select_desc">Only the checked categories are written to the file</string>
+    <string name="import_select_title">Select what to import</string>
+    <string name="import_select_desc">Only the checked categories are applied</string>
+    <string name="export_action">Export</string>
+    <string name="import_action">Import</string>
+    <string name="category_collected_data">Collected data</string>
+    <string name="category_saved_locations">Saved locations</string>
+    <string name="category_saved_routes">Saved routes</string>
+    <string name="category_app_coordinates">Per-app coordinate systems</string>
+    <string name="category_app_settings">App settings (simulation params, map preferences)</string>
+    <string name="category_api_keys">API keys</string>
+    <string name="category_api_keys_warning">Personal credentials. Do not include when sharing with others</string>
+    <string name="category_with_count">%1$s (%2$d)</string>
+    <string name="category_empty">Nothing to include</string>
+    <string name="import_parse_failed">Could not read this file. Please pick a valid backup</string>
 </resources>

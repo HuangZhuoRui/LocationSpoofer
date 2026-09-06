@@ -451,4 +451,20 @@
     <string name="save_bt">保存蓝牙</string>
     <string name="edit_coordinates_title">采集点经纬度</string>
     <string name="edit_coordinates_desc">修改本采集点绑定的坐标，在目标地点开启模拟时即可复用此处采集的 Wi-Fi、基站与蓝牙环境数据</string>
+    <string name="export_select_title">选择要导出的内容</string>
+    <string name="export_select_desc">只有勾选的分类会写入文件</string>
+    <string name="import_select_title">选择要导入的内容</string>
+    <string name="import_select_desc">只有勾选的分类会被应用</string>
+    <string name="export_action">导出</string>
+    <string name="import_action">导入</string>
+    <string name="category_collected_data">采集数据</string>
+    <string name="category_saved_locations">收藏点位</string>
+    <string name="category_saved_routes">保存的路线</string>
+    <string name="category_app_coordinates">应用坐标系配置</string>
+    <string name="category_app_settings">软件设置（模拟参数、地图偏好）</string>
+    <string name="category_api_keys">API 密钥</string>
+    <string name="category_api_keys_warning">属于个人凭据，分享给他人时请勿包含</string>
+    <string name="category_with_count">%1$s（%2$d 条）</string>
+    <string name="category_empty">暂无可导出内容</string>
+    <string name="import_parse_failed">无法解析该文件，请选择有效的备份文件</string>
 </resources>

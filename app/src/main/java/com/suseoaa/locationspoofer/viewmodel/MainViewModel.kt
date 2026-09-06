@@ -12,6 +12,8 @@ import com.suseoaa.locationspoofer.R
 import com.suseoaa.locationspoofer.data.db.EnvironmentDao
 import com.suseoaa.locationspoofer.data.db.LocationRecord
 import com.suseoaa.locationspoofer.data.model.AppState
+import com.suseoaa.locationspoofer.data.model.ImportExportCounts
+import com.suseoaa.locationspoofer.data.model.ImportExportSelection
 import com.suseoaa.locationspoofer.data.model.RoutePoint
 import com.suseoaa.locationspoofer.data.model.RoutePlanStage
 import com.suseoaa.locationspoofer.data.model.RouteRunMode
@@ -2535,22 +2537,77 @@ class MainViewModel(
         return Triple(wifiArr.toString(), cellArr.toString(), btArr.toString())
     }
 
-    fun exportEnvironmentData(uri: android.net.Uri, onResult: (Boolean) -> Unit = {}) {
+    /** 供导出对话框展示"当前设备上每个分类各有多少条" */
+    fun collectExportCounts(onResult: (ImportExportCounts) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val counts = try {
+                ImportExportCounts(
+                    locations = environmentDao.getAllCompleteLocations().size,
+                    savedLocations = settingsRepository.getSavedLocations().size,
+                    savedRoutes = locationRepository.getAllSavedRoutesList().size,
+                    appCoordinateSystems = settingsRepository.getAppCoordinateSystems().size,
+                    settings = 1,
+                    apiKeys = listOf(
+                        settingsRepository.getAmapApiKey(),
+                        settingsRepository.getBaiduApiKey(),
+                        settingsRepository.getGoogleApiKey(),
+                        settingsRepository.getWigleApiToken(),
+                        settingsRepository.getOpencellidApiToken()
+                    ).count { it.isNotBlank() }
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
+                ImportExportCounts()
+            }
+            launch(Dispatchers.Main) { onResult(counts) }
+        }
+    }
+
+    fun exportEnvironmentData(
+        uri: android.net.Uri,
+        selection: ImportExportSelection = ImportExportSelection(),
+        onResult: (Boolean) -> Unit = {}
+    ) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val locations = environmentDao.getAllCompleteLocations()
-                val savedLocations = settingsRepository.getSavedLocations()
-                val savedRoutes = locationRepository.getAllSavedRoutesList()
-                val appCoordinateSystems = settingsRepository.getAppCoordinateSystems()
+                // 未勾选的分类直接留空/留 null，不写进文件
+                val locations = if (selection.locations) environmentDao.getAllCompleteLocations() else emptyList()
+                val savedLocations = if (selection.savedLocations) settingsRepository.getSavedLocations() else emptyList()
+                val savedRoutes = if (selection.savedRoutes) locationRepository.getAllSavedRoutesList() else emptyList()
+                val appCoordinateSystems =
+                    if (selection.appCoordinateSystems) settingsRepository.getAppCoordinateSystems() else emptyMap()
+                val settings = if (selection.settings) {
+                    com.suseoaa.locationspoofer.data.db.ExportedSettings(
+                        mockWifi = settingsRepository.mockWifi,
+                        mockCell = settingsRepository.mockCell,
+                        mockBluetooth = settingsRepository.mockBluetooth,
+                        enableJitter = settingsRepository.enableJitter,
+                        altitude = settingsRepository.altitude,
+                        satelliteCount = settingsRepository.satelliteCount,
+                        mapType = settingsRepository.getMapType(),
+                        mapEngine = settingsRepository.getMapEngine()
+                    )
+                } else null
+                val apiKeys = if (selection.apiKeys) {
+                    com.suseoaa.locationspoofer.data.db.ExportedApiKeys(
+                        amapApiKey = settingsRepository.getAmapApiKey(),
+                        baiduApiKey = settingsRepository.getBaiduApiKey(),
+                        googleApiKey = settingsRepository.getGoogleApiKey(),
+                        wigleApiToken = settingsRepository.getWigleApiToken(),
+                        opencellidApiToken = settingsRepository.getOpencellidApiToken()
+                    )
+                } else null
 
                 val dataPackage = com.suseoaa.locationspoofer.data.db.LocationSpooferDataPackage(
-                    version = 2,
+                    version = 3,
                     exportTimestamp = System.currentTimeMillis(),
                     appVersion = "2.0.0",
                     locations = locations,
                     savedLocations = savedLocations,
                     savedRoutes = savedRoutes,
-                    appCoordinateSystems = appCoordinateSystems
+                    appCoordinateSystems = appCoordinateSystems,
+                    settings = settings,
+                    apiKeys = apiKeys
                 )
 
                 val json = kotlinx.serialization.json.Json {
@@ -2585,81 +2642,115 @@ class MainViewModel(
         }
     }
 
+    /**
+     * 兼容入口：解析并全量导入（API 密钥除外，避免静默覆盖掉用户自己的密钥）。
+     * 需要按分类选择时走 parseImportPackage + applyImportPackage。
+     */
     fun importEnvironmentData(uri: android.net.Uri, onComplete: () -> Unit) {
+        parseImportPackage(uri) { pkg ->
+            if (pkg == null) onComplete()
+            else applyImportPackage(pkg, ImportExportSelection(), onComplete)
+        }
+    }
+
+    /** 只解析不落库：先让用户看清文件里有什么，再决定导入哪些分类 */
+    fun parseImportPackage(
+        uri: android.net.Uri,
+        onParsed: (com.suseoaa.locationspoofer.data.db.LocationSpooferDataPackage?) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val parsed = try {
+                parseImportPackageInternal(uri)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                null
+            }
+            launch(Dispatchers.Main) { onParsed(parsed) }
+        }
+    }
+
+    private fun parseImportPackageInternal(
+        uri: android.net.Uri
+    ): com.suseoaa.locationspoofer.data.db.LocationSpooferDataPackage? {
+        val jsonStr = context.contentResolver.openInputStream(uri)?.use { inputStream ->
+            inputStream.bufferedReader().use { it.readText() }
+        } ?: return null
+
+        val json = kotlinx.serialization.json.Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+            coerceInputValues = true
+            encodeDefaults = true
+        }
+
+        // 1. 优先按标准数据包格式解析（version 2 的文件没有 settings/apiKeys 字段，会落到默认 null）
+        val pkg = try {
+            json.decodeFromString<com.suseoaa.locationspoofer.data.db.LocationSpooferDataPackage>(jsonStr)
+        } catch (e: Exception) {
+            null
+        }
+        val pkgHasContent = pkg != null && (
+                pkg.locations.isNotEmpty() || pkg.savedLocations.isNotEmpty() ||
+                        pkg.savedRoutes.isNotEmpty() || pkg.appCoordinateSystems.isNotEmpty() ||
+                        pkg.settings != null || pkg.apiKeys != null
+                )
+        if (pkgHasContent) return pkg
+
+        // 2. 兼容旧版本历史 JSON 导出格式 (List<CompleteLocation> 或 List<SavedLocation>)
+        try {
+            val legacyLocations =
+                json.decodeFromString<List<com.suseoaa.locationspoofer.data.db.CompleteLocation>>(jsonStr)
+            if (legacyLocations.isNotEmpty()) {
+                return com.suseoaa.locationspoofer.data.db.LocationSpooferDataPackage(locations = legacyLocations)
+            }
+        } catch (e: Exception) {
+            try {
+                val legacySaved = json.decodeFromString<List<SavedLocation>>(jsonStr)
+                if (legacySaved.isNotEmpty()) {
+                    return com.suseoaa.locationspoofer.data.db.LocationSpooferDataPackage(savedLocations = legacySaved)
+                }
+            } catch (e2: Exception) {
+                e2.printStackTrace()
+            }
+        }
+
+        return pkg
+    }
+
+    /** 按用户勾选的分类落库，各分类的合并语义与此前保持一致 */
+    fun applyImportPackage(
+        pkg: com.suseoaa.locationspoofer.data.db.LocationSpooferDataPackage,
+        selection: ImportExportSelection,
+        onComplete: () -> Unit
+    ) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val jsonStr = context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                    inputStream.bufferedReader().use { it.readText() }
-                } ?: return@launch
-
-                val json = kotlinx.serialization.json.Json {
-                    ignoreUnknownKeys = true
-                    isLenient = true
-                    coerceInputValues = true
-                    encodeDefaults = true
-                }
-
-                var locationsToImport = emptyList<com.suseoaa.locationspoofer.data.db.CompleteLocation>()
-                var savedLocationsToImport = emptyList<SavedLocation>()
-                var savedRoutesToImport = emptyList<com.suseoaa.locationspoofer.data.db.SavedRouteEntity>()
-                var appCoordsToImport = emptyMap<String, String>()
-
-                // 1. 优先尝试按照标准数据包格式 (Version 2) 解析
-                var parsedAsPackage = false
-                try {
-                    val pkg = json.decodeFromString<com.suseoaa.locationspoofer.data.db.LocationSpooferDataPackage>(jsonStr)
-                    locationsToImport = pkg.locations
-                    savedLocationsToImport = pkg.savedLocations
-                    savedRoutesToImport = pkg.savedRoutes
-                    appCoordsToImport = pkg.appCoordinateSystems
-                    parsedAsPackage = true
-                } catch (e: Exception) {
-                    parsedAsPackage = false
-                }
-
-                // 2. 兼容旧版本历史 JSON 导出格式 (List<CompleteLocation> 或 List<SavedLocation>)
-                if (!parsedAsPackage || (locationsToImport.isEmpty() && savedLocationsToImport.isEmpty() && savedRoutesToImport.isEmpty() && appCoordsToImport.isEmpty())) {
-                    try {
-                        val legacyLocations = json.decodeFromString<List<com.suseoaa.locationspoofer.data.db.CompleteLocation>>(jsonStr)
-                        if (legacyLocations.isNotEmpty()) {
-                            locationsToImport = legacyLocations
-                        }
-                    } catch (e: Exception) {
-                        try {
-                            val legacySaved = json.decodeFromString<List<SavedLocation>>(jsonStr)
-                            if (legacySaved.isNotEmpty()) {
-                                savedLocationsToImport = legacySaved
-                            }
-                        } catch (e2: Exception) {
-                            e2.printStackTrace()
-                        }
-                    }
-                }
-
                 // 安全导入环境定位点 (通过 copy(id = 0) 消除主键冲突，并正确绑定关联设备外键)
-                locationsToImport.forEach { cl ->
-                    val locId = environmentDao.insertLocation(cl.location.copy(id = 0))
-                    cl.connectedWifi?.let { cw ->
-                        environmentDao.insertConnectedWifi(cw.copy(locationId = locId))
-                    }
-                    cl.wifis.forEach { w ->
-                        environmentDao.insertWifiDevice(w.device)
-                        environmentDao.insertLocationWifi(w.locationWifi.copy(locationId = locId))
-                    }
-                    cl.cells.forEach { c ->
-                        environmentDao.insertCellDevice(c.device)
-                        environmentDao.insertLocationCell(c.locationCell.copy(locationId = locId))
-                    }
-                    cl.bluetooths.forEach { b ->
-                        environmentDao.insertBluetoothDevice(b.device)
-                        environmentDao.insertLocationBluetooth(b.locationBluetooth.copy(locationId = locId))
+                if (selection.locations) {
+                    pkg.locations.forEach { cl ->
+                        val locId = environmentDao.insertLocation(cl.location.copy(id = 0))
+                        cl.connectedWifi?.let { cw ->
+                            environmentDao.insertConnectedWifi(cw.copy(locationId = locId))
+                        }
+                        cl.wifis.forEach { w ->
+                            environmentDao.insertWifiDevice(w.device)
+                            environmentDao.insertLocationWifi(w.locationWifi.copy(locationId = locId))
+                        }
+                        cl.cells.forEach { c ->
+                            environmentDao.insertCellDevice(c.device)
+                            environmentDao.insertLocationCell(c.locationCell.copy(locationId = locId))
+                        }
+                        cl.bluetooths.forEach { b ->
+                            environmentDao.insertBluetoothDevice(b.device)
+                            environmentDao.insertLocationBluetooth(b.locationBluetooth.copy(locationId = locId))
+                        }
                     }
                 }
 
                 // 合并收藏点位 (避免重复点位)
-                if (savedLocationsToImport.isNotEmpty()) {
+                if (selection.savedLocations && pkg.savedLocations.isNotEmpty()) {
                     val currentSaved = settingsRepository.getSavedLocations().toMutableList()
-                    savedLocationsToImport.forEach { loc ->
+                    pkg.savedLocations.forEach { loc ->
                         if (currentSaved.none { it.name == loc.name && it.lat == loc.lat && it.lng == loc.lng }) {
                             currentSaved.add(loc)
                         }
@@ -2668,17 +2759,42 @@ class MainViewModel(
                 }
 
                 // 合并保存的路线
-                if (savedRoutesToImport.isNotEmpty()) {
-                    savedRoutesToImport.forEach { route ->
+                if (selection.savedRoutes && pkg.savedRoutes.isNotEmpty()) {
+                    pkg.savedRoutes.forEach { route ->
                         locationRepository.insertSavedRouteEntity(route.copy(id = 0))
                     }
                 }
 
                 // 合并应用坐标系配置
-                if (appCoordsToImport.isNotEmpty()) {
+                if (selection.appCoordinateSystems && pkg.appCoordinateSystems.isNotEmpty()) {
                     val currentCoords = settingsRepository.getAppCoordinateSystems().toMutableMap()
-                    currentCoords.putAll(appCoordsToImport)
+                    currentCoords.putAll(pkg.appCoordinateSystems)
                     settingsRepository.setAppCoordinateSystems(currentCoords)
+                }
+
+                // 软件设置与 API 密钥都是标量配置，没有合并语义，导入即覆盖
+                if (selection.settings) {
+                    pkg.settings?.let { s ->
+                        settingsRepository.mockWifi = s.mockWifi
+                        settingsRepository.mockCell = s.mockCell
+                        settingsRepository.mockBluetooth = s.mockBluetooth
+                        settingsRepository.enableJitter = s.enableJitter
+                        if (s.altitude.isNotBlank()) settingsRepository.altitude = s.altitude
+                        if (s.satelliteCount.isNotBlank()) settingsRepository.satelliteCount = s.satelliteCount
+                        if (s.mapType.isNotBlank()) settingsRepository.setMapType(s.mapType)
+                        if (s.mapEngine.isNotBlank()) settingsRepository.setMapEngine(s.mapEngine)
+                    }
+                }
+                if (selection.apiKeys) {
+                    pkg.apiKeys?.let { k ->
+                        if (k.amapApiKey.isNotBlank()) settingsRepository.setAmapApiKey(k.amapApiKey)
+                        if (k.baiduApiKey.isNotBlank()) settingsRepository.setBaiduApiKey(k.baiduApiKey)
+                        if (k.googleApiKey.isNotBlank()) settingsRepository.setGoogleApiKey(k.googleApiKey)
+                        if (k.wigleApiToken.isNotBlank()) settingsRepository.setWigleApiToken(k.wigleApiToken)
+                        if (k.opencellidApiToken.isNotBlank()) {
+                            settingsRepository.setOpencellidApiToken(k.opencellidApiToken)
+                        }
+                    }
                 }
 
                 val count = environmentDao.getRecordCount()
@@ -2689,7 +2805,26 @@ class MainViewModel(
                     it.copy(
                         environmentRecordCount = count,
                         savedLocations = updatedSaved,
-                        appCoordinateSystems = updatedCoords
+                        appCoordinateSystems = updatedCoords,
+                        mockWifi = settingsRepository.mockWifi,
+                        mockCell = settingsRepository.mockCell,
+                        mockBluetooth = settingsRepository.mockBluetooth,
+                        enableJitter = settingsRepository.enableJitter,
+                        altitudeInput = settingsRepository.altitude.ifBlank { it.altitudeInput },
+                        satelliteCountInput = settingsRepository.satelliteCount.ifBlank { it.satelliteCountInput },
+                        amapApiKey = settingsRepository.getAmapApiKey(),
+                        baiduApiKey = settingsRepository.getBaiduApiKey(),
+                        googleApiKey = settingsRepository.getGoogleApiKey(),
+                        mapType = try {
+                            AppMapType.valueOf(settingsRepository.getMapType())
+                        } catch (e: Exception) {
+                            it.mapType
+                        },
+                        mapEngine = try {
+                            MapEngine.valueOf(settingsRepository.getMapEngine())
+                        } catch (e: Exception) {
+                            it.mapEngine
+                        }
                     )
                 }
 
@@ -2698,6 +2833,7 @@ class MainViewModel(
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
+                launch(Dispatchers.Main) { onComplete() }
             }
         }
     }

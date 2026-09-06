@@ -14,6 +14,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,6 +32,9 @@ import com.suseoaa.locationspoofer.ui.screen.FooterLinks
 import com.suseoaa.locationspoofer.ui.screen.ImportExportDataCard
 import com.suseoaa.locationspoofer.ui.screen.ManageDataCard
 import com.suseoaa.locationspoofer.ui.screen.ScannerMapCard
+import com.suseoaa.locationspoofer.ui.components.ImportExportSelectionDialog
+import com.suseoaa.locationspoofer.data.model.ImportExportCounts
+import com.suseoaa.locationspoofer.data.model.ImportExportSelection
 import com.suseoaa.locationspoofer.ui.theme.AccentBlue
 import com.suseoaa.locationspoofer.ui.theme.AppColors
 import com.suseoaa.locationspoofer.viewmodel.MainViewModel
@@ -44,11 +51,19 @@ fun FeaturesTab(
     val isDark = isSystemInDarkTheme()
     val context = LocalContext.current
 
+    // 导出：先让用户选内容，再拉起系统选择器（SAF 必须在拉起前就知道要写什么）
+    var exportCounts by remember { mutableStateOf<ImportExportCounts?>(null) }
+    var exportSelection by remember { mutableStateOf(ImportExportSelection()) }
+    // 导入：先解析出文件里有什么，再让用户勾选要应用的部分
+    var pendingImportPackage by remember {
+        mutableStateOf<com.suseoaa.locationspoofer.data.db.LocationSpooferDataPackage?>(null)
+    }
+
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
         uri?.let {
-            viewModel.exportEnvironmentData(it) { success ->
+            viewModel.exportEnvironmentData(it, exportSelection) { success ->
                 Toast.makeText(
                     context,
                     context.getString(if (success) R.string.export_success else R.string.export_failed),
@@ -61,10 +76,58 @@ fun FeaturesTab(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri?.let {
-            viewModel.importEnvironmentData(it) {
-                Toast.makeText(context, context.getString(R.string.import_merge_success), Toast.LENGTH_SHORT).show()
+            viewModel.parseImportPackage(it) { pkg ->
+                if (pkg == null) {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.import_parse_failed),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                } else {
+                    pendingImportPackage = pkg
+                }
             }
         }
+    }
+
+    exportCounts?.let { counts ->
+        ImportExportSelectionDialog(
+            isExport = true,
+            counts = counts,
+            onConfirm = { selection ->
+                exportSelection = selection
+                exportCounts = null
+                val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+                    .format(java.util.Date())
+                exportLauncher.launch("environment_data_$stamp.json")
+            },
+            onDismiss = { exportCounts = null }
+        )
+    }
+
+    pendingImportPackage?.let { pkg ->
+        ImportExportSelectionDialog(
+            isExport = false,
+            counts = ImportExportCounts(
+                locations = pkg.locations.size,
+                savedLocations = pkg.savedLocations.size,
+                savedRoutes = pkg.savedRoutes.size,
+                appCoordinateSystems = pkg.appCoordinateSystems.size,
+                settings = if (pkg.settings != null) 1 else 0,
+                apiKeys = if (pkg.apiKeys != null) 1 else 0
+            ),
+            onConfirm = { selection ->
+                pendingImportPackage = null
+                viewModel.applyImportPackage(pkg, selection) {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.import_merge_success),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            },
+            onDismiss = { pendingImportPackage = null }
+        )
     }
 
     Box(
@@ -144,15 +207,12 @@ fun FeaturesTab(
                             importLauncher.launch(arrayOf("application/json", "*/*"))
                         },
                         onExportClick = {
-                            // 文件名带时间戳，保证每次导出都是新文件名。
-                            // 固定用 environment_data.json 时，第二次导出必然撞名，
-                            // 而部分 ROM 的 DocumentsProvider 处理重名的方式是：
-                            // 另建一个 xxx_1.json 空占位文件，却把返回的 Uri 指向原来那个旧文件，
-                            // 结果就是"旧备份被新数据覆盖 + 多出一个 0B 空文件"（见 issue #57）。
-                            // 从源头避免重名，就不会走到 ROM 那套有问题的重名处理逻辑上。
-                            val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
-                                .format(java.util.Date())
-                            exportLauncher.launch("environment_data_$stamp.json")
+                            // 先查各分类数量，弹出选择对话框；实际拉起 SAF 在对话框确认之后。
+                            // 文件名在那里再带上时间戳，保证每次导出都是新文件名：
+                            // 固定用 environment_data.json 时第二次导出必然撞名，而部分 ROM 的
+                            // DocumentsProvider 处理重名的方式是另建一个 xxx_1.json 空占位文件、
+                            // 却把返回的 Uri 指向原来那个旧文件，导致"旧备份被覆盖 + 多出 0B 空文件"（issue #57）。
+                            viewModel.collectExportCounts { counts -> exportCounts = counts }
                         }
                     )
                 }
