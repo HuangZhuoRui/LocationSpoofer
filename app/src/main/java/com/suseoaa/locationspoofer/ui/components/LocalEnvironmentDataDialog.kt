@@ -24,6 +24,12 @@ import androidx.compose.ui.window.DialogProperties
 import com.suseoaa.locationspoofer.R
 import com.suseoaa.locationspoofer.data.db.CompleteLocation
 import com.suseoaa.locationspoofer.ui.theme.AccentBlue
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.suseoaa.locationspoofer.ui.theme.AccentGreen
+import com.suseoaa.locationspoofer.ui.theme.AccentOrange
+import com.suseoaa.locationspoofer.ui.theme.noRippleClickable
+import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -33,6 +39,7 @@ fun LocalEnvironmentDataDialog(
     dataList: List<CompleteLocation>,
     isLoading: Boolean,
     onSelectPoint: (item: CompleteLocation) -> Unit,
+    onFavorite: (item: CompleteLocation) -> Unit,
     onImportClick: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -266,7 +273,8 @@ fun LocalEnvironmentDataDialog(
                                 onClick = {
                                     onSelectPoint(item)
                                     onDismiss()
-                                }
+                                },
+                                onFavorite = { onFavorite(item) }
                             )
                         }
                     }
@@ -319,125 +327,135 @@ fun LocalEnvironmentDataDialog(
 private fun LocalDataItem(
     item: CompleteLocation,
     timeStr: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onFavorite: () -> Unit
 ) {
     val hasRemark = item.location.remark.isNotBlank()
     val hasPlaceName = item.location.placeName.isNotBlank()
+    // 与「管理采集数据」一致：优先地名，其次备注；两者都有时备注作为副标题
     val primaryTitle = when {
-        hasRemark -> item.location.remark
         hasPlaceName -> item.location.placeName
-        else -> "${String.format(Locale.US, "%.6f", item.location.lat)}, ${
-            String.format(
-                Locale.US,
-                "%.6f",
-                item.location.lng
-            )
-        }"
+        hasRemark -> item.location.remark
+        else -> stringResource(R.string.coord_record_title)
     }
-    val showCoordSubtitle = hasRemark || hasPlaceName
+    val subtitle = if (hasPlaceName && hasRemark) item.location.remark else null
 
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-        modifier = Modifier.fillMaxWidth()
+    val wifiCount = (if (item.connectedWifi != null) 1 else 0) + item.wifis.size
+    val cellCount = item.cells.size
+    val btCount = item.bluetooths.size
+
+    MiuixCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .noRippleClickable(onClick = onClick),
+        cornerRadius = 16.dp,
+        insideMargin = PaddingValues(14.dp)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(AccentBlue.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Icon(
-                    Icons.Rounded.Place,
-                    contentDescription = null,
-                    tint = AccentBlue,
-                    modifier = Modifier.size(19.dp)
-                )
-            }
-
-            Spacer(Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = primaryTitle,
-                    fontSize = 14.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1
-                )
-
-                if (showCoordSubtitle) {
-                    Spacer(Modifier.height(2.dp))
+                // 主标题与时间
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
                     Text(
-                        text = "${
-                            String.format(
-                                Locale.US,
-                                "%.6f",
-                                item.location.lat
-                            )
-                        }, ${String.format(Locale.US, "%.6f", item.location.lng)}",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                        text = primaryTitle,
+                        fontSize = 15.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    Text(
+                        text = timeStr,
+                        fontSize = 11.5.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
                     )
                 }
 
-                Spacer(Modifier.height(4.dp))
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val totalWifi = (if (item.connectedWifi != null) 1 else 0) + item.wifis.size
-                    if (totalWifi > 0) {
-                        SignalTag("Wi-Fi $totalWifi")
-                    }
-                    if (item.cells.isNotEmpty()) {
-                        SignalTag(stringResource(R.string.cells_count_label, item.cells.size))
-                    }
-                    if (item.bluetooths.isNotEmpty()) {
-                        SignalTag(stringResource(R.string.bluetooth_count_label, item.bluetooths.size))
+                // 备注副标题
+                if (subtitle != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.Description,
+                            contentDescription = null,
+                            tint = AccentBlue,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Text(
+                            text = subtitle,
+                            fontSize = 12.5.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
                     }
                 }
 
-                Spacer(Modifier.height(2.dp))
+                // 经纬度
                 Text(
-                    text = timeStr,
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                    text = "${String.format(Locale.US, "%.5f", item.location.lat)}, ${
+                        String.format(Locale.US, "%.5f", item.location.lng)
+                    }",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                 )
+
+                // 信号设备标签组（按类型分色，与管理页保持一致）
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (wifiCount > 0) {
+                        SignalTag(Icons.Rounded.Wifi, "$wifiCount", AccentBlue)
+                    }
+                    if (cellCount > 0) {
+                        SignalTag(Icons.Rounded.CellTower, "$cellCount", AccentGreen)
+                    }
+                    if (btCount > 0) {
+                        SignalTag(Icons.Rounded.Bluetooth, "$btCount", AccentOrange)
+                    }
+                }
             }
 
-            Icon(
-                Icons.Rounded.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
-                modifier = Modifier.size(20.dp)
-            )
+            Spacer(Modifier.width(8.dp))
+
+            IconButton(onClick = onFavorite, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.Rounded.StarOutline,
+                    contentDescription = stringResource(R.string.add_to_favorites),
+                    tint = AccentOrange,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun SignalTag(text: String) {
-    Box(
+private fun SignalTag(icon: ImageVector, text: String, color: Color) {
+    Row(
         modifier = Modifier
             .clip(RoundedCornerShape(6.dp))
-            .background(AccentBlue.copy(alpha = 0.1f))
-            .padding(horizontal = 6.dp, vertical = 2.dp)
+            .background(color.copy(alpha = 0.1f))
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
     ) {
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(12.dp))
         Text(
             text = text,
             fontSize = 10.5.sp,
             fontWeight = FontWeight.SemiBold,
-            color = AccentBlue
+            color = color
         )
     }
 }

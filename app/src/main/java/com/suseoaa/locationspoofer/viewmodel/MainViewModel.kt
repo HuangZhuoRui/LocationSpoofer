@@ -1607,10 +1607,48 @@ class MainViewModel(
                 lat,
                 lng,
                 state.collectedWifiJson,
-                state.collectedCellJson
+                state.collectedCellJson,
+                // 此前漏了这一段，导致从定位页保存的收藏点丢失蓝牙指纹
+                state.collectedBluetoothJson
             )
         )
         _uiState.update { it.copy(savedLocations = settingsRepository.getSavedLocations()) }
+    }
+
+    /**
+     * 把一个采集点直接收藏起来（供"本地采集数据源"与"管理采集数据"两个页面调用）。
+     *
+     * 刻意不复用 evaluateMockCapabilitiesSuspend：那条路会顺带改写 uiState 里
+     * 当前待模拟的环境数据，而"收藏某个点"不应该悄悄改变你接下来要模拟的内容。
+     * 这里只用纯函数 locationToJson 做转换，无副作用。
+     * addSavedLocation 已按 name+lat+lng 去重，重复收藏是覆盖而不是叠加。
+     */
+    fun saveCollectedLocationToFavorites(locationId: Long, onResult: (String?) -> Unit) {
+        viewModelScope.launch {
+            val record = withContext(Dispatchers.IO) {
+                environmentDao.getCompleteLocationById(locationId)
+            }
+            if (record == null) {
+                onResult(null)
+                return@launch
+            }
+
+            val lat = record.location.lat
+            val lng = record.location.lng
+            // 与 selectCollectedLocation 保持一致的命名回退
+            val name = when {
+                record.location.remark.isNotBlank() -> record.location.remark
+                record.location.placeName.isNotBlank() -> record.location.placeName
+                else -> String.format(Locale.US, "(%.5f, %.5f)", lat, lng)
+            }
+
+            val (wifiJson, cellJson, btJson) = locationToJson(listOf(record), lat, lng)
+            settingsRepository.addSavedLocation(
+                SavedLocation(name, lat, lng, wifiJson, cellJson, btJson)
+            )
+            _uiState.update { it.copy(savedLocations = settingsRepository.getSavedLocations()) }
+            onResult(name)
+        }
     }
 
     private fun parseWifiCount(wifiJson: String?): Int {

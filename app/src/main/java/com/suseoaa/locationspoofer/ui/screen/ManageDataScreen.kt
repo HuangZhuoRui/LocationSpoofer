@@ -1,5 +1,6 @@
 package com.suseoaa.locationspoofer.ui.screen
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -49,6 +51,7 @@ fun ManageDataScreen(
     onClose: () -> Unit,
     manageDataViewModel: ManageDataViewModel = koinViewModel()
 ) {
+    val context = LocalContext.current
     var mapController by remember { mutableStateOf<AppMapController?>(null) }
     var editingItem by remember { mutableStateOf<CompleteLocation?>(null) }
     var itemToDelete by remember { mutableStateOf<CompleteLocation?>(null) }
@@ -271,7 +274,20 @@ fun ManageDataScreen(
                                     )
                                 },
                                 onEdit = { editingItem = item },
-                                onDelete = { itemToDelete = item }
+                                onDelete = { itemToDelete = item },
+                                onFavorite = {
+                                    viewModel.saveCollectedLocationToFavorites(item.location.id) { name ->
+                                        Toast.makeText(
+                                            context,
+                                            if (name != null) {
+                                                context.getString(R.string.favorited_toast, name)
+                                            } else {
+                                                context.getString(R.string.favorite_failed)
+                                            },
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }
                             )
                         }
                     }

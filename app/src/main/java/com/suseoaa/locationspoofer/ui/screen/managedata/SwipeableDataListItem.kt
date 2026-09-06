@@ -48,13 +48,14 @@ fun SwipeableDataListItem(
     isDark: Boolean,
     onClick: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onFavorite: () -> Unit
 ) {
     val density = LocalDensity.current
     val coroutineScope = rememberCoroutineScope()
 
-    // 显露操作区域总宽度（编辑 60dp + 删除 60dp + 间距）
-    val maxRevealWidthDp = 136.dp
+    // 显露操作区域总宽度（收藏 60dp + 编辑 60dp + 删除 60dp + 间距）
+    val maxRevealWidthDp = 204.dp
     val maxRevealWidthPx = with(density) { maxRevealWidthDp.toPx() }
 
     val offsetX = remember { Animatable(0f) }
@@ -97,6 +98,46 @@ fun SwipeableDataListItem(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // 收藏按钮
+            Box(
+                modifier = Modifier
+                    .width(60.dp)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(AccentOrange)
+                    .noRippleClickable {
+                        coroutineScope.launch {
+                            offsetX.animateTo(
+                                0f,
+                                spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness = 500f
+                                )
+                            )
+                        }
+                        onFavorite()
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.Star,
+                        contentDescription = stringResource(R.string.add_to_favorites),
+                        tint = Color.White,
+                        modifier = Modifier.size(19.dp)
+                    )
+                    Text(
+                        text = stringResource(R.string.add_to_favorites),
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+
             // 编辑按钮
             Box(
                 modifier = Modifier

@@ -200,30 +200,41 @@ fun SavedLocationsDialog(
                                     Spacer(Modifier.width(12.dp))
 
                                     Column(modifier = Modifier.weight(1f)) {
+                                        val coordText = "${
+                                            String.format(java.util.Locale.US, "%.6f", loc.lat)
+                                        }, ${
+                                            String.format(java.util.Locale.US, "%.6f", loc.lng)
+                                        }"
+                                        // 没有备注/地名的收藏点，名字本身就是坐标，
+                                        // 再渲染一行坐标就是上下两行雷同（issue #56）。
+                                        // 去掉括号与空格后归一化比较，一致就只显示一行。
+                                        val normalize = { text: String ->
+                                            text.replace("(", "").replace(")", "")
+                                                .replace("（", "").replace("）", "")
+                                                .replace(" ", "")
+                                        }
+                                        val nameIsCoordinate =
+                                            normalize(loc.name) == normalize(coordText) ||
+                                                    normalize(loc.name) == normalize(
+                                                "${String.format(java.util.Locale.US, "%.5f", loc.lat)}, ${
+                                                    String.format(java.util.Locale.US, "%.5f", loc.lng)
+                                                }"
+                                            )
+
                                         Text(
-                                            loc.name,
+                                            if (nameIsCoordinate) coordText else loc.name,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 14.5.sp,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
-                                        Spacer(Modifier.height(2.dp))
-                                        Text(
-                                            text = "${
-                                                String.format(
-                                                    java.util.Locale.US,
-                                                    "%.6f",
-                                                    loc.lat
-                                                )
-                                            }, ${
-                                                String.format(
-                                                    java.util.Locale.US,
-                                                    "%.6f",
-                                                    loc.lng
-                                                )
-                                            }",
-                                            fontSize = 12.sp,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
-                                        )
+                                        if (!nameIsCoordinate) {
+                                            Spacer(Modifier.height(2.dp))
+                                            Text(
+                                                text = coordText,
+                                                fontSize = 12.sp,
+                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                                            )
+                                        }
                                     }
 
                                     IconButton(

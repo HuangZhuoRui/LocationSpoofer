@@ -467,4 +467,7 @@
     <string name="category_with_count">%1$s（%2$d 条）</string>
     <string name="category_empty">暂无可导出内容</string>
     <string name="import_parse_failed">无法解析该文件，请选择有效的备份文件</string>
+    <string name="add_to_favorites">收藏</string>
+    <string name="favorited_toast">已收藏“%1$s”</string>
+    <string name="favorite_failed">收藏失败</string>
 </resources>

@@ -471,6 +471,19 @@ fun LocationTab(
                     Toast.LENGTH_SHORT
                 ).show()
             },
+            onFavorite = { item ->
+                viewModel.saveCollectedLocationToFavorites(item.location.id) { name ->
+                    Toast.makeText(
+                        context,
+                        if (name != null) {
+                            context.getString(R.string.favorited_toast, name)
+                        } else {
+                            context.getString(R.string.favorite_failed)
+                        },
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            },
             onImportClick = {
                 importLauncher.launch(arrayOf("application/json", "*/*"))
             },
