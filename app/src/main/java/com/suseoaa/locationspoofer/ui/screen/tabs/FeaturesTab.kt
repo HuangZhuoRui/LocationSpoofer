@@ -48,8 +48,13 @@ fun FeaturesTab(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
         uri?.let {
-            viewModel.exportEnvironmentData(it)
-            Toast.makeText(context, context.getString(R.string.export_success), Toast.LENGTH_SHORT).show()
+            viewModel.exportEnvironmentData(it) { success ->
+                Toast.makeText(
+                    context,
+                    context.getString(if (success) R.string.export_success else R.string.export_failed),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
         }
     }
     val importLauncher = rememberLauncherForActivityResult(
@@ -139,7 +144,15 @@ fun FeaturesTab(
                             importLauncher.launch(arrayOf("application/json", "*/*"))
                         },
                         onExportClick = {
-                            exportLauncher.launch("environment_data.json")
+                            // 文件名带时间戳，保证每次导出都是新文件名。
+                            // 固定用 environment_data.json 时，第二次导出必然撞名，
+                            // 而部分 ROM 的 DocumentsProvider 处理重名的方式是：
+                            // 另建一个 xxx_1.json 空占位文件，却把返回的 Uri 指向原来那个旧文件，
+                            // 结果就是"旧备份被新数据覆盖 + 多出一个 0B 空文件"（见 issue #57）。
+                            // 从源头避免重名，就不会走到 ROM 那套有问题的重名处理逻辑上。
+                            val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+                                .format(java.util.Date())
+                            exportLauncher.launch("environment_data_$stamp.json")
                         }
                     )
                 }

@@ -117,6 +117,7 @@
     <string name="spoofing_active_cannot_collect">模拟定位已开启，无法采集真实物理环境</string>
     <string name="stop_spoofing_before_scan">请先停止模拟定位再开启扫街模式</string>
     <string name="export_success">导出成功</string>
+    <string name="export_failed">导出失败，请重试或更换保存目录</string>
     <string name="import_merge_success">导入合并成功</string>
     <string name="no_predictions_found">未找到预测结果：%s</string>
     <string name="search_success_results">搜索成功：%1$d 个结果</string>

@@ -2535,7 +2535,7 @@ class MainViewModel(
         return Triple(wifiArr.toString(), cellArr.toString(), btArr.toString())
     }
 
-    fun exportEnvironmentData(uri: android.net.Uri) {
+    fun exportEnvironmentData(uri: android.net.Uri, onResult: (Boolean) -> Unit = {}) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val locations = environmentDao.getAllCompleteLocations()
@@ -2560,11 +2560,27 @@ class MainViewModel(
                 }
                 val jsonStr = json.encodeToString(dataPackage)
 
-                context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                    outputStream.write(jsonStr.toByteArray(Charsets.UTF_8))
-                }
+                // 优先用 "wt"（write + truncate）而不是默认的 "w"：
+                // SAF 的 "w" 对多数 DocumentsProvider 不会截断原文件，当新内容比旧内容短时，
+                // 旧文件的尾巴会残留在后面，导出的 JSON 直接损坏。
+                // 但少数 OEM 的 DocumentsProvider 不认 "t" 标志会直接抛异常，
+                // 所以失败时降级回 "w"，保证导出至少能成功而不是彻底不可用。
+                val bytes = jsonStr.toByteArray(Charsets.UTF_8)
+                val written = try {
+                    context.contentResolver.openOutputStream(uri, "wt")
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    context.contentResolver.openOutputStream(uri)
+                }?.use { outputStream ->
+                    outputStream.write(bytes)
+                    outputStream.flush()
+                    true
+                } ?: false
+
+                launch(Dispatchers.Main) { onResult(written) }
             } catch (e: Exception) {
                 e.printStackTrace()
+                launch(Dispatchers.Main) { onResult(false) }
             }
         }
     }

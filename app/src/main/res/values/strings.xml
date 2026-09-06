@@ -112,6 +112,7 @@
     <string name="spoofing_active_cannot_collect">Spoofing is active, cannot collect real physical environment</string>
     <string name="stop_spoofing_before_scan">Please stop spoofing before starting continuous scan</string>
     <string name="export_success">Export successful</string>
+    <string name="export_failed">Export failed, please try again or pick another directory</string>
     <string name="import_merge_success">Import and merge successful</string>
     <string name="no_predictions_found">No predictions found for: %s</string>
     <string name="search_success_results">Search Success: %1$d results</string>
