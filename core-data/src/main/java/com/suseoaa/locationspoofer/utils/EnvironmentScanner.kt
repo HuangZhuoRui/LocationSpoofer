@@ -147,33 +147,9 @@ class EnvironmentScanner(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     suspend fun scanCell(): String = withContext(Dispatchers.IO) {
-        val connectivityManager =
-            context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
-        var isWifiConnected = false
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            val networks = connectivityManager.allNetworks
-            for (network in networks) {
-                val caps = connectivityManager.getNetworkCapabilities(network)
-                if (caps != null && caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)) {
-                    if (caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) ||
-                        caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-                    ) {
-                        isWifiConnected = true
-                        break
-                    }
-                }
-            }
-        } else {
-            val activeNetwork = connectivityManager.activeNetworkInfo
-            isWifiConnected =
-                activeNetwork != null && activeNetwork.type == android.net.ConnectivityManager.TYPE_WIFI && activeNetwork.isConnected
-        }
-
-        if (isWifiConnected) {
-            // 如果连接了 Wi-Fi，就不采集基站
-            return@withContext "[]"
-        }
-
+        // 之前这里连了 Wi-Fi 就直接跳过基站扫描，但 Wi-Fi 和基站是同一个物理位置的两个
+        // 独立维度，并不互斥，跳过只会导致最常见的采集场景（家里/公司都连着 Wi-Fi）
+        // 永远采不到基站数据，纯属早期写错，去掉这个限制。
         val telephonyManager =
             context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
         val jsonArray = JSONArray()
