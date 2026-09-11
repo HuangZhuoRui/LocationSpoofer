@@ -79,6 +79,13 @@ fun ManageDataScreen(
         viewModel.onManageDataChanged()
     }
 
+    // 之前进这个页面只在 ViewModel 初始化时加载过一次数据；如果是在"采集本地数据"页
+    // 后台采集完，再切回来看，看到的还是旧列表，得重启 App 才刷新（issue #60）。
+    // 打开页面时主动拉一次最新数据，解决大部分场景，另外仍保留手动刷新按钮兜底。
+    LaunchedEffect(Unit) {
+        manageDataViewModel.loadManageData()
+    }
+
     BackHandler(onBack = onClose)
 
     LaunchedEffect(mapController, uiState.mapType) {
@@ -152,6 +159,34 @@ fun ManageDataScreen(
                         fontSize = 12.5.sp,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f)
                     )
+                }
+
+                Spacer(Modifier.weight(1f))
+
+                // 手动刷新按钮：兜底给用户一个明确的"我要看最新数据"入口（issue #60）
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .noRippleClickable(
+                            onClick = { manageDataViewModel.loadManageData() }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (manageDataUiState.isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = AccentBlue
+                        )
+                    } else {
+                        Icon(
+                            Icons.Rounded.Refresh,
+                            contentDescription = stringResource(R.string.refresh_data),
+                            tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                 }
             }
 

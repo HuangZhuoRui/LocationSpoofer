@@ -6,11 +6,13 @@ import com.suseoaa.locationspoofer.data.db.LocationRecord
 import com.suseoaa.locationspoofer.data.model.RoutePlanStage
 import com.suseoaa.locationspoofer.data.state.SpoofingState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // MainViewModel 的模拟开关、摇杆移动与持续扫描相关扩展函数
 
@@ -248,32 +250,62 @@ internal fun MainViewModel.toggleContinuousScanning() {
                     val lat = realLoc.first
                     val lng = realLoc.second
 
-                    val wifiJson = environmentScanner.scanWifi()
-                    val cellJson = environmentScanner.scanCell()
-                    val bluetoothJson = environmentScanner.scanBluetooth()
+                    // 用户点"停止采集"时 job 会被 cancel()，如果扫描/落库中途被取消，
+                    // 这一轮已经扫到的数据会直接丢失（对应 issue #59）。
+                    // 用 NonCancellable 包住这段，保证一轮扫描+保存要么完整做完要么还没开始，
+                    // 取消信号只会在下一次 delay 处生效。
+                    var saveFailed = false
+                    withContext(NonCancellable) {
+                        val wifiJson = environmentScanner.scanWifi()
+                        val cellJson = environmentScanner.scanCell()
+                        val bluetoothJson = environmentScanner.scanBluetooth()
 
-                    val wCount = parseWifiCount(wifiJson)
-                    val cCount = try {
-                        org.json.JSONArray(cellJson).length()
-                    } catch (e: Exception) {
-                        0
+                        val wCount = parseWifiCount(wifiJson)
+                        val cCount = try {
+                            org.json.JSONArray(cellJson).length()
+                        } catch (e: Exception) {
+                            0
+                        }
+                        val bCount = try {
+                            org.json.JSONArray(bluetoothJson).length()
+                        } catch (e: Exception) {
+                            0
+                        }
+
+                        try {
+                            saveEnvironmentData(lat, lng, wifiJson, cellJson, bluetoothJson)
+                        } catch (e: Exception) {
+                            // 之前这里的异常会未捕获地冒泡出去，直接把整个采集协程杀死，
+                            // 但 isContinuousScanning 不会被重置，UI 会一直显示"采集中"，
+                            // 用户毫无感知（对应 issue #60 里"有时会采集失败或保存失败却没有提示"）。
+                            e.printStackTrace()
+                            saveFailed = true
+                        }
+
+                        if (!saveFailed) {
+                            val count = environmentDao.getRecordCount()
+                            _uiState.update {
+                                it.copy(
+                                    environmentRecordCount = count,
+                                    scannedWifiCount = it.scannedWifiCount + wCount,
+                                    scannedCellCount = it.scannedCellCount + cCount,
+                                    scannedBluetoothCount = it.scannedBluetoothCount + bCount
+                                )
+                            }
+                        }
                     }
-                    val bCount = try {
-                        org.json.JSONArray(bluetoothJson).length()
-                    } catch (e: Exception) {
-                        0
-                    }
 
-                    saveEnvironmentData(lat, lng, wifiJson, cellJson, bluetoothJson)
-
-                    val count = environmentDao.getRecordCount()
-                    _uiState.update {
-                        it.copy(
-                            environmentRecordCount = count,
-                            scannedWifiCount = it.scannedWifiCount + wCount,
-                            scannedCellCount = it.scannedCellCount + cCount,
-                            scannedBluetoothCount = it.scannedBluetoothCount + bCount
-                        )
+                    if (saveFailed) {
+                        withContext(Dispatchers.Main) {
+                            android.widget.Toast.makeText(
+                                context,
+                                context.getString(com.suseoaa.locationspoofer.ui.R.string.collection_save_failed),
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        }
+                        _uiState.update { it.copy(isContinuousScanning = false) }
+                        continuousScanJob = null
+                        break
                     }
                 }
 

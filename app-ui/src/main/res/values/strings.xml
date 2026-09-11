@@ -496,4 +496,6 @@ Error details: %s</string>
     <string name="unfavorited_toast">Removed \"%1$s\" from favorites</string>
     <string name="env_simulation_section">Environment simulation</string>
     <string name="enable_slight_jitter_desc">Adds natural GPS drift so the track looks less mechanical</string>
+    <string name="refresh_data">Refresh</string>
+    <string name="collection_save_failed">Failed to save collected data, scanning stopped</string>
 </resources>

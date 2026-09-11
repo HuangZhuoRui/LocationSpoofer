@@ -496,4 +496,6 @@
     <string name="unfavorited_toast">已取消收藏“%1$s”</string>
     <string name="env_simulation_section">环境模拟</string>
     <string name="enable_slight_jitter_desc">加入自然的 GPS 漂移，让轨迹不那么机械</string>
+    <string name="refresh_data">刷新</string>
+    <string name="collection_save_failed">本地数据保存失败，采集已自动停止</string>
 </resources>
