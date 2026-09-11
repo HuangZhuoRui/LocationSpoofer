@@ -22,12 +22,13 @@ jobs:
       - name: Check Version Status
         id: check_version
         run: |
-          # 提取 app/build.gradle.kts 中的 versionName
-          VERSION_NAME=$(grep 'versionName =' app/build.gradle.kts | head -n 1 | awk -F'"' '{print $2}')
+          # 提取 gradle.properties 中的 APP_VERSION_NAME（多模块拆分后 :app 的 versionName
+          # 改为从这里读取，不再是 app/build.gradle.kts 里的字面量字符串）
+          VERSION_NAME=$(grep '^APP_VERSION_NAME=' gradle.properties | head -n 1 | cut -d'=' -f2)
           echo "当前代码中的 versionName: $VERSION_NAME"
-          
+
           if [ -z "$VERSION_NAME" ]; then
-            echo "错误：未能从 app/build.gradle.kts 提取到 versionName，终止流程。"
+            echo "错误：未能从 gradle.properties 提取到 APP_VERSION_NAME，终止流程。"
             exit 1
           fi
           

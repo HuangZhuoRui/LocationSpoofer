@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <service
+            android:name=".SpoofingService"
+            android:enabled="true"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="location" />
+        <service
+            android:name=".FloatingJoystickService"
+            android:enabled="true"
+            android:exported="false" />
+        <receiver
+            android:name=".SpoofingControlReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.suseoaa.locationspoofer.START" />
+                <action android:name="com.suseoaa.locationspoofer.STOP" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name=".BootCompletedReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+</manifest>

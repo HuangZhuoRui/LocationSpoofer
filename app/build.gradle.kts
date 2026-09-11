@@ -6,8 +6,6 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
     alias(libs.plugins.jetbrains.kotlin.compose)
-    alias(libs.plugins.ksp)
-    alias(libs.plugins.jetbrains.kotlin.serialization)
 }
 
 android {
@@ -33,8 +31,8 @@ android {
         applicationId = "com.suseoaa.locationspoofer"
         minSdk = 26
         targetSdk = 37
-        versionCode = 20613
-        versionName = "2.7.13-beta-3"
+        versionCode = providers.gradleProperty("APP_VERSION_CODE").get().toInt()
+        versionName = providers.gradleProperty("APP_VERSION_NAME").get()
 
         vectorDrawables {
             useSupportLibrary = true
@@ -99,26 +97,26 @@ kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
         freeCompilerArgs.addAll(
-            "-Xskip-metadata-version-check",
-            "-opt-in=kotlinx.serialization.InternalSerializationApi"
+            "-Xskip-metadata-version-check"
         )
     }
 }
 
 dependencies {
-    compileOnly(libs.xposed.api)
+    implementation(project(":core-geo"))
+    implementation(project(":core-data"))
+    implementation(project(":service"))
+    implementation(project(":app-ui"))
+    // 纯打包依赖：:app 不直接调用 :xposed 的代码，只是需要把它的产物
+    // （LocationHooker 及 META-INF/xposed/* 资源）一起打进最终 APK，供 LSPosed 扫描加载。
+    implementation(project(":xposed"))
+
     implementation(libs.xposed.service)
     implementation(libs.koin.androidx.compose)
     implementation(libs.amap.map)
     implementation(libs.amap.search)
     implementation(libs.baidu.map)
-    implementation(libs.baidu.location)
-    implementation(libs.baidu.search)
-    implementation(libs.google.maps)
     implementation(libs.google.places)
-    implementation(libs.kotlinx.serialization.json)
-    implementation(libs.play.services.location)
-    implementation(libs.okhttp)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -131,18 +129,8 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.material.icons.extended)
 
-    // Room (KSP)
-    implementation(libs.room.runtime)
-    implementation(libs.room.ktx)
-    ksp(libs.room.compiler)
-
     implementation(libs.miuix.ui)
     implementation(libs.miuix.blur)
 
     debugImplementation(libs.androidx.ui.tooling)
-
-    testImplementation(libs.junit)
-    // 真实的 org.json 实现：Android 平台 jar 里的 org.json 是桩实现，
-    // 方法体直接抛 "not mocked"，测试用的类路径顺序会让这个真实依赖优先生效。
-    testImplementation(libs.org.json)
 }

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="spoofing_service_title">Location Spoofer</string>
+    <string name="spoofing_service_content">Spoofing location: %1$s, %2$s</string>
+    <string name="spoofing_service_channel_name">Location Spoofer Service</string>
+    <string name="spoofing_bg_notification_title">Location Spoofing Background Notification</string>
+    <string name="close_joystick">Close Joystick</string>
+</resources>

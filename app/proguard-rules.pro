@@ -8,6 +8,9 @@
 -keep class io.github.libxposed.** { *; }
 -keep interface io.github.libxposed.** { *; }
 -keep class com.suseoaa.locationspoofer.xposed.** { *; }
+# libxposed-api 在 :xposed 模块里是 compileOnly（由 LSPosed 框架在运行时提供，不打进 APK），
+# compileOnly 依赖不会传递给依赖方 :app 的 R8，所以这里需要显式 -dontwarn 而不是仅靠 -keep。
+-dontwarn io.github.libxposed.api.**
 
 # AMap 3DMap & Location SDK
 -keep class com.amap.api.** { *; }

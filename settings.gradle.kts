@@ -22,3 +22,8 @@ dependencyResolutionManagement {
 
 rootProject.name = "LocationSpoofer"
 include(":app")
+include(":app-ui")
+include(":service")
+include(":xposed")
+include(":core-data")
+include(":core-geo")

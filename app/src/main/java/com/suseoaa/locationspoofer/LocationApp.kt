@@ -5,21 +5,15 @@ import com.amap.api.location.AMapLocationClient
 import com.amap.api.maps.MapsInitializer
 import com.amap.api.services.core.ServiceSettings
 import com.google.android.libraries.places.api.Places
-import com.suseoaa.locationspoofer.di.appModule
+import com.suseoaa.locationspoofer.di.appModules
+import com.suseoaa.locationspoofer.utils.XposedModuleStatus
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.core.context.startKoin
 import io.github.libxposed.service.XposedService
 import io.github.libxposed.service.XposedServiceHelper
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 
 class LocationApp : Application(), XposedServiceHelper.OnServiceListener {
-    companion object {
-        private val _isModuleActive = MutableStateFlow(false)
-        val isModuleActive: StateFlow<Boolean> = _isModuleActive
-        var mService: XposedService? = null
-    }
 
     override fun onCreate() {
         super.onCreate()
@@ -70,17 +64,15 @@ class LocationApp : Application(), XposedServiceHelper.OnServiceListener {
         startKoin {
             androidLogger()
             androidContext(this@LocationApp)
-            modules(appModule)
+            modules(appModules)
         }
     }
 
     override fun onServiceBind(service: XposedService) {
-        mService = service
-        _isModuleActive.value = true
+        XposedModuleStatus.update(service)
     }
 
     override fun onServiceDied(service: XposedService) {
-        mService = null
-        _isModuleActive.value = false
+        XposedModuleStatus.clear()
     }
 }

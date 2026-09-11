@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Density
+import com.suseoaa.locationspoofer.ui.R
 import com.suseoaa.locationspoofer.ui.screen.BlockingScreen
 import com.suseoaa.locationspoofer.ui.screen.InitializingScreen
 import com.suseoaa.locationspoofer.ui.screen.LanguageSelectionScreen
@@ -29,6 +30,7 @@ import com.suseoaa.locationspoofer.ui.theme.AppColorSchemeDark
 import com.suseoaa.locationspoofer.ui.theme.AppColorSchemeLight
 import com.suseoaa.locationspoofer.utils.LocaleUtils
 import com.suseoaa.locationspoofer.viewmodel.MainViewModel
+import com.suseoaa.locationspoofer.viewmodel.getSavedLanguage
 import org.koin.androidx.viewmodel.ext.android.viewModel
 
 class MainActivity : ComponentActivity() {
