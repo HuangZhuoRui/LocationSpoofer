@@ -130,43 +130,51 @@ Real GPS receivers naturally output coordinates with Gaussian white noise caused
 
 ## System Architecture
 
-Built on modern **MVVM + Clean Architecture**, using root shell privileges to bypass package visibility restrictions and SELinux isolation on Android 11+:
+Built on modern **MVVM + Clean Architecture**, split into 6 Gradle modules by responsibility:
+
+| Module | Type | Responsibility |
+|---|---|---|
+| `app` | Android App | The host shell: `Application` / `MainActivity`, signing & packaging config, aggregates every module's Koin DI; only bundles the `xposed` module's artifact (the `LocationHooker` class and `META-INF/xposed/*` metadata) into the final APK for LSPosed to scan — it never calls that code directly |
+| `app-ui` | Android Library | All Jetpack Compose UI: screens, dialogs, the custom "liquid glass" widget kit (`ui/liquid`), and the ViewModel layer |
+| `service` | Android Library | The foreground service `SpoofingService`, the floating joystick `FloatingJoystickService`, boot-completed receivers, and other background/service-layer code |
+| `xposed` | Android Library | The LSPosed/Xposed injection module itself: the `LocationHooker` entry point plus the hook implementations under `hooks/` and `hooks/network/` |
+| `core-data` | Android Library | The data/domain layer shared by `app`, `app-ui`, and `service`: the Room database, repositories, and core utilities such as `ConfigManager`, `RootManager`, `EnvironmentScanner` |
+| `core-geo` | Pure Kotlin/JVM | The only module in the project with no Android dependency: WGS-84 / GCJ-02 / BD-09 coordinate conversion |
+
+Using root shell privileges to bypass package visibility restrictions and SELinux isolation on Android 11+:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                       LocationSpoofer (Host App)                        │
+│       LocationSpoofer Host Process (app/app-ui/service/core-data)       │
 │  ┌─────────────────────────┐  ┌──────────────────────────────────────┐  │
 │  │     Triple Map Engine   │  │          RouteStateMachine           │  │
 │  │ (AMap / Baidu / Google) │  │     (IDLE / READY / RUN / PAUSE)     │  │
 │  └────────────┬────────────┘  └──────────────────┬───────────────────┘  │
 │               │                                  │                      │
 │  ┌────────────▼──────────────────────────────────▼───────────────────┐  │
-│  │                       ConfigManager                               │  │
-│  │     (Serializes config & coordinate mappings to /data/local/tmp)  │  │
+│  │                     ConfigManager (core-data)                     │  │
+│  │     Serializes config + coord mappings, multi-path + SELinux      │  │
 │  └──────────────────────────────────┬────────────────────────────────┘  │
 │  ┌──────────────────────────────────▼────────────────────────────────┐  │
-│  │                      SpoofingService                              │  │
-│  │         (Foreground Service, Gait Engine, Route Navigation)       │  │
+│  │                     SpoofingService (service)                     │  │
+│  │ Foreground service, floating joystick controller, gait/route calc │  │
 │  └───────────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────┬───────────────────────────────────┘
-                                      │ (Writes JSON, chmod 777 + chcon)
+                                      │ (core-data ConfigManager writes, chmod 644 + dedicated SELinux type)
                                       ▼
-                        ┌───────────────────────────┐
-                        │ /data/local/tmp/ config   │
-                        └─────────────┬─────────────┘
-                                      │ (Daemon thread polls every 1000ms)
+              ┌─────────────────────────────────────────────────┐
+              │ 3 config files (tmp / system / app private dir) │
+              └────────────────────────┬────────────────────────┘
+                                      │ (LocationHooker daemon polls every 1000ms by default, backs off to 10s/60s on failure)
                                       ▼ LSPosed / libxposed (API 101+) Injection
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                            Target App Process                           │
+│                           Target App Process                            │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
-│  │                         LocationHooker                            │  │
-│  │  • BaseLocationHooker (Location / LocationManager / NMEA / GNSS)  │  │
-│  │  • MapSdkHooker (Baidu BDLocation / AMap / Tencent SDK & BlueDot) │  │
-│  │  • WifiHooker (WifiManager / ScanResults / Connection / DHCP)     │  │
-│  │  • CellHooker (TelephonyManager / 2G-5G NR Cells / Carrier)       │  │
-│  │  • BluetoothHooker (BluetoothLeScanner / BLE Beacons Filtering)   │  │
-│  │  • SensorStepHooker (StepCounter / StepDetector Linkage)          │  │
-│  │  • AntiDetectionHooker (Xposed Stack Scrubbing / ClassLoader)     │  │
+│  │                          LocationHooker                           │  │
+│  │  - Location/GNSS: BaseLocationHooker, GnssStatusHooker, etc.      │  │
+│  │  - Map SDKs: AMapHooker / BaiduMapHooker / TencentMapHooker       │  │
+│  │  - hooks/network/: Wifi* / Cellular* / Bluetooth*Hooker etc.      │  │
+│  │  - SensorStepHooker (steps) / AntiDetectionHooker (anti-detect)   │  │
 │  └───────────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -174,8 +182,8 @@ Built on modern **MVVM + Clean Architecture**, using root shell privileges to by
 > [!NOTE]
 > **IPC Design Decision**:
 > Sandboxed app processes cannot query a custom `ContentProvider` on Android 11+ due to package visibility rules and SELinux isolation.
-> To resolve this, the host app writes parameters to `/data/local/tmp/locationspoofer_config.json`, applying `777` permissions and the `shell_data_file` SELinux context.
-> The sandboxed `LocationHooker` daemon thread polls this file every 1000ms into a volatile in-memory cache. All hook methods query memory with 0-IO latency, completely preventing UI drop-frames.
+> The `core-data` module's `ConfigManager` uses root privileges to write the config as JSON to **three paths at once** (`/data/local/tmp/`, `/data/system/`, and the app's private `files/` directory, with a fourth read-only fallback at `/sdcard/Download/`), with permissions tightened to `644` (owner-writable only). `RootManager` dynamically injects a dedicated SELinux type, `locationspoofer_config_file` (not the generic `shell_data_file`), granting only `read/open/getattr` to the specific domains that need it (`untrusted_app`, `platform_app`, etc.) instead of a blanket world-readable/writable hack.
+> The `xposed` module's `LocationHooker` runs a background daemon thread that picks its read-path priority based on the caller's UID, polling every 1000ms by default into an in-memory cache; on read failure it backs off to 10s (general failures) or 60s (when `com.android.phone` hits a permission denial), avoiding pointless high-frequency retries in a broken state. Hook methods on the main thread only ever read the in-memory cache, achieving 0-IO latency and preventing target-app frame drops.
 
 ---
 
@@ -235,12 +243,13 @@ git clone https://github.com/your-username/LocationSpoofer.git
 ## 🛠️ Tech Stack
 
 * **Language**: 100% Kotlin
-* **UI**: Jetpack Compose & Material Design 3 (Liquid Glass UI)
-* **Dependency Injection**: Koin
-* **Local Storage**: Room Database (SQLite) + Spatial Indexing
+* **Module layout**: 6 Gradle modules — `app` / `app-ui` / `service` / `xposed` / `core-data` / `core-geo` (see [System Architecture](#system-architecture))
+* **UI**: Jetpack Compose & Material Design 3, layered with the third-party [Miuix](https://github.com/miuix-kmp/miuix) library (`top.yukonga.miuix.kmp`) for its backdrop-blur primitives, on top of which a custom `ui/liquid` package (adapted from the open-source AndroidLiquidGlass / ILoveWork projects, Apache-2.0) implements the Liquid Glass floating bottom bar, lens/vibrancy effects, and damped-drag interactions
+* **Dependency Injection**: Koin, split per module into `coreDataModule` / `serviceModule` / `viewModelModule`, aggregated by `appModules` in the `app` module
+* **Local Storage**: Room Database (SQLite) + Spatial Indexing (in `core-data`)
 * **Networking & Serialization**: OkHttp 3 + Kotlinx Serialization
 * **Map SDKs**: AMap 3DMap SDK / BaiduMap SDK / Google Maps & Places SDK
-* **Xposed Hooking**: LSPosed API 101+ / libxposed (Service mode)
+* **Xposed Hooking**: LSPosed API 101+ / libxposed (Service mode); hook implementations live under `xposed`'s `hooks/` and `hooks/network/` packages
 
 ---
 

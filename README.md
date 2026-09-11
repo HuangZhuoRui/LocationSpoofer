@@ -135,43 +135,51 @@
 
 ## 系统架构
 
-本项目采用 **MVVM + Clean Architecture** 架构，利用 Root 权限与系统共享内存通道规避了 Android 11+ 的沙盒可见性隔离，实现零权限跨进程配置传递：
+本项目采用 **MVVM + Clean Architecture**，并按职责拆分为 6 个 Gradle 模块：
+
+| 模块 | 类型 | 职责 |
+|---|---|---|
+| `app` | Android App | 宿主壳工程：`Application` / `MainActivity`、签名与打包配置、聚合各模块的 Koin DI；仅把 `xposed` 模块的产物（`LocationHooker` 类与 `META-INF/xposed/*` 元数据）打进最终 APK 供 LSPosed 扫描加载，自身**不直接调用**其代码 |
+| `app-ui` | Android Library | 全部 Jetpack Compose UI：页面、弹窗、自研“液态玻璃”组件（`ui/liquid`）与 ViewModel 层 |
+| `service` | Android Library | 前台保活服务 `SpoofingService`、悬浮摇杆 `FloatingJoystickService`、开机自启广播等后台/服务层 |
+| `xposed` | Android Library | LSPosed / Xposed 注入模块本体：`LocationHooker` 入口 + `hooks/`、`hooks/network/` 下的各类 Hook 实现 |
+| `core-data` | Android Library | `app` / `app-ui` / `service` 三端共用的数据与业务层：Room 数据库、各类 Repository，以及 `ConfigManager`、`RootManager`、`EnvironmentScanner` 等核心工具类 |
+| `core-geo` | 纯 Kotlin/JVM | 全项目唯一不依赖 Android 的模块：WGS-84 / GCJ-02 / BD-09 坐标系换算 |
+
+利用 Root 权限与系统共享内存通道规避了 Android 11+ 的沙盒可见性隔离，实现零权限跨进程配置传递：
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                       LocationSpoofer (宿主 App)                        │
+│     LocationSpoofer 宿主进程（app / app-ui / service / core-data）      │
 │  ┌─────────────────────────┐  ┌──────────────────────────────────────┐  │
 │  │     Triple Map Engine   │  │          RouteStateMachine           │  │
 │  │ (AMap / Baidu / Google) │  │     (IDLE / READY / RUN / PAUSE)     │  │
 │  └────────────┬────────────┘  └──────────────────┬───────────────────┘  │
 │               │                                  │                      │
 │  ┌────────────▼──────────────────────────────────▼───────────────────┐  │
-│  │                       ConfigManager                               │  │
-│  │        (将完整配置与多坐标系映射写入 /data/local/tmp 共享目录)       │  │
+│  │                    ConfigManager（core-data）                     │  │
+│  │     序列化配置与坐标系映射，多路径 + SELinux 授权写入本地文件     │  │
 │  └──────────────────────────────────┬────────────────────────────────┘  │
 │  ┌──────────────────────────────────▼────────────────────────────────┐  │
-│  │                      SpoofingService                              │  │
-│  │          (前台保活服务、步态引擎、路网计算与悬浮窗控制器)         │  │
+│  │                    SpoofingService（service）                     │  │
+│  │           前台保活服务、悬浮摇杆控制器与路网 / 步态计算           │  │
 │  └───────────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────┬───────────────────────────────────┘
-                                      │ (写入 JSON 配置，chmod 777 + chcon)
+                                      │ (core-data ConfigManager 写入，chmod 644 + 专属 SELinux type)
                                       ▼
-                        ┌───────────────────────────┐
-                        │ /data/local/tmp/ 共享文件 │
-                        └─────────────┬─────────────┘
-                                      │ (守护线程 1000ms 轮询 + Volatile 缓存)
+               ┌─────────────────────────────────────────────┐
+               │ 3 份配置文件（tmp / system / app 私有目录） │
+               └──────────────────────┬──────────────────────┘
+                                      │ (LocationHooker 守护线程默认 1000ms 轮询，失败退避 10s/60s)
                                       ▼ LSPosed / libxposed (API 101+) 注入
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                            目标 App 进程                                │
+│                              目标 App 进程                              │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
 │  │                         LocationHooker                            │  │
-│  │  • BaseLocationHooker (Location / LocationManager / NMEA / GNSS)  │  │
-│  │  • MapSdkHooker (Baidu BDLocation / AMap / Tencent SDK & 蓝点图层) │  │
-│  │  • WifiHooker (WifiManager / ScanResults / Connection / DHCP)     │  │
-│  │  • CellHooker (TelephonyManager / 2G-5G NR 小区 / 运营商 / 基带)  │  │
-│  │  • BluetoothHooker (BluetoothLeScanner / BLE Beacons 过滤)        │  │
-│  │  • SensorStepHooker (StepCounter / StepDetector 计步联动)         │  │
-│  │  • AntiDetectionHooker (Xposed 堆栈清洗 / ClassLoader 隔离)       │  │
+│  │  • Location/GNSS：BaseLocationHooker、GnssStatusHooker 等         │  │
+│  │  • 地图 SDK：AMapHooker / BaiduMapHooker / TencentMapHooker       │  │
+│  │  • hooks/network/：Wifi* / Cellular* / Bluetooth*Hooker 等        │  │
+│  │  • SensorStepHooker（计步）/ AntiDetectionHooker（反检测）        │  │
 │  └───────────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -179,8 +187,8 @@
 > [!NOTE]
 > **跨进程通信 (IPC) 设计**：
 > 目标 App 进程在沙盒内运行时，由于 Android 11+ 包可见性及 SELinux 策略，使用 `ContentProvider` 会导致主线程卡顿并产生 `Failed to find provider info` 错误。
-> 宿主 App 借助 Root 权限将配置以 JSON 格式写入 `/data/local/tmp/locationspoofer_config.json`，赋予 `777` 权限及 `shell_data_file` SELinux 上下文。
-> 目标沙盒内的 `LocationHooker` 启动后台守护线程，每 1000ms 异步读取文件并存储在 Volatile 内存中。主线程的 Hook 方法读取配置时为 0-IO 延迟，避免导致目标 App 丢帧与卡顿。
+> `core-data` 模块的 `ConfigManager` 借助 Root 权限，把配置以 JSON 格式**同时写入三份路径**（`/data/local/tmp/`、`/data/system/`、应用私有目录 `files/`，读取时再兜底一份 `/sdcard/Download/` 备份），权限收紧为 `644`（仅 owner 可写），并由 `RootManager` 动态注入一个专属 SELinux 类型 `locationspoofer_config_file`（而非笼统的 `shell_data_file`），只对目标应用所在的域（`untrusted_app`、`platform_app` 等）授予 `read / open / getattr`，而非简单粗暴的全局可读可写。
+> `xposed` 模块的 `LocationHooker` 内置后台守护线程，按调用方 UID 决定优先读取顺序，默认每 1000ms 轮询一次并写入内存缓存；读取失败时自动退避到 10s（一般失败）或 60s（`com.android.phone` 权限被拒绝的场景），避免异常状态下无意义的高频重试。主线程的 Hook 方法只读内存缓存，实现 0-IO 延迟，避免导致目标 App 丢帧与卡顿。
 
 ---
 
@@ -240,12 +248,13 @@ git clone https://github.com/your-username/LocationSpoofer.git
 ## 技术栈
 
 * **编程语言**：100% Kotlin
-* **UI 框架**：Jetpack Compose & Material Design 3 (Liquid Glass 拟态设计)
-* **依赖注入**：Koin
-* **持久化存储**：Room Database (SQLite) + 空间索引
+* **模块划分**：`app` / `app-ui` / `service` / `xposed` / `core-data` / `core-geo` 六个 Gradle 模块（详见[系统架构](#系统架构)）
+* **UI 框架**：Jetpack Compose & Material Design 3，叠加第三方 [Miuix](https://github.com/miuix-kmp/miuix)（`top.yukonga.miuix.kmp`）提供的毛玻璃模糊底层能力，并在此之上自研 `ui/liquid` 组件包（改编自开源项目 AndroidLiquidGlass / ILoveWork，Apache-2.0）实现悬浮底栏、透镜折射与阻尼拖拽等 Liquid Glass 交互效果
+* **依赖注入**：Koin，按模块拆分为 `coreDataModule` / `serviceModule` / `viewModelModule` 三个子模块，由 `app` 模块的 `appModules` 统一聚合注册
+* **持久化存储**：Room Database (SQLite) + 空间索引（`core-data` 模块）
 * **网络与序列化**：OkHttp 3 + Kotlinx Serialization
 * **地图组件**：AMap 3DMap SDK / BaiduMap SDK / Google Maps & Places SDK
-* **Xposed 框架**：LSPosed API 101+ / libxposed (Service 模式)
+* **Xposed 框架**：LSPosed API 101+ / libxposed (Service 模式)，Hook 实现位于 `xposed` 模块的 `hooks/` 与 `hooks/network/` 子包
 
 ---
 

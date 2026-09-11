@@ -19,6 +19,7 @@ Contributions from the community help make LocationSpoofer more stable, reliable
    * [Pull Requests](#pull-requests)
 3. [Development Setup](#development-setup)
 4. [Architecture & Guidelines](#architecture--guidelines)
+   * [Coding Conventions](#coding-conventions)
 5. [Commit Message Conventions](#commit-message-conventions)
 
 ---
@@ -72,7 +73,7 @@ Feature requests are welcome! When opening an issue via the **Feature Request Te
 ### Prerequisites
 * **Android Studio**: Android Studio Hedgehog / Iguana / Jellyfish or newer.
 * **JDK**: OpenJDK 17 or OpenJDK 21.
-* **Android SDK**: Build Tools `34.0.0`+, compileSdk `34`.
+* **Android SDK**: compileSdk `37` (minSdk `26`); Build Tools version is resolved automatically by AGP, no need to pin it manually.
 * **Testing Device**: A rooted device with **KernelSU / APatch / Magisk** and **LSPosed (API 101+)** installed.
 
 ### Building
@@ -94,18 +95,38 @@ cd LocationSpoofer
 
 ## Architecture & Guidelines
 
-LocationSpoofer is structured using **MVVM + Clean Architecture**:
+LocationSpoofer is structured using **MVVM + Clean Architecture**, split into 6 Gradle modules by responsibility:
+
+| Module | Type | Responsibility |
+|---|---|---|
+| `app` | Android App | The host shell: `Application` / `MainActivity`, signing & packaging, aggregates every module's Koin DI; only bundles the `xposed` module's artifact for LSPosed to scan — it never calls that code directly |
+| `app-ui` | Android Library | All Compose UI (screens/dialogs/the `ui/liquid` kit) and the ViewModel layer |
+| `service` | Android Library | The foreground service, floating joystick service, boot-completed receiver, etc. |
+| `xposed` | Android Library | The LSPosed/Xposed injection module itself, with hooks split across `hooks/` and `hooks/network/` |
+| `core-data` | Android Library | The data/domain layer shared by `app`/`app-ui`/`service`: Room database, repositories, and core utilities such as `ConfigManager`/`RootManager`/`EnvironmentScanner` |
+| `core-geo` | Pure Kotlin/JVM | The only module with no Android dependency; coordinate-system conversion |
+
+Before adding new code, decide which module it belongs in: pure business logic/persistence goes in `core-data`; anything Compose-UI-only goes in `app-ui`; hook implementations only go in `xposed` (and `xposed` may only depend on `core-geo` — never depend back on `app-ui`/`core-data`, or you'll drag Room/Compose and other heavyweight dependencies into the target app's process).
 
 * **Language**: 100% Kotlin with Coroutines and StateFlow.
-* **UI**: Jetpack Compose and Material Design 3. Maintain modular, decoupled Composable components.
-* **Dependency Injection**: Koin (`appModule`).
-* **Database**: Room Database with spatial index optimizations.
+* **UI**: Jetpack Compose, Material Design 3, layered with the third-party [Miuix](https://github.com/miuix-kmp/miuix) library (`top.yukonga.miuix.kmp`) for its blur/frosted-glass primitives; `app-ui/ui/liquid` builds the "Liquid Glass" floating bottom bar, lens, and damped-drag effects on top of it. Prefer Miuix's existing widgets for new basic components instead of reinventing them.
+* **Dependency Injection**: Koin, split per module into `coreDataModule` (`core-data`), `serviceModule` (`service`), and `viewModelModule` (`app-ui`), aggregated by `appModules` (a `List<Module>`) in the `app` module and started via `startKoin` in `LocationApp.onCreate()`. Add new injectable types to the matching module's `di/XxxModule.kt` — don't bypass DI with a manual `new`.
+* **Database**: Room Database (in `core-data`) with spatial index optimizations.
 * **Xposed Hook Layer**:
-  * Located in `com.suseoaa.locationspoofer.xposed`.
+  * Lives in the `xposed` module's `com.suseoaa.locationspoofer.xposed` package, entry class `LocationHooker`; concrete hooks are split by category across `hooks/` (location/GNSS/map SDKs/steps/anti-detection) and `hooks/network/` (Wi-Fi/cell/Bluetooth/connectivity) — file new hooks into the matching existing subpackage rather than piling them into the `xposed` root package or `LocationHooker.kt`.
   * Adheres to **LSPosed API 101+ / libxposed (Service mode)** specifications.
-  * Zero-IO on high-frequency hook threads: Read configuration from volatile in-memory cache updated by background daemon thread.
+  * Zero-IO on high-frequency hook threads: `LocationHooker`'s background daemon thread polls several config-file paths by caller UID (1000ms by default, backing off to 10s/60s on read failure) into an in-memory cache; hook methods only ever read that cache, no synchronous IO.
+  * Cross-process config delivery avoids `ContentProvider` (which stalls the main thread under Android 11+ package-visibility rules); instead `core-data`'s `ConfigManager` uses root to write the JSON config to `/data/local/tmp/`, `/data/system/`, and the app's private directory at once, permissions tightened to `644`, with `RootManager` dynamically injecting a dedicated SELinux type (not the generic `shell_data_file`) — don't fall back to `777` or a generic SELinux type for convenience.
   * MultiDex safety: Dynamic ClassLoader hooking locked to the host package via `/proc/self/cmdline`.
   * Maintain clean stack traces and avoid leaving observable inspection points.
+
+### Coding Conventions
+
+* **ViewModel organization**: only `app-ui`'s `MainViewModel` — the single "god" ViewModel backing the whole main screen — is split across multiple files (`MainViewModel.kt` holds only fields/constructor; behavior lives entirely as `internal fun MainViewModel.xxx()` extension functions spread across `MainViewModelSpoofing.kt` / `MainViewModelDataIO.kt` / `MainViewModelLocation.kt` / `MainViewModelRoute.kt` / `MainViewModelSettings.kt`). This is specific to `MainViewModel`, **not** a project-wide convention — single-purpose ViewModels like `ManageDataViewModel` or `UpdateViewModel` should stay single-file with methods as regular class members; don't force the extension-function split onto them. When adding logic to `MainViewModel`, put it in whichever `MainViewModelXxx.kt` matches its concern (spoofing/import-export/location/route/settings) rather than in `MainViewModel.kt` itself.
+* **Comment style**: comments in this codebase are overwhelmingly Chinese and overwhelmingly explain *why* something is written the way it is (a hidden constraint, a bug once hit, a check that looks redundant but isn't) rather than restating what the code does — e.g. why a specific SELinux attribute is used instead of enumerating variants one by one, why a check's ordering can't be swapped, why Gaussian noise is used instead of a deterministic sine wave. Before adding a comment, ask: if this line were deleted, would a future reader miss the underlying reason and risk breaking it again? If yes, write it; a comment that only restates what the code already says should not be added.
+* **`app-ui/ui/` package layout**: `components/` (dialogs/widgets reused across screens), `components/map/` (per-map-engine adapters), `liquid/` (the custom Liquid Glass kit), `theme/` (colors/theming), `screen/` (individual screens); when a screen's own logic grows complex, open a subpackage under `screen/` for it (e.g. `screen/managedata/`, `screen/settings/`, `screen/tabs/`) and keep that screen's own sub-components, dialogs, and UI state inside it rather than flattening everything into the `screen/` root.
+* **Static analysis**: the project currently has **no** ktlint/detekt or similar linting configured — style is enforced by manual review only, so check your changes against this document and the existing code style before submitting rather than waiting on CI to flag it.
+* **Localization resources**: the default `res/values/strings.xml` under `app-ui` and `service` is actually **English**; `values-zh` holds the Chinese translation and `values-ar` the Arabic one (currently behind the other two — missing strings fall back to the English default automatically). When adding new UI copy, add the English original to `values/strings.xml` first, then the Chinese translation to `values-zh/strings.xml`. Updating only the Chinese translation and forgetting the default English resource is a common oversight — watch for it.
 
 ---
 
