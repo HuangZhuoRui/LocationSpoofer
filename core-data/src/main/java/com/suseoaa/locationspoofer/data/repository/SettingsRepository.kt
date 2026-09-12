@@ -91,6 +91,17 @@ class SettingsRepository(private val settingsManager: SettingsManager) {
     fun setAppCoordinateSystems(map: Map<String, String>) =
         settingsManager.setAppCoordinateSystems(map)
 
+    fun getSystemHookPackages(): Set<String> = settingsManager.getSystemHookPackages()
+
+    fun setSystemHookPackages(packages: Set<String>) =
+        settingsManager.setSystemHookPackages(packages)
+
+    var isSystemHookGlobalMode: Boolean
+        get() = settingsManager.isSystemHookGlobalMode
+        set(value) {
+            settingsManager.isSystemHookGlobalMode = value
+        }
+
     var isSpoofingActive: Boolean
         get() = settingsManager.isSpoofingActive
         set(value) {

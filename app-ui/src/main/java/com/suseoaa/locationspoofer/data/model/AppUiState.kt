@@ -112,6 +112,13 @@ data class AppState(
     val scannedCellCount: Int = 0,
     val scannedBluetoothCount: Int = 0,
     val hookedApps: List<AppInfoItem> = emptyList(),
+    /** system_server 级定位 Hook 勾选生效的目标 App 包名集合 */
+    val systemHookPackages: Set<String> = emptySet(),
+    /** 是否开启全局模拟模式（除自身与系统核心组件外对全设备所有应用生效） */
+    val isSystemHookGlobalMode: Boolean = false,
+    /** "系统级模拟应用"选择页展示的全量已安装 App 列表，进入该页时按需加载 */
+    val installedAppsForSystemHook: List<AppInfoItem> = emptyList(),
+    val isLoadingInstalledApps: Boolean = false,
     // 采集到的本地环境数据
     val collectedWifiJson: String = "[]",
     val collectedCellJson: String = "[]",

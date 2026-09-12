@@ -41,7 +41,8 @@ class RootManager {
             "untrusted_app",
             "gmscore_app",
             "platform_app",
-            "system_app"
+            "system_app",
+            "system_server"
         )
 
         private val CONFIG_FILE_PATHS = listOf(

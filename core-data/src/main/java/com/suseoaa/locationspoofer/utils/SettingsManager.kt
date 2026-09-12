@@ -244,4 +244,30 @@ class SettingsManager(context: Context) {
         map.forEach { (k, v) -> jsonObj.put(k, v) }
         prefs.edit().putString("app_coordinate_systems", jsonObj.toString()).apply()
     }
+
+    /** system_server 级定位 Hook（实验性）里被勾选生效的目标 App 包名集合 */
+    fun getSystemHookPackages(): Set<String> {
+        val jsonString = prefs.getString("system_hook_packages", "[]") ?: "[]"
+        val set = mutableSetOf<String>()
+        try {
+            val jsonArray = JSONArray(jsonString)
+            for (i in 0 until jsonArray.length()) {
+                set.add(jsonArray.getString(i))
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return set
+    }
+
+    fun setSystemHookPackages(packages: Set<String>) {
+        val jsonArray = JSONArray()
+        packages.forEach { jsonArray.put(it) }
+        prefs.edit().putString("system_hook_packages", jsonArray.toString()).apply()
+    }
+
+    /** 是否开启全局模拟模式（除本应用与系统基础核心外对所有应用生效） */
+    var isSystemHookGlobalMode: Boolean
+        get() = prefs.getBoolean("is_system_hook_global_mode", false)
+        set(value) = prefs.edit().putBoolean("is_system_hook_global_mode", value).apply()
 }

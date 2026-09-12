@@ -62,6 +62,8 @@ class MainViewModel(
             currentLanguage = settingsRepository.getLanguage(),
             isLanguageSet = settingsRepository.isLanguageSet(),
             appCoordinateSystems = settingsRepository.getAppCoordinateSystems(),
+            systemHookPackages = settingsRepository.getSystemHookPackages(),
+            isSystemHookGlobalMode = settingsRepository.isSystemHookGlobalMode,
             mockWifi = settingsRepository.mockWifi,
             mockCell = settingsRepository.mockCell,
             mockBluetooth = settingsRepository.mockBluetooth,

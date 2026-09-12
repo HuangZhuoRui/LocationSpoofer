@@ -95,6 +95,65 @@ fun AppCoordinateConfigCard(isDark: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
+fun SystemHookAppsConfigCard(uiState: com.suseoaa.locationspoofer.data.model.AppState, isDark: Boolean, onClick: () -> Unit) {
+    MiuixCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .noRippleClickable { onClick() },
+        cornerRadius = 16.dp,
+        insideMargin = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(AccentOrange.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Rounded.Shield,
+                    null,
+                    tint = AccentOrange,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.system_hook_apps_title),
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(Modifier.height(2.dp))
+                val statusDesc = if (uiState.isSystemHookGlobalMode) {
+                    stringResource(R.string.system_hook_global_mode_title) + "（所有应用生效）"
+                } else if (uiState.systemHookPackages.isNotEmpty()) {
+                    stringResource(R.string.selected_count_format, uiState.systemHookPackages.size)
+                } else {
+                    stringResource(R.string.system_hook_apps_card_desc)
+                }
+                Text(
+                    statusDesc,
+                    color = if (uiState.isSystemHookGlobalMode) AccentBlue else AppColors.textSecondary(isDark),
+                    fontSize = 12.sp
+                )
+            }
+            Icon(
+                Icons.Rounded.ChevronRight,
+                null,
+                tint = AppColors.textSecondary(isDark).copy(alpha = 0.7f),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+@Composable
 fun ScannerMapCard(
     isDark: Boolean,
     uiState: AppState,

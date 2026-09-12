@@ -71,7 +71,8 @@ enum class MainSubScreen {
     SignatureAuth,
     RootDiagnostics,
     BackgroundKeepAlive,
-    EnvTokens
+    EnvTokens,
+    SystemHookApps
 }
 
 @Composable
@@ -316,7 +317,8 @@ fun MainScaffoldScreen(
                                 currentSubScreen = MainSubScreen.CoordinateConfig
                             },
                             onNavigateToScanner = { currentSubScreen = MainSubScreen.ScannerMap },
-                            onNavigateToManageData = { currentSubScreen = MainSubScreen.ManageData }
+                            onNavigateToManageData = { currentSubScreen = MainSubScreen.ManageData },
+                            onNavigateToSystemHookApps = { currentSubScreen = MainSubScreen.SystemHookApps }
                         )
 
                         BottomTab.Info.ordinal -> com.suseoaa.locationspoofer.ui.screen.tabs.InfoTab(
@@ -423,6 +425,12 @@ fun MainScaffoldScreen(
                         uiState = uiState,
                         isDark = isDark,
                         onClose = { currentSubScreen = MainSubScreen.None }
+                    )
+
+                    MainSubScreen.SystemHookApps -> SystemHookAppsScreen(
+                        viewModel = viewModel,
+                        uiState = uiState,
+                        onBack = { currentSubScreen = MainSubScreen.None }
                     )
 
                     MainSubScreen.None -> Unit

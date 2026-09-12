@@ -429,6 +429,104 @@ internal fun MainViewModel.setAppCoordinateSystem(pkg: String, sys: String) {
     }
 }
 
+/** 进入"系统级模拟应用"选择页时按需加载全量已安装 App 列表 */
+internal fun MainViewModel.loadInstalledAppsForSystemHook() {
+    _uiState.update { it.copy(isLoadingInstalledApps = true) }
+    viewModelScope.launch(Dispatchers.IO) {
+        val apps = lsposedManager.getAllInstalledApps(context)
+        _uiState.update { it.copy(installedAppsForSystemHook = apps, isLoadingInstalledApps = false) }
+    }
+}
+
+internal fun MainViewModel.setSystemHookGlobalMode(enabled: Boolean) {
+    settingsRepository.isSystemHookGlobalMode = enabled
+    _uiState.update { it.copy(isSystemHookGlobalMode = enabled) }
+
+    if (_uiState.value.isSpoofingActive) {
+        viewModelScope.launch {
+            locationRepository.updateConfig(
+                SpoofingState.latitude,
+                SpoofingState.longitude,
+                SpoofingState.simMode,
+                SpoofingState.simBearing,
+                SpoofingState.startTimestamp,
+                if (SpoofingState.isRouteMode) parseRoutePoints(SpoofingState.routeJson) else emptyList(),
+                SpoofingState.isRouteMode,
+                _uiState.value.appCoordinateSystems
+            )
+        }
+    }
+}
+
+internal fun MainViewModel.selectAllUserAppsForSystemHook() {
+    val userAppPkgs = _uiState.value.installedAppsForSystemHook
+        .filter { !it.isSystem }
+        .map { it.packageName }
+        .toSet()
+    val newSet = _uiState.value.systemHookPackages + userAppPkgs
+    settingsRepository.setSystemHookPackages(newSet)
+    _uiState.update { it.copy(systemHookPackages = newSet) }
+
+    if (_uiState.value.isSpoofingActive) {
+        viewModelScope.launch {
+            locationRepository.updateConfig(
+                SpoofingState.latitude,
+                SpoofingState.longitude,
+                SpoofingState.simMode,
+                SpoofingState.simBearing,
+                SpoofingState.startTimestamp,
+                if (SpoofingState.isRouteMode) parseRoutePoints(SpoofingState.routeJson) else emptyList(),
+                SpoofingState.isRouteMode,
+                _uiState.value.appCoordinateSystems
+            )
+        }
+    }
+}
+
+internal fun MainViewModel.clearAllSystemHookApps() {
+    val emptySet = emptySet<String>()
+    settingsRepository.setSystemHookPackages(emptySet)
+    _uiState.update { it.copy(systemHookPackages = emptySet) }
+
+    if (_uiState.value.isSpoofingActive) {
+        viewModelScope.launch {
+            locationRepository.updateConfig(
+                SpoofingState.latitude,
+                SpoofingState.longitude,
+                SpoofingState.simMode,
+                SpoofingState.simBearing,
+                SpoofingState.startTimestamp,
+                if (SpoofingState.isRouteMode) parseRoutePoints(SpoofingState.routeJson) else emptyList(),
+                SpoofingState.isRouteMode,
+                _uiState.value.appCoordinateSystems
+            )
+        }
+    }
+}
+
+internal fun MainViewModel.setSystemHookPackageEnabled(pkg: String, enabled: Boolean) {
+    val currentSet = _uiState.value.systemHookPackages.toMutableSet()
+    if (enabled) currentSet.add(pkg) else currentSet.remove(pkg)
+    settingsRepository.setSystemHookPackages(currentSet)
+    _uiState.update { it.copy(systemHookPackages = currentSet) }
+
+    // 如果模拟处于开启状态，立即刷新配置文件让新的 system_hook_packages 生效
+    if (_uiState.value.isSpoofingActive) {
+        viewModelScope.launch {
+            locationRepository.updateConfig(
+                SpoofingState.latitude,
+                SpoofingState.longitude,
+                SpoofingState.simMode,
+                SpoofingState.simBearing,
+                SpoofingState.startTimestamp,
+                if (SpoofingState.isRouteMode) parseRoutePoints(SpoofingState.routeJson) else emptyList(),
+                SpoofingState.isRouteMode,
+                _uiState.value.appCoordinateSystems
+            )
+        }
+    }
+}
+
 internal fun MainViewModel.removeAppCoordinateSystem(pkg: String) {
     val currentMap = _uiState.value.appCoordinateSystems.toMutableMap()
     currentMap.remove(pkg)

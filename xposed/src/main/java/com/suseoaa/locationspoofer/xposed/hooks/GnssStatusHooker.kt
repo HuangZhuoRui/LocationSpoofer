@@ -112,6 +112,70 @@ internal fun LocationHooker.hookGnssStatus(classLoader: ClassLoader) {
             XposedBridge.log(e)
         }
 
+        // Hook 注册 GnssMeasurementsCallback / GnssNavigationMessageCallback：
+        // 原始伪距、多普勒频移、导航电文比 Location 更底层，一旦透传真实值出去，
+        // 等于把真实卫星几何和真实运动状态原样暴露给 App，而我们又没有可靠办法
+        // 伪造出跟模拟坐标/速度物理自洽的原始测量数据（错误的伪造比不投递更容易被识破）。
+        // 所以这里不去碰注册方法本身的返回值（它在不同 API 级别有 void/boolean 两种签名，
+        // 硬改返回值风险高），而是照搬上面 GnssStatusCallback 的思路：拿到回调实例后
+        // 直接 Hook 它自己的 onXxxReceived，命中模拟状态时不调用 proceed，让真实数据在这里被吞掉。
+        fun suppressRealCallbackWhenActive(callback: Any, vararg methodNames: String) {
+            val clazz = callback.javaClass
+            if (hookedCallbackClasses.putIfAbsent(clazz, true) != null) return
+            for (methodName in methodNames) {
+                try {
+                    XposedHelpers.hookAllMethods(clazz, methodName) { innerChain, _ ->
+                        val config = readConfig()
+                        if (config != null && config.optBoolean("active", false)) {
+                            return@hookAllMethods null
+                        }
+                        return@hookAllMethods innerChain.proceed(innerChain.args.toTypedArray())
+                    }
+                } catch (_: Throwable) {
+                }
+            }
+        }
+
+        try {
+            XposedHelpers.hookAllMethods(
+                locationManagerClazz,
+                "registerGnssMeasurementsCallback"
+            ) { chain, method ->
+                val callback = chain.args.firstOrNull { arg ->
+                    arg != null && LocationHooker.hasTypeByName(
+                        arg.javaClass,
+                        "android.location.GnssMeasurementsEvent\$Callback"
+                    )
+                }
+                if (callback != null) {
+                    suppressRealCallbackWhenActive(callback, "onGnssMeasurementsReceived", "onStatusChanged")
+                }
+                return@hookAllMethods chain.proceed(chain.args.toTypedArray())
+            }
+        } catch (e: Throwable) {
+            XposedBridge.log(e)
+        }
+
+        try {
+            XposedHelpers.hookAllMethods(
+                locationManagerClazz,
+                "registerGnssNavigationMessageCallback"
+            ) { chain, method ->
+                val callback = chain.args.firstOrNull { arg ->
+                    arg != null && LocationHooker.hasTypeByName(
+                        arg.javaClass,
+                        "android.location.GnssNavigationMessage\$Callback"
+                    )
+                }
+                if (callback != null) {
+                    suppressRealCallbackWhenActive(callback, "onGnssNavigationMessageReceived", "onStatusChanged")
+                }
+                return@hookAllMethods chain.proceed(chain.args.toTypedArray())
+            }
+        } catch (e: Throwable) {
+            XposedBridge.log(e)
+        }
+
         // Hook LocationManager.getGpsStatus 以适配通过 LocationManager 直接拉取卫星的旧版 SDK
         try {
             XposedHelpers.hookAllMethods(

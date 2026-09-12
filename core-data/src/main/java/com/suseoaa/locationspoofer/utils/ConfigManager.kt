@@ -11,6 +11,9 @@ import org.json.JSONObject
 
 class ConfigManager(private val context: Context, private val rootManager: RootManager) {
 
+    // system_hook_packages 是独立于每次模拟会话的常驻勾选项（在"系统级模拟应用"页面里配置），
+    // 不随 lat/lng/active 这类瞬时状态一起在调用方逐层透传，这里每次落盘时直接读取最新值即可。
+    private val settingsManager = SettingsManager(context)
 
     private var lastGeocodedLat = -999.0
     private var lastGeocodedLng = -999.0
@@ -143,6 +146,11 @@ class ConfigManager(private val context: Context, private val rootManager: RootM
             val coordSysObj = JSONObject()
             appCoordinateSystems.forEach { (pkg, sys) -> coordSysObj.put(pkg, sys) }
             put("app_coordinate_systems", coordSysObj)
+
+            val systemHookPackagesArr = JSONArray()
+            settingsManager.getSystemHookPackages().forEach { systemHookPackagesArr.put(it) }
+            put("system_hook_packages", systemHookPackagesArr)
+            put("system_hook_global_mode", settingsManager.isSystemHookGlobalMode)
         }
         val cellCount = json.optJSONArray("cell_json")?.length() ?: 0
 

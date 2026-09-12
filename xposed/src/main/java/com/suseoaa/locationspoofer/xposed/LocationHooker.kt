@@ -53,6 +53,9 @@ class LocationHooker : XposedModule() {
     @Volatile
     internal var environmentHooksInstalled = false
 
+    @Volatile
+    internal var systemHooksInstalled = false
+
     // 用于跟踪活动的 Android LocationListener，实现动态主动欺骗
     // 使用 CopyOnWriteArrayList 和强引用，防止 GC 移除监听器
     internal val capturedLocationListeners = CopyOnWriteArrayList<Any>()
@@ -115,6 +118,10 @@ class LocationHooker : XposedModule() {
 
     // LibXposed API 101/102: 系统服务专属入口
     override fun onSystemServerStarting(param: XposedModuleInterface.SystemServerStartingParam) {
+        android.util.Log.e(
+            "LocationSpoofer",
+            "[SysHook] onSystemServerStarting invoked! system_server classLoader=${param.classLoader}"
+        )
         handleLoadPackage("android", param.classLoader)
     }
 
@@ -126,6 +133,7 @@ class LocationHooker : XposedModule() {
         bleScanTimers.clear()
         hookedCallbackClasses.clear()
         environmentHooksInstalled = false
+        systemHooksInstalled = false
         capturedLocationListeners.clear()
         capturedAMapListeners.clear()
         capturedBaiduListeners.clear()
@@ -191,12 +199,29 @@ class LocationHooker : XposedModule() {
                 processName == "com.android.systemui"
 
         if (isCoreSystemProcess) {
-            // 系统进程仅执行基础的位置与 GNSS Hook，绝对不 Hook 系统的 Wi-Fi、基站、网络状态与蓝牙底层状态机
-            // 避免破坏系统 internal 状态机引发 NullPointerException 导致 system_server 崩溃进入安全模式
-            XposedBridge.log("[LocationSpoofer] Core system process ($pkg / $processName) detected, skipping environment hooks to prevent system crash.")
-            hookLocationAPIs(classLoader, pkg)
-            hookGnssStatus(classLoader)
-            readConfig()
+            android.util.Log.e(
+                "LocationSpoofer",
+                "[SysHook] Core system process detected: pkg=$pkg, process=$processName, myUid=${android.os.Process.myUid()}"
+            )
+            if (systemHooksInstalled) {
+                readConfig()
+                return
+            }
+            systemHooksInstalled = true
+            android.util.Log.e(
+                "LocationSpoofer",
+                "[SysHook] Deploying system framework hooks in $processName..."
+            )
+            try { dumpSystemServiceInternals(classLoader) } catch (t: Throwable) { android.util.Log.e("LocationSpoofer", "[SysHook] dump failed: $t") }
+            try { hookSystemLocationService(classLoader) } catch (t: Throwable) { android.util.Log.e("LocationSpoofer", "[SysHook] hookSystemLocationService error", t) }
+            try { hookSystemWifiService(classLoader) } catch (t: Throwable) { android.util.Log.e("LocationSpoofer", "[SysHook] hookSystemWifiService error", t) }
+            try { hookSystemTelephonyService(classLoader) } catch (t: Throwable) { android.util.Log.e("LocationSpoofer", "[SysHook] hookSystemTelephonyService error", t) }
+            try { hookSystemAppOpsService(classLoader) } catch (t: Throwable) { android.util.Log.e("LocationSpoofer", "[SysHook] hookSystemAppOpsService error", t) }
+            val cfg = readConfig()
+            android.util.Log.e(
+                "LocationSpoofer",
+                "[SysHook] System framework hooks deployed successfully. Config active=${cfg?.optBoolean("active")}, globalMode=${cfg?.optBoolean("system_hook_global_mode")}, targetPkgs=${cfg?.optJSONArray("system_hook_packages")?.length() ?: 0}"
+            )
             return
         }
 
@@ -233,6 +258,7 @@ class LocationHooker : XposedModule() {
                 val result = chain.proceed(chain.args.toTypedArray())
                 val app = chain.thisObject as? android.app.Application
                 val appCl = app?.classLoader
+                XposedBridge.log("[LocationSpoofer] attachBaseContext fired, appClassLoader=$appCl sameAsInitial=${appCl === classLoader}")
                 if (appCl != null) {
                     hookAllMapSdks(appCl)
                 }
@@ -249,6 +275,7 @@ class LocationHooker : XposedModule() {
                 val result = chain.proceed(chain.args.toTypedArray())
                 val app = chain.thisObject as? android.app.Application
                 val appCl = app?.classLoader
+                XposedBridge.log("[LocationSpoofer] Application.onCreate fired, appClassLoader=$appCl sameAsInitial=${appCl === classLoader}")
                 if (appCl != null) {
                     hookAllMapSdks(appCl)
                 }
@@ -270,6 +297,45 @@ class LocationHooker : XposedModule() {
         try { hookTencentSDK(cl) } catch (_: Throwable) {}
         try { hookBaiduSDK(cl) } catch (_: Throwable) {}
         try { hookGoogleFusedLocation(cl) } catch (_: Throwable) {}
+    }
+
+    /**
+     * 只读侦察，不装任何会改变行为的 Hook：探索"直接改 system_server 内部服务实现，
+     * 一次性对全设备生效"这个方向时，第一步必须先摸清楚这台设备/这个安卓版本实际的
+     * 内部类结构长什么样——LocationManagerService/WifiServiceImpl 这些类不是公开 API，
+     * 字段和方法名在不同安卓版本、不同 OEM 定制 ROM 之间差异很大，且没有公开文档，
+     * 瞎猜字段名直接上 Hook 是 system_server 崩溃、设备进重启循环最常见的原因。
+     * 这里只用反射枚举候选类的方法名/字段名打进日志，不拦截、不修改任何返回值，
+     * 单个类枚举失败也只是记一条日志，不会影响 system_server 本身的运行。
+     */
+    internal fun dumpSystemServiceInternals(classLoader: ClassLoader) {
+        val candidateClassNames = listOf(
+            "com.android.server.location.LocationManagerService",
+            "com.android.server.LocationManagerService",
+            "com.android.server.location.provider.LocationProviderManager",
+            "com.android.server.location.gnss.GnssLocationProvider",
+            "com.android.server.location.gnss.GnssManagerService",
+            "com.android.server.wifi.WifiServiceImpl",
+            "com.android.server.wifi.scanner.WifiScanningServiceImpl",
+            "com.android.server.TelephonyRegistry",
+            "com.android.internal.telephony.PhoneInterfaceManager"
+        )
+        for (className in candidateClassNames) {
+            try {
+                val clazz = classLoader.loadClass(className)
+                val methodNames = clazz.declaredMethods.map { it.name }.distinct().sorted()
+                val fieldInfo = clazz.declaredFields.map { "${it.type.simpleName} ${it.name}" }.sorted()
+                XposedBridge.log(
+                    "[LocationSpoofer][SysDump] FOUND $className (superclass=${clazz.superclass?.name})\n" +
+                        "  methods(${methodNames.size})=${methodNames.joinToString(",")}\n" +
+                        "  fields(${fieldInfo.size})=${fieldInfo.joinToString(",")}"
+                )
+            } catch (e: ClassNotFoundException) {
+                XposedBridge.log("[LocationSpoofer][SysDump] not found: $className")
+            } catch (e: Throwable) {
+                XposedBridge.log("[LocationSpoofer][SysDump] error dumping $className: $e")
+            }
+        }
     }
 
     /**
@@ -328,10 +394,14 @@ class LocationHooker : XposedModule() {
         val mockBt = config.optBoolean("mock_bluetooth", true)
         val lat = config.optDouble("lat", 0.0)
         val lng = config.optDouble("lng", 0.0)
-        val logKey = "$active|$mockBt|$lat|$lng|$cellCount|$btCount"
+        val isGlobal = config.optBoolean("system_hook_global_mode", false)
+        val sysPkgs = config.optJSONArray("system_hook_packages")?.length() ?: 0
+        val logKey = "$active|$mockBt|$lat|$lng|$cellCount|$btCount|$isGlobal|$sysPkgs"
         if (logKey != lastOpenCellConfigLogKey) {
             lastOpenCellConfigLogKey = logKey
-            XposedBridge.log("[LocationSpoofer] 配置已加载[$source]: active=$active, mock_bluetooth=$mockBt, lat=$lat, lng=$lng, 蓝牙设备数=$btCount, 基站数=$cellCount")
+            val msg = "[SysHook] 配置已加载[$source]: active=$active, globalMode=$isGlobal, 目标应用数=$sysPkgs, lat=$lat, lng=$lng, 蓝牙数=$btCount, 基站数=$cellCount"
+            android.util.Log.i("LocationSpoofer", msg)
+            XposedBridge.log(msg)
         }
     }
 
@@ -402,13 +472,13 @@ class LocationHooker : XposedModule() {
         }
         if (now - lastOpenCellConfigReadFailureLogTime > logIntervalMs) {
             lastOpenCellConfigReadFailureLogTime = now
-            XposedBridge.logOpenCellId(
-                "readConfig[$source] no readable config (${
-                    errors.joinToString(
-                        " | "
-                    )
-                })"
-            )
+            val msg = "[SysHook] readConfig[$source] no readable config (${
+                errors.joinToString(
+                    " | "
+                )
+            })"
+            android.util.Log.e("LocationSpoofer", msg)
+            XposedBridge.logOpenCellId(msg)
         }
         return null
     }

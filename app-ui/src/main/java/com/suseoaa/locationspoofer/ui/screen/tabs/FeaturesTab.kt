@@ -32,6 +32,7 @@ import com.suseoaa.locationspoofer.ui.screen.FooterLinks
 import com.suseoaa.locationspoofer.ui.screen.ImportExportDataCard
 import com.suseoaa.locationspoofer.ui.screen.ManageDataCard
 import com.suseoaa.locationspoofer.ui.screen.ScannerMapCard
+import com.suseoaa.locationspoofer.ui.screen.SystemHookAppsConfigCard
 import com.suseoaa.locationspoofer.ui.components.ImportExportSelectionDialog
 import com.suseoaa.locationspoofer.data.model.ImportExportCounts
 import com.suseoaa.locationspoofer.data.model.ImportExportSelection
@@ -50,7 +51,8 @@ fun FeaturesTab(
     tabBarHeight: Dp = 90.dp,
     onNavigateToCoordinate: () -> Unit,
     onNavigateToScanner: () -> Unit,
-    onNavigateToManageData: () -> Unit
+    onNavigateToManageData: () -> Unit,
+    onNavigateToSystemHookApps: () -> Unit
 ) {
     val isDark = isSystemInDarkTheme()
     val context = LocalContext.current
@@ -203,7 +205,16 @@ fun FeaturesTab(
                     )
                 }
 
-                // 4. 导入与导出数据
+                // 4. 系统级模拟（全局 / 指定应用）
+                item {
+                    SystemHookAppsConfigCard(
+                        uiState = uiState,
+                        isDark = isDark,
+                        onClick = onNavigateToSystemHookApps
+                    )
+                }
+
+                // 5. 导入与导出数据
                 item {
                     ImportExportDataCard(
                         isDark = isDark,
