@@ -144,9 +144,9 @@ internal fun MainViewModel.confirmMapPoint(lat: Double, lng: Double, isDragging:
                 wifiJson = updatedState.collectedWifiJson,
                 cellJson = updatedState.collectedCellJson,
                 bluetoothJson = updatedState.collectedBluetoothJson,
-                mockWifi = updatedState.mockWifi && updatedState.canMockWifi,
+                mockWifi = updatedState.mockWifi,
                 mockCell = updatedState.mockCell,
-                mockBluetooth = updatedState.mockBluetooth && updatedState.canMockBluetooth,
+                mockBluetooth = updatedState.mockBluetooth,
                 enableJitter = updatedState.enableJitter
             )
         }

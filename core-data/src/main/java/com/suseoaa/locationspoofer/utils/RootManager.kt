@@ -42,7 +42,9 @@ class RootManager {
             "gmscore_app",
             "platform_app",
             "system_app",
-            "system_server"
+            "system_server",
+            "radio",
+            "bluetooth"
         )
 
         private val CONFIG_FILE_PATHS = listOf(

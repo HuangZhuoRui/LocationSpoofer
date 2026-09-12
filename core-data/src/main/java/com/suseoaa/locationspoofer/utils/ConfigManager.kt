@@ -166,24 +166,59 @@ class ConfigManager(private val context: Context, private val rootManager: RootM
             mkdir -p /data/data/com.suseoaa.locationspoofer/files 2>/dev/null || true
             chmod 755 /data/data/com.suseoaa.locationspoofer 2>/dev/null || true
             chmod 755 /data/data/com.suseoaa.locationspoofer/files 2>/dev/null || true
+            mkdir -p /data/user_de/0/com.android.phone/files 2>/dev/null || true
+            mkdir -p /data/user_de/0/com.android.bluetooth/files 2>/dev/null || true
+
             cat > /data/local/tmp/locationspoofer_config_tmp.json
             chmod 644 /data/local/tmp/locationspoofer_config_tmp.json
-            chcon u:object_r:$selinuxType:s0 /data/local/tmp/locationspoofer_config_tmp.json 2>/dev/null || true
+
+            # system_server 专属路径：使用标准 system_data_file 标签与 system:system 所有权
             cp /data/local/tmp/locationspoofer_config_tmp.json /data/system/locationspoofer_config_tmp.json
-            chown system:system /data/system/locationspoofer_config_tmp.json 2>/dev/null || true
+            chown 1000:1000 /data/system/locationspoofer_config_tmp.json 2>/dev/null || true
             chmod 644 /data/system/locationspoofer_config_tmp.json
-            chcon u:object_r:$selinuxType:s0 /data/system/locationspoofer_config_tmp.json 2>/dev/null || true
-            cp /data/local/tmp/locationspoofer_config_tmp.json /data/data/com.suseoaa.locationspoofer/files/locationspoofer_config.json
-            chmod 644 /data/data/com.suseoaa.locationspoofer/files/locationspoofer_config.json 2>/dev/null || true
-            chcon u:object_r:$selinuxType:s0 /data/data/com.suseoaa.locationspoofer/files/locationspoofer_config.json 2>/dev/null || true
-            mv /data/local/tmp/locationspoofer_config_tmp.json /data/local/tmp/locationspoofer_config.json
+            chcon u:object_r:system_data_file:s0 /data/system/locationspoofer_config_tmp.json 2>/dev/null || true
             mv /data/system/locationspoofer_config_tmp.json /data/system/locationspoofer_config.json
+
+            # com.android.phone (radio, uid 1001) 专属路径：使用 radio_data_file 标签与 1001:1001 所有权
+            cp /data/local/tmp/locationspoofer_config_tmp.json /data/user_de/0/com.android.phone/files/locationspoofer_config.json 2>/dev/null || true
+            chown 1001:1001 /data/user_de/0/com.android.phone/files/locationspoofer_config.json 2>/dev/null || true
+            chmod 644 /data/user_de/0/com.android.phone/files/locationspoofer_config.json 2>/dev/null || true
+            chcon u:object_r:radio_data_file:s0 /data/user_de/0/com.android.phone/files/locationspoofer_config.json 2>/dev/null || true
+
+            # com.android.bluetooth (bluetooth, uid 1002) 专属路径：使用 bluetooth_data_file 标签与 1002:1002 所有权
+            cp /data/local/tmp/locationspoofer_config_tmp.json /data/user_de/0/com.android.bluetooth/files/locationspoofer_config.json 2>/dev/null || true
+            chown 1002:1002 /data/user_de/0/com.android.bluetooth/files/locationspoofer_config.json 2>/dev/null || true
+            chmod 644 /data/user_de/0/com.android.bluetooth/files/locationspoofer_config.json 2>/dev/null || true
+            chcon u:object_r:bluetooth_data_file:s0 /data/user_de/0/com.android.bluetooth/files/locationspoofer_config.json 2>/dev/null || true
+
+            # app 本身路径
+            cp /data/local/tmp/locationspoofer_config_tmp.json /data/data/com.suseoaa.locationspoofer/files/locationspoofer_config.json 2>/dev/null || true
+            chmod 644 /data/data/com.suseoaa.locationspoofer/files/locationspoofer_config.json 2>/dev/null || true
+
+            mv /data/local/tmp/locationspoofer_config_tmp.json /data/local/tmp/locationspoofer_config.json
             chmod 644 /data/local/tmp/locationspoofer_config.json 2>/dev/null || true
-            chmod 644 /data/system/locationspoofer_config.json 2>/dev/null || true
-            chcon u:object_r:$selinuxType:s0 /data/local/tmp/locationspoofer_config.json 2>/dev/null || true
-            chcon u:object_r:$selinuxType:s0 /data/system/locationspoofer_config.json 2>/dev/null || true
         """.trimIndent()
 
         val result = rootManager.executeCommandWithInput(command, jsonText)
+    }
+
+    fun syncDomainConfigs() {
+        val command = """
+            if [ -f /data/system/locationspoofer_config.json ]; then
+                mkdir -p /data/user_de/0/com.android.phone/files 2>/dev/null || true
+                mkdir -p /data/user_de/0/com.android.bluetooth/files 2>/dev/null || true
+                
+                cp /data/system/locationspoofer_config.json /data/user_de/0/com.android.phone/files/locationspoofer_config.json 2>/dev/null || true
+                chown 1001:1001 /data/user_de/0/com.android.phone/files/locationspoofer_config.json 2>/dev/null || true
+                chmod 644 /data/user_de/0/com.android.phone/files/locationspoofer_config.json 2>/dev/null || true
+                chcon u:object_r:radio_data_file:s0 /data/user_de/0/com.android.phone/files/locationspoofer_config.json 2>/dev/null || true
+
+                cp /data/system/locationspoofer_config.json /data/user_de/0/com.android.bluetooth/files/locationspoofer_config.json 2>/dev/null || true
+                chown 1002:1002 /data/user_de/0/com.android.bluetooth/files/locationspoofer_config.json 2>/dev/null || true
+                chmod 644 /data/user_de/0/com.android.bluetooth/files/locationspoofer_config.json 2>/dev/null || true
+                chcon u:object_r:bluetooth_data_file:s0 /data/user_de/0/com.android.bluetooth/files/locationspoofer_config.json 2>/dev/null || true
+            fi
+        """.trimIndent()
+        rootManager.executeCommand(command)
     }
 }

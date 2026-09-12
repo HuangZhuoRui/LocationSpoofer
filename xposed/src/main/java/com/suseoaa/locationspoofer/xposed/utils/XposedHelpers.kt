@@ -87,6 +87,18 @@ object XposedHelpers {
         return field.get(obj)
     }
 
+    fun getIntField(obj: Any, fieldName: String): Int {
+        val field = findFieldInternal(obj.javaClass, fieldName)
+            ?: throw NoSuchFieldException(fieldName)
+        return field.getInt(obj)
+    }
+
+    fun getStaticObjectField(clazz: Class<*>, fieldName: String): Any? {
+        val field = findFieldInternal(clazz, fieldName)
+            ?: throw NoSuchFieldException(fieldName)
+        return field.get(null)
+    }
+
     fun setObjectField(obj: Any, fieldName: String, value: Any?) {
         val field = findFieldInternal(obj.javaClass, fieldName)
             ?: throw NoSuchFieldException(fieldName)

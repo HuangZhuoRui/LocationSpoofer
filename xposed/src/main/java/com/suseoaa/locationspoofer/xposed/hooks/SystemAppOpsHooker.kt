@@ -11,8 +11,7 @@
     "RemoveRedundantQualifierName",
     "OPT_IN_USAGE",
     "unused",
-    "UnusedImport"
-)
+    "UnusedImport")
 
 package com.suseoaa.locationspoofer.xposed.hooks
 
@@ -20,6 +19,8 @@ import com.suseoaa.locationspoofer.xposed.LocationHooker
 import com.suseoaa.locationspoofer.xposed.utils.XposedBridge
 import com.suseoaa.locationspoofer.xposed.utils.XposedHelpers
 import org.json.JSONObject
+
+private fun sysLog(msg: String) = XposedBridge.log(msg)
 
 /**
  * system_server 级 AppOps 与系统设置（AppOpsService / Settings）反检测模块
@@ -58,7 +59,7 @@ internal fun LocationHooker.hookSystemAppOpsService(classLoader: ClassLoader) {
                 }
             } catch (_: Throwable) {}
         }
-        android.util.Log.i("LocationSpoofer", "[SysHook] AppOpsService OP_MOCK_LOCATION hooked")
+        sysLog("[SysHook] AppOpsService OP_MOCK_LOCATION hooked")
     }
 
     // 拦截 Settings.Secure 中 mock_location 开关读取

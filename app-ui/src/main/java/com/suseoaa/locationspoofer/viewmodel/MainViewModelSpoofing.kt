@@ -61,9 +61,9 @@ internal fun MainViewModel.startSpoofing() {
             updatedState.collectedWifiJson,
             updatedState.collectedCellJson,
             updatedState.collectedBluetoothJson,
-            updatedState.mockWifi && updatedState.canMockWifi,
+            updatedState.mockWifi,
             updatedState.mockCell,
-            updatedState.mockBluetooth && updatedState.canMockBluetooth,
+            updatedState.mockBluetooth,
             updatedState.enableJitter
         )
 

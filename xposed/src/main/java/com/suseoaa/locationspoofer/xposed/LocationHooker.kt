@@ -56,6 +56,15 @@ class LocationHooker : XposedModule() {
     @Volatile
     internal var systemHooksInstalled = false
 
+    @Volatile
+    internal var isSystemServerProcess = false
+
+    @Volatile
+    internal var isPhoneProcessInstance = false
+
+    @Volatile
+    internal var isBluetoothProcessInstance = false
+
     // 用于跟踪活动的 Android LocationListener，实现动态主动欺骗
     // 使用 CopyOnWriteArrayList 和强引用，防止 GC 移除监听器
     internal val capturedLocationListeners = CopyOnWriteArrayList<Any>()
@@ -185,18 +194,23 @@ class LocationHooker : XposedModule() {
             currentClassLoader = classLoader
         }
 
-        // 防止注入到 SystemUI 或 com.android.bluetooth 导致崩溃或 SELinux 违规
-        if (pkg == "com.android.systemui" || pkg == "com.android.bluetooth" || processName.contains("com.android.bluetooth")) {
+        // 防止注入到 SystemUI 导致崩溃或无意义占用
+        if (pkg == "com.android.systemui" || processName == "com.android.systemui") {
             return
         }
 
         val isSystemServer =
             (pkg == "android") || (processName == "android") || (processName == "system_server")
+        val isPhoneProcess =
+            (pkg == "com.android.phone") || (processName == "com.android.phone")
+        val isBluetoothProcess =
+            (pkg == "com.android.bluetooth") || (processName.startsWith("com.android.bluetooth"))
 
-        // 核心系统进程：system_server, com.android.phone 等
-        val isCoreSystemProcess = isSystemServer ||
-                processName == "com.android.phone" ||
-                processName == "com.android.systemui"
+        if (isSystemServer) isSystemServerProcess = true
+        if (isPhoneProcess) isPhoneProcessInstance = true
+        if (isBluetoothProcess) isBluetoothProcessInstance = true
+
+        val isCoreSystemProcess = isSystemServer || isPhoneProcess || isBluetoothProcess
 
         if (isCoreSystemProcess) {
             android.util.Log.e(
@@ -208,19 +222,29 @@ class LocationHooker : XposedModule() {
                 return
             }
             systemHooksInstalled = true
-            android.util.Log.e(
-                "LocationSpoofer",
-                "[SysHook] Deploying system framework hooks in $processName..."
-            )
-            try { dumpSystemServiceInternals(classLoader) } catch (t: Throwable) { android.util.Log.e("LocationSpoofer", "[SysHook] dump failed: $t") }
-            try { hookSystemLocationService(classLoader) } catch (t: Throwable) { android.util.Log.e("LocationSpoofer", "[SysHook] hookSystemLocationService error", t) }
-            try { hookSystemWifiService(classLoader) } catch (t: Throwable) { android.util.Log.e("LocationSpoofer", "[SysHook] hookSystemWifiService error", t) }
-            try { hookSystemTelephonyService(classLoader) } catch (t: Throwable) { android.util.Log.e("LocationSpoofer", "[SysHook] hookSystemTelephonyService error", t) }
-            try { hookSystemAppOpsService(classLoader) } catch (t: Throwable) { android.util.Log.e("LocationSpoofer", "[SysHook] hookSystemAppOpsService error", t) }
+            XposedBridge.log("[SysHook] Deploying system framework hooks in $processName...")
+
+            if (isSystemServer) {
+                try { dumpSystemServiceInternals(classLoader) } catch (t: Throwable) { XposedBridge.log("[SysHook] dump failed: $t") }
+                try { hookSystemLocationService(classLoader) } catch (t: Throwable) { XposedBridge.log("[SysHook] hookSystemLocationService error: $t") }
+                try { hookSystemWifiService(classLoader) } catch (t: Throwable) { XposedBridge.log("[SysHook] hookSystemWifiService error: $t") }
+                try { hookSystemConnectivityService(classLoader) } catch (t: Throwable) { XposedBridge.log("[SysHook] hookSystemConnectivityService error: $t") }
+                try { hookSystemTelephonyRegistry(classLoader) } catch (t: Throwable) { XposedBridge.log("[SysHook] hookSystemTelephonyRegistry error: $t") }
+                try { hookSystemAppOpsService(classLoader) } catch (t: Throwable) { XposedBridge.log("[SysHook] hookSystemAppOpsService error: $t") }
+            }
+
+            if (isPhoneProcess) {
+                try { hookSystemTelephonyService(classLoader) } catch (t: Throwable) { XposedBridge.log("[SysHook] hookSystemTelephonyService error: $t") }
+            }
+
+            if (isBluetoothProcess) {
+                try { hookSystemBluetoothService(classLoader) } catch (t: Throwable) { XposedBridge.log("[SysHook] hookSystemBluetoothService error: $t") }
+            }
+
             val cfg = readConfig()
             android.util.Log.e(
                 "LocationSpoofer",
-                "[SysHook] System framework hooks deployed successfully. Config active=${cfg?.optBoolean("active")}, globalMode=${cfg?.optBoolean("system_hook_global_mode")}, targetPkgs=${cfg?.optJSONArray("system_hook_packages")?.length() ?: 0}"
+                "[SysHook] System framework hooks deployed in $processName. Config active=${cfg?.optBoolean("active")}, globalMode=${cfg?.optBoolean("system_hook_global_mode")}, targetPkgs=${cfg?.optJSONArray("system_hook_packages")?.length() ?: 0}"
             )
             return
         }
@@ -382,6 +406,8 @@ class LocationHooker : XposedModule() {
     internal val pollingLock = Any()
     internal val localConfigPath = "/data/local/tmp/locationspoofer_config.json"
     internal val systemConfigPath = "/data/system/locationspoofer_config.json"
+    internal val phoneConfigPath = "/data/user_de/0/com.android.phone/files/locationspoofer_config.json"
+    internal val bluetoothConfigPath = "/data/user_de/0/com.android.bluetooth/files/locationspoofer_config.json"
     internal val appDataConfigPath = "/data/data/com.suseoaa.locationspoofer/files/locationspoofer_config.json"
     internal val sdcardConfigPath = "/sdcard/Download/locationspoofer_config.json"
 
@@ -406,10 +432,17 @@ class LocationHooker : XposedModule() {
     }
 
     internal fun configReadPaths(): Array<String> {
-        return if (android.os.Process.myUid() == 1000) {
-            arrayOf(systemConfigPath, localConfigPath, appDataConfigPath, sdcardConfigPath)
+        val uid = android.os.Process.myUid()
+        if (isPhoneProcessInstance || uid == 1001) {
+            return arrayOf(phoneConfigPath)
+        }
+        if (isBluetoothProcessInstance || uid == 1002) {
+            return arrayOf(bluetoothConfigPath)
+        }
+        return if (uid == 1000) {
+            arrayOf(systemConfigPath)
         } else {
-            arrayOf(localConfigPath, systemConfigPath, appDataConfigPath, sdcardConfigPath)
+            arrayOf(localConfigPath, systemConfigPath, appDataConfigPath)
         }
     }
 
@@ -508,6 +541,17 @@ class LocationHooker : XposedModule() {
                             try {
                                 Thread.sleep(configPollIntervalMs)
                                 val newConfig = loadConfigFromDisk("poll")
+
+                                // 若系统核心服务在初次加载时尚未初始化完成，在后台轮询线程中重试挂载，直至成功
+                                if (isSystemServerProcess && !isWifiServiceHooked && currentClassLoader != null) {
+                                    try { hookSystemWifiService(currentClassLoader!!) } catch (t: Throwable) { XposedBridge.log("[SysWifi] Poller hookSystemWifiService error: $t") }
+                                }
+                                if (isPhoneProcessInstance && !isTelephonyServiceHooked && currentClassLoader != null) {
+                                    try { hookSystemTelephonyService(currentClassLoader!!) } catch (t: Throwable) { XposedBridge.log("[SysCell] Poller hookSystemTelephonyService error: $t") }
+                                }
+                                if (isBluetoothProcessInstance && !isBluetoothServiceHooked && currentClassLoader != null) {
+                                    try { hookSystemBluetoothService(currentClassLoader!!) } catch (t: Throwable) { XposedBridge.log("[SysBle] Poller hookSystemBluetoothService error: $t") }
+                                }
 
                                 if (newConfig != null && newConfig.optBoolean("active", false)) {
                                     val currentLat = newConfig.optDouble("lat", 0.0)

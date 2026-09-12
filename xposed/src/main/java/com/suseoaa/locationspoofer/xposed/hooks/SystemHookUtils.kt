@@ -4,6 +4,7 @@ import android.os.Binder
 import android.util.Log
 import com.suseoaa.locationspoofer.xposed.LocationHooker
 import com.suseoaa.locationspoofer.xposed.utils.SpoofedMotion
+import com.suseoaa.locationspoofer.xposed.utils.XposedBridge
 import com.suseoaa.locationspoofer.xposed.utils.XposedHelpers
 import org.json.JSONObject
 
@@ -22,7 +23,18 @@ object SystemHookUtils {
         "system",
         "com.android.systemui",
         "com.android.phone",
-        "com.android.server.telecom"
+        "com.android.server.telecom",
+        "com.xiaomi.metoknlp",
+        "com.google.android.gms",
+        "com.qualcomm.location",
+        "com.qualcomm.atfwd",
+        "com.android.ons",
+        "com.xiaomi.location.fused",
+        "com.android.location.fused",
+        "com.xiaomi.aicr",
+        "com.xiaomi.hypercomm",
+        "com.miui.powerinsight",
+        "com.miui.powerkeeper"
     )
 
     @Volatile
@@ -42,11 +54,11 @@ object SystemHookUtils {
     }
 
     /**
-     * 通过 Binder.getCallingUid() 反查系统服务调用者的已安装包名集合
+     * 通过 Binder.getCallingUid() 或传入的 overrideUid 反查系统服务调用者的已安装包名集合
      */
-    fun resolveCallingPackages(serviceInstance: Any?): Set<String> {
+    fun resolveCallingPackages(serviceInstance: Any?, overrideUid: Int? = null): Set<String> {
         return try {
-            val uid = Binder.getCallingUid()
+            val uid = if (overrideUid != null && overrideUid > 1000) overrideUid else Binder.getCallingUid()
             if (uid <= 1000) return emptySet() // 忽略 root (0) 和 system (1000) 核心调用
 
             // 优先使用 ActivityThread 的系统上下文（在 system_server 中最稳定）
@@ -70,16 +82,38 @@ object SystemHookUtils {
             }
             emptySet()
         } catch (t: Throwable) {
-            Log.e(TAG, "[SysHook] resolveCallingPackages failed: $t")
+            XposedBridge.log("[SysHook] resolveCallingPackages failed: $t")
             emptySet()
         }
     }
 
     /**
-     * 从方法参数中稳妥提取调用方传入的包名（过滤掉 provider、类名与标记）
+     * 从方法参数中提取 CallerIdentity 或请求对象中的 UID
+     */
+    fun extractCallerUid(args: List<Any?>): Int? {
+        for (arg in args) {
+            if (arg == null) continue
+            val className = arg.javaClass.simpleName
+            if (className.contains("Identity") || className.contains("Request") || className.contains("Registration")) {
+                try {
+                    val uid = XposedHelpers.callMethod(arg, "getUid") as? Int
+                    if (uid != null && uid > 1000) return uid
+                } catch (_: Throwable) {}
+                try {
+                    val uid = XposedHelpers.getIntField(arg, "mUid")
+                    if (uid > 1000) return uid
+                } catch (_: Throwable) {}
+            }
+        }
+        return null
+    }
+
+    /**
+     * 从方法参数中稳妥提取调用方传入的包名（过滤掉 provider、类名与标记，支持 CallerIdentity）
      */
     fun extractPackageName(args: List<Any?>): String? {
         for (arg in args) {
+            if (arg == null) continue
             if (arg is String) {
                 // 包名特征：必须包含点号，且不是 provider 名称，不是系统内部类名
                 if (arg.contains(".") &&
@@ -89,6 +123,26 @@ object SystemHookUtils {
                 ) {
                     return arg
                 }
+            }
+            // 支持 CallerIdentity / Identity 对象
+            val className = arg.javaClass.simpleName
+            if (className.contains("Identity") || className.contains("Request") || className.contains("Registration")) {
+                try {
+                    val pkg = XposedHelpers.callMethod(arg, "getPackageName") as? String
+                    if (!pkg.isNullOrEmpty() && pkg.contains(".") && !pkg.startsWith("android.")) {
+                        return pkg
+                    }
+                } catch (_: Throwable) {}
+                try {
+                    val pkg = XposedHelpers.getObjectField(arg, "mPackageName") as? String
+                    if (!pkg.isNullOrEmpty() && pkg.contains(".") && !pkg.startsWith("android.")) {
+                        return pkg
+                    }
+                } catch (_: Throwable) {}
+            }
+            if (arg is android.app.PendingIntent) {
+                val pkg = arg.creatorPackage
+                if (!pkg.isNullOrEmpty() && pkg.contains(".")) return pkg
             }
         }
         return null
@@ -103,6 +157,16 @@ object SystemHookUtils {
                 when (arg.lowercase()) {
                     "gps", "network", "passive", "fused" -> return arg
                 }
+            }
+            if (arg != null && (arg.javaClass.simpleName.contains("Request") || arg.javaClass.simpleName.contains("Registration"))) {
+                try {
+                    val p = XposedHelpers.callMethod(arg, "getProvider") as? String
+                    if (!p.isNullOrEmpty()) return p
+                } catch (_: Throwable) {}
+                try {
+                    val p = XposedHelpers.getObjectField(arg, "mProvider") as? String
+                    if (!p.isNullOrEmpty()) return p
+                } catch (_: Throwable) {}
             }
         }
         return android.location.LocationManager.GPS_PROVIDER
@@ -123,18 +187,21 @@ object SystemHookUtils {
      * @param serviceInstance 系统服务实例（用于获取 Context 与 Binder UID）
      * @param explicitPackage 方法参数中显式传入的包名（如 callingPackage），若没有可传 null
      * @param config 当前全局配置 JSON
+     * @param overrideUid 可选的调用方真实 UID（如来自 CallerIdentity），解决 clearCallingIdentity 后的 UID 漂移
      */
     fun isTargetCaller(
         serviceInstance: Any?,
         explicitPackage: String?,
-        config: JSONObject
+        config: JSONObject,
+        overrideUid: Int? = null
     ): Boolean {
         if (!config.optBoolean("active", false)) return false
 
-        val uid = Binder.getCallingUid()
+        val uid = if (overrideUid != null && overrideUid > 1000) overrideUid else Binder.getCallingUid()
+        val cleanPkg = explicitPackage?.substringBefore(":")?.trim()
 
         // 1. 严格排除自身，绝不模拟自身
-        if (explicitPackage == "com.suseoaa.locationspoofer") {
+        if (cleanPkg == "com.suseoaa.locationspoofer" || explicitPackage == "com.suseoaa.locationspoofer") {
             return false
         }
 
@@ -143,23 +210,33 @@ object SystemHookUtils {
             return false
         }
 
-        val callingPackages = resolveCallingPackages(serviceInstance)
-        if (callingPackages.contains("com.suseoaa.locationspoofer")) {
+        // 严格排除系统核心组件与定位服务
+        if (cleanPkg != null && EXEMPT_PACKAGES.contains(cleanPkg)) {
+            return false
+        }
+
+        val callingPackages = resolveCallingPackages(serviceInstance, uid)
+        if (callingPackages.any { it.substringBefore(":") == "com.suseoaa.locationspoofer" }) {
+            return false
+        }
+        if (callingPackages.any { EXEMPT_PACKAGES.contains(it.substringBefore(":")) }) {
             return false
         }
 
         val isGlobalMode = config.optBoolean("system_hook_global_mode", false)
 
-        // 2. 全局模拟模式：对设备上所有非系统核心应用生效
+        // 2. 全局模拟模式：只对普通用户应用（UID >= 10000）生效，绝不污染系统级服务
         if (isGlobalMode) {
-            if (explicitPackage != null && !EXEMPT_PACKAGES.contains(explicitPackage)) {
-                Log.i(TAG, "[SysHook] GlobalMode match: explicitPkg=$explicitPackage (uid=$uid)")
-                return true
-            }
-            val nonExempt = callingPackages.filter { !EXEMPT_PACKAGES.contains(it) }
-            if (nonExempt.isNotEmpty()) {
-                Log.i(TAG, "[SysHook] GlobalMode match: callingPkgs=$nonExempt (uid=$uid)")
-                return true
+            if (uid >= 10000) {
+                if (cleanPkg != null && !EXEMPT_PACKAGES.contains(cleanPkg)) {
+                    XposedBridge.log("[SysHook] GlobalMode match: explicitPkg=$explicitPackage (cleanPkg=$cleanPkg, uid=$uid)")
+                    return true
+                }
+                val nonExempt = callingPackages.filter { !EXEMPT_PACKAGES.contains(it.substringBefore(":")) }
+                if (nonExempt.isNotEmpty()) {
+                    XposedBridge.log("[SysHook] GlobalMode match: callingPkgs=$nonExempt (uid=$uid)")
+                    return true
+                }
             }
             return false
         }
@@ -168,18 +245,36 @@ object SystemHookUtils {
         val targetPackages = resolveTargetPackages(config)
         if (targetPackages.isEmpty()) return false
 
-        if (explicitPackage != null && targetPackages.contains(explicitPackage)) {
-            Log.i(TAG, "[SysHook] Whitelist match: explicitPkg=$explicitPackage (uid=$uid)")
+        if (cleanPkg != null && targetPackages.contains(cleanPkg)) {
+            XposedBridge.log("[SysHook] Whitelist match: cleanPkg=$cleanPkg (explicitPkg=$explicitPackage, uid=$uid)")
             return true
         }
 
-        val matched = callingPackages.intersect(targetPackages)
+        if (explicitPackage != null && targetPackages.contains(explicitPackage)) {
+            logWhitelistMatch("exp:$explicitPackage", "[SysHook] Whitelist match: explicitPkg=$explicitPackage (uid=$uid)")
+            return true
+        }
+
+        val matched = callingPackages.filter { pkg ->
+            targetPackages.contains(pkg) || targetPackages.contains(pkg.substringBefore(":"))
+        }
         if (matched.isNotEmpty()) {
-            Log.i(TAG, "[SysHook] Whitelist match: callingPkgs=$matched (uid=$uid)")
+            logWhitelistMatch("call:${matched.first()}", "[SysHook] Whitelist match: callingPkgs=$matched (uid=$uid)")
             return true
         }
 
         return false
+    }
+
+    private val lastWhitelistLogTimes = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    private fun logWhitelistMatch(key: String, message: String) {
+        val now = System.currentTimeMillis()
+        val last = lastWhitelistLogTimes[key] ?: 0L
+        if (now - last > 5000L) {
+            lastWhitelistLogTimes[key] = now
+            XposedBridge.log(message)
+        }
     }
 
     /**
@@ -203,6 +298,18 @@ object SystemHookUtils {
                 locObj, "setElapsedRealtimeNanos",
                 android.os.SystemClock.elapsedRealtimeNanos()
             )
+            try {
+                XposedHelpers.callMethod(locObj, "setVerticalAccuracyMeters", 1.5f)
+            } catch (_: Throwable) {}
+            try {
+                XposedHelpers.callMethod(locObj, "setSpeedAccuracyMetersPerSecond", 0.3f)
+            } catch (_: Throwable) {}
+            try {
+                XposedHelpers.callMethod(locObj, "setBearingAccuracyDegrees", 2.0f)
+            } catch (_: Throwable) {}
+            try {
+                XposedHelpers.callMethod(locObj, "setMock", false)
+            } catch (_: Throwable) {}
             try {
                 XposedHelpers.callMethod(locObj, "setIsFromMockProvider", false)
             } catch (_: Throwable) {}
@@ -240,7 +347,7 @@ object SystemHookUtils {
             applyFakeLocationFields(fakeLoc, motion, altitude, accuracy)
             fakeLoc
         } catch (t: Throwable) {
-            Log.e(TAG, "[SysHook] buildFakeLocation failed: $t")
+            XposedBridge.log("[SysHook] buildFakeLocation failed: $t")
             null
         }
     }
