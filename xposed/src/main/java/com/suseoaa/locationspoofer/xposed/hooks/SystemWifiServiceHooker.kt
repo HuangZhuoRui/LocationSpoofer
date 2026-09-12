@@ -283,10 +283,11 @@ internal fun LocationHooker.installWifiHooks(wifiServiceClass: Class<*>, classLo
                 return@hookAllMethods chain.proceed(chain.args.toTypedArray())
             }
 
+            // mock_wifi 单独关闭时：目标应用仍处于全局/白名单模拟范围内，绝不能把真实周边 Wi-Fi
+            // 透传给它（会暴露真实位置、与已伪造的 GPS 坐标产生矛盾触发风控），但也不能像旧版本
+            // 那样用坐标 Hash 兜底伪造一批假热点——用户关闭该开关就是不想让 Wi-Fi 子系统参与模拟，
+            // 正确行为是让目标应用看到"周边无 Wi-Fi"（空列表），而不是真实数据或另一份假数据。
             val mockWifi = config.optBoolean("mock_wifi", true)
-            if (!mockWifi) {
-                return@hookAllMethods chain.proceed(chain.args.toTypedArray())
-            }
 
             val fakeList = java.util.ArrayList<Any>()
             val wifiObj = config.optJSONObject("wifi_json")
@@ -357,7 +358,7 @@ internal fun LocationHooker.installWifiHooks(wifiServiceClass: Class<*>, classLo
                     fakeList.add(fakeScanResult)
                 }
 
-                if (wifiObj != null) {
+                if (mockWifi && wifiObj != null) {
                     val isConnected = wifiObj.optBoolean("isConnected", false)
                     val connectedWifi = if (isConnected) wifiObj.optJSONObject("connectedWifi") else null
                     if (connectedWifi != null) {
@@ -373,8 +374,8 @@ internal fun LocationHooker.installWifiHooks(wifiServiceClass: Class<*>, classLo
                     }
                 }
 
-                // 若没有采集或设置 Wi-Fi 列表，按坐标 Hash 稳定生成 5 个虚拟热点
-                if (fakeList.isEmpty()) {
+                // 若没有采集或设置 Wi-Fi 列表，按坐标 Hash 稳定生成 5 个虚拟热点（仅在开关开启时兜底）
+                if (mockWifi && fakeList.isEmpty()) {
                     val lat = config.optDouble("lat", 0.0)
                     val lng = config.optDouble("lng", 0.0)
                     val seed = ((lat * 100000).toLong() xor (lng * 100000).toLong())
@@ -465,12 +466,9 @@ internal fun LocationHooker.installWifiHooks(wifiServiceClass: Class<*>, classLo
             }
 
             val mockWifi = config.optBoolean("mock_wifi", true)
-            if (!mockWifi) {
-                return@hookAllMethods chain.proceed(chain.args.toTypedArray())
-            }
 
             val wifiObj = config.optJSONObject("wifi_json")
-            val isConnected = wifiObj?.optBoolean("isConnected", false) ?: false
+            val isConnected = mockWifi && (wifiObj?.optBoolean("isConnected", false) ?: false)
             val connectedWifi = if (isConnected) wifiObj!!.optJSONObject("connectedWifi") else null
 
             val ssidVal: String
@@ -481,7 +479,17 @@ internal fun LocationHooker.installWifiHooks(wifiServiceClass: Class<*>, classLo
             val levelVal: Int
             val networkIdVal: Int
 
-            if (isConnected && connectedWifi != null) {
+            if (!mockWifi) {
+                // 开关关闭：既不能泄露真实 BSSID/SSID，也不伪造一份假连接——
+                // 直接汇报"未连接任何 Wi-Fi"，与 mock_wifi 关闭时 getScanResults 返回空列表的语义一致。
+                ssidVal = "<unknown ssid>"
+                bssidVal = "02:00:00:00:00:00"
+                freqVal = 0
+                macAddressVal = "02:00:00:00:00:00"
+                linkSpeedVal = -1
+                levelVal = -127
+                networkIdVal = -1
+            } else if (isConnected && connectedWifi != null) {
                 val rawSsid = connectedWifi.optString("ssid", "")
                 ssidVal = if (rawSsid.isEmpty() || rawSsid == "<unknown ssid>") "HOME_WIFI" else rawSsid
                 bssidVal = connectedWifi.optString("bssid", "02:00:00:00:00:00")
@@ -593,10 +601,12 @@ internal fun LocationHooker.installWifiHooks(wifiServiceClass: Class<*>, classLo
                         return@hookAllMethods chain.proceed(chain.args.toTypedArray())
                     }
                     val mockWifi = config.optBoolean("mock_wifi", true)
-                    if (!mockWifi) {
-                        return@hookAllMethods chain.proceed(chain.args.toTypedArray())
-                    }
                     val fakeList = java.util.ArrayList<Any>()
+                    if (!mockWifi) {
+                        // 与 getScanResults 一致：开关关闭时返回空列表，既不泄露真实热点也不伪造假数据
+                        logWifi("[SysWifi] WifiScanningServiceImpl.getSingleScanResults suppressed (mock_wifi off) for ${explicitPkg ?: "caller"}")
+                        return@hookAllMethods fakeList
+                    }
                     val scanResultClass = XposedHelpers.findClass("android.net.wifi.ScanResult", classLoader)
                     val baseTimestamp = android.os.SystemClock.elapsedRealtimeNanos()
                     val rng = Random()
@@ -715,12 +725,17 @@ internal fun LocationHooker.installConnectivityHooks(connClazz: Class<*>, classL
                 val currentResult = chain.proceed(chain.args.toTypedArray()) ?: return@hookAllMethods null
                 val config = readConfig() ?: return@hookAllMethods currentResult
                 if (!config.optBoolean("active", false)) return@hookAllMethods currentResult
-                if (!config.optBoolean("mock_wifi", true)) return@hookAllMethods currentResult
 
                 val explicitPkg = SystemHookUtils.extractPackageName(chain.args)
                 val overrideUid = SystemHookUtils.extractCallerUid(chain.args)
                 val isTarget = SystemHookUtils.isTargetCaller(chain.thisObject, explicitPkg, config, overrideUid)
                 if (!isTarget) return@hookAllMethods currentResult
+
+                // 注意：这里不受 mock_wifi 开关控制——sanitizeNetworkCapabilities 只是清除真实
+                // BSSID/SSID（关闭时退化为按坐标生成的中性标识），不是"伪造一整套假热点列表"，
+                // 所以不属于开关想要关闭的范畴；真正受开关控制的是 getScanResults/getConnectionInfo
+                // 里"是否展示一份完整的假 Wi-Fi 环境"。这里永远执行，避免真实 BSSID 通过
+                // NetworkCapabilities 泄露给目标应用，与已伪造的 GPS 坐标产生矛盾触发风控。
 
                 try {
                     sanitizeNetworkCapabilities(currentResult, config, classLoader, explicitPkg)

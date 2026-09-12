@@ -94,7 +94,10 @@ internal fun LocationHooker.hookSystemTelephonyService(classLoader: ClassLoader)
 
             val mockCell = config.optBoolean("mock_cell", true)
             if (!mockCell) {
-                return@hookAllMethods chain.proceed(chain.args.toTypedArray())
+                // 与 Wi-Fi 一致：开关关闭时不能把真实基站信息透传给已被模拟 GPS 覆盖的目标应用
+                // （会暴露真实城市/地区，与伪造坐标矛盾触发风控），也不伪造假数据，直接返回空列表。
+                sysLog("[SysCell] getAllCellInfo suppressed (mock_cell off) for ${explicitPkg ?: "caller"}")
+                return@hookAllMethods java.util.ArrayList<Any>()
             }
 
             val lat = config.optDouble("lat", 0.0)
@@ -133,16 +136,15 @@ internal fun LocationHooker.hookSystemTelephonyService(classLoader: ClassLoader)
             }
 
             val mockCell = config.optBoolean("mock_cell", true)
-            if (!mockCell) {
-                return@hookAllMethods chain.proceed(chain.args.toTypedArray())
-            }
 
             val lat = config.optDouble("lat", 0.0)
             val lng = config.optDouble("lng", 0.0)
 
             try {
-                val lac = ((lat * 100).toInt().coerceAtLeast(1000) % 65535)
-                val cid = ((lng * 1000).toInt().coerceAtLeast(10000) % 268435455)
+                // 开关关闭时用 -1（Android 约定的"未知/无基站信息"哨兵值）代替真实 lac/cid，
+                // 而不是放行真实基站坐标——与 mock_cell 关闭时 getAllCellInfo 返回空列表同一语义。
+                val lac = if (mockCell) ((lat * 100).toInt().coerceAtLeast(1000) % 65535) else -1
+                val cid = if (mockCell) ((lng * 1000).toInt().coerceAtLeast(10000) % 268435455) else -1
 
                 val targetMethod = method as? java.lang.reflect.Method
                 val returnType = targetMethod?.returnType
@@ -218,9 +220,6 @@ internal fun LocationHooker.hookSystemTelephonyService(classLoader: ClassLoader)
             }
 
             val mockCell = config.optBoolean("mock_cell", true)
-            if (!mockCell) {
-                return@hookAllMethods chain.proceed(chain.args.toTypedArray())
-            }
 
             val lat = config.optDouble("lat", 0.0)
             val lng = config.optDouble("lng", 0.0)
@@ -233,7 +232,8 @@ internal fun LocationHooker.hookSystemTelephonyService(classLoader: ClassLoader)
                     )
                 }
                 if (callback != null) {
-                    val fakeCellList = buildFakeCellInfoList(classLoader, lat, lng, config)
+                    // 开关关闭时投递空列表而不是放行真实回调，避免真实基站信息通过异步回调泄露
+                    val fakeCellList = if (mockCell) buildFakeCellInfoList(classLoader, lat, lng, config) else java.util.ArrayList<Any>()
                     val onCellInfoMethod = callback.javaClass.methods.firstOrNull { it.name == "onCellInfo" }
                     if (onCellInfoMethod != null) {
                         onCellInfoMethod.invoke(callback, fakeCellList)
