@@ -157,10 +157,37 @@ internal fun MainViewModel.dismissRootSetupTestResult() {
     _uiState.update { it.copy(rootSetupTestResult = null) }
 }
 
-/** 从 LSPosed 作用域拉取当前 Hook 的目标 App 列表，触发"确认重启应用"弹窗 */
+/** 从 LSPosed 作用域与系统级 Hook 目标应用拉取当前生效的目标 App 列表，触发"确认重启应用"弹窗 */
 
 internal fun MainViewModel.requestRestartHookedApps() {
-    val apps = lsposedManager.getHookedApps(context)
+    val targetPackages = mutableSetOf<String>()
+    targetPackages.addAll(lsposedManager.getHookedApps(context).map { it.packageName })
+    targetPackages.addAll(settingsRepository.getSystemHookPackages())
+
+    val exempt = setOf(
+        context.packageName,
+        "android",
+        "system",
+        "system_server",
+        "com.android.systemui",
+        "com.android.phone",
+        "com.android.bluetooth",
+        "com.android.server.telecom",
+        "com.xiaomi.metoknlp",
+        "com.google.android.gms"
+    )
+    val pm = context.packageManager
+    val apps = targetPackages.filter { it.isNotBlank() && !exempt.contains(it) }.mapNotNull { pkg ->
+        try {
+            val info = pm.getApplicationInfo(pkg, 0)
+            val label = pm.getApplicationLabel(info).toString()
+            val isSystem = (info.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+            com.suseoaa.locationspoofer.data.model.AppInfoItem(pkg, label, isSystem)
+        } catch (_: Exception) {
+            com.suseoaa.locationspoofer.data.model.AppInfoItem(pkg, pkg, false)
+        }
+    }.sortedBy { it.appName }
+
     _uiState.update { it.copy(hookedAppsToRestart = apps) }
 }
 

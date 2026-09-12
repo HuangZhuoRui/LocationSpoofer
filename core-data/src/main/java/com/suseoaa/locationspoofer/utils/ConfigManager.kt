@@ -217,6 +217,9 @@ class ConfigManager(private val context: Context, private val rootManager: RootM
                 chown 1002:1002 /data/user_de/0/com.android.bluetooth/files/locationspoofer_config.json 2>/dev/null || true
                 chmod 644 /data/user_de/0/com.android.bluetooth/files/locationspoofer_config.json 2>/dev/null || true
                 chcon u:object_r:bluetooth_data_file:s0 /data/user_de/0/com.android.bluetooth/files/locationspoofer_config.json 2>/dev/null || true
+
+                cp /data/system/locationspoofer_config.json /data/local/tmp/locationspoofer_config.json 2>/dev/null || true
+                chmod 644 /data/local/tmp/locationspoofer_config.json 2>/dev/null || true
             fi
         """.trimIndent()
         rootManager.executeCommand(command)

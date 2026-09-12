@@ -12,6 +12,23 @@ class SettingsManager(context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
 
+    init {
+        // 自动升级迁移：
+        // 修复之前版本将 mockWifi / mockCell / mockBluetooth 错误绑定导致旧配置中被意外写入 false 的历史遗留问题。
+        // 在系统级 Hook 架构下，Wi-Fi、基站与蓝牙均由系统服务自动实时合成高拟真环境数据，
+        // 必须默认保持开启以彻底杜绝高德/阿里/抖音等通过物理 Wi-Fi BSSID 与基站反查真实位置。
+        // 同时确保系统级全局模拟模式（is_system_hook_global_mode）默认开启。
+        if (!prefs.getBoolean("mock_switches_migrated_v3", false)) {
+            prefs.edit()
+                .putBoolean("mock_wifi", true)
+                .putBoolean("mock_cell", true)
+                .putBoolean("mock_bluetooth", true)
+                .putBoolean("is_system_hook_global_mode", true)
+                .putBoolean("mock_switches_migrated_v3", true)
+                .apply()
+        }
+    }
+
     var isDarkMode: Boolean
         get() = prefs.getBoolean("is_dark_mode", true)
         set(value) = prefs.edit().putBoolean("is_dark_mode", value).apply()
@@ -268,6 +285,6 @@ class SettingsManager(context: Context) {
 
     /** 是否开启全局模拟模式（除本应用与系统基础核心外对所有应用生效） */
     var isSystemHookGlobalMode: Boolean
-        get() = prefs.getBoolean("is_system_hook_global_mode", false)
+        get() = prefs.getBoolean("is_system_hook_global_mode", true)
         set(value) = prefs.edit().putBoolean("is_system_hook_global_mode", value).apply()
 }
