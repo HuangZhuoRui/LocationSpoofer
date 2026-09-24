@@ -46,6 +46,18 @@ object SensorStepHooker {
     private var lastCalculatedSteps: Long = 2350L
     private var lastStepInitTime: Long = 0L
 
+    // 单调锚：对外发出的 TYPE_STEP_COUNTER 值绝不小于上次发出的值。
+    // 宿主普遍按 counter 差值累计步数，任何一次回退都会被记成新增步数。
+    // 三个调用点来自不同线程（系统传感器回调 / 宿主回调 / 配置轮询），故加锁保护。
+    private val emittedStepsLock = Any()
+    private var lastEmittedSteps: Long = 0L
+
+    private fun monotonicCounter(value: Long): Long = synchronized(emittedStepsLock) {
+        val v = if (value < lastEmittedSteps) lastEmittedSteps else value
+        lastEmittedSteps = v
+        v
+    }
+
     // 缓存虚拟 Sensor 实例
     private var mockStepCounterSensor: Sensor? = null
     private var mockStepDetectorSensor: Sensor? = null
@@ -173,7 +185,7 @@ object SensorStepHooker {
 
                         if (sensorType == Sensor.TYPE_STEP_COUNTER) {
                             // 仅对明确判定的计步器传感器进行步数计算，严禁误判光感/距离传感器
-                            val curSteps = calculateCurrentSteps(config)
+                            val curSteps = monotonicCounter(calculateCurrentSteps(config))
                             values[0] = curSteps.toFloat()
                         } else if (sensorType == Sensor.TYPE_STEP_DETECTOR) {
                             if (speed > 0.1) {
@@ -205,7 +217,7 @@ object SensorStepHooker {
                         if (config != null && config.optBoolean("active", false) && config.optBoolean("enable_step_simulation", true)) {
                             val speed = config.optDouble("speed_m_s", 0.0)
                             if (event.sensor.type == Sensor.TYPE_STEP_COUNTER && event.values.isNotEmpty()) {
-                                val curSteps = calculateCurrentSteps(config)
+                                val curSteps = monotonicCounter(calculateCurrentSteps(config))
                                 event.values[0] = curSteps.toFloat()
                                 event.timestamp = SystemClock.elapsedRealtimeNanos()
                             } else if (event.sensor.type == Sensor.TYPE_STEP_DETECTOR && event.values.isNotEmpty()) {
@@ -249,7 +261,10 @@ object SensorStepHooker {
         val startTime = config.optLong("start_timestamp", now)
         if (lastStepInitTime != startTime) {
             lastStepInitTime = startTime
-            baseBootSteps = 2350L
+            // 会话锚点变化（如开始新一次模拟）不得让 counter 回退：
+            // 以已算出的最大步数作为新基线。否则 counter 会从当前累计值断崖回落到 2350，
+            // 而按 counter 差值累计步数的宿主（微信等）会把"回落 + 再涨"记成新增步数。
+            baseBootSteps = if (lastCalculatedSteps > baseBootSteps) lastCalculatedSteps else baseBootSteps
         }
 
         val speed = config.optDouble("speed_m_s", 0.0)
@@ -295,7 +310,7 @@ object SensorStepHooker {
         if (speed <= 0.05) return
 
         val now = System.currentTimeMillis()
-        val totalSteps = calculateCurrentSteps(config, now)
+        val totalSteps = monotonicCounter(calculateCurrentSteps(config, now))
 
         val listeners = capturedListeners.toList()
         if (listeners.isEmpty()) return
