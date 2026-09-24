@@ -676,6 +676,33 @@ class LocationHooker : XposedModule() {
                                                         XposedHelpers.callMethod(mockAMapLoc, "setGpsAccuracyStatus", 1)
                                                         XposedHelpers.callMethod(mockAMapLoc, "setLocationType", 1)
                                                     } catch (_: Throwable) {}
+                                                    try {
+                                                        val extras = android.os.Bundle().apply {
+                                                            val satCount = newConfig.optInt("satellite_count", 20)
+                                                            putInt("satellites", satCount)
+                                                            putInt("satellites_in_view", satCount)
+                                                            putInt("satellites_used_in_fix", satCount.coerceAtLeast(12))
+                                                            putInt("satellites_visible", satCount)
+                                                            putBoolean("mockLocation", false)
+                                                        }
+                                                        XposedHelpers.callMethod(mockAMapLoc, "setExtras", extras)
+                                                    } catch (_: Throwable) {}
+                                                    try {
+                                                        XposedHelpers.callMethod(
+                                                            mockAMapLoc,
+                                                            "setElapsedRealtimeNanos",
+                                                            elapsedNanos
+                                                        )
+                                                    } catch (_: Throwable) {
+                                                    }
+                                                    try {
+                                                        XposedHelpers.callMethod(
+                                                            mockAMapLoc,
+                                                            "setIsFromMockProvider",
+                                                            false
+                                                        )
+                                                    } catch (_: Throwable) {
+                                                    }
                                                     XposedHelpers.callMethod(
                                                         listener,
                                                         "onLocationChanged",
