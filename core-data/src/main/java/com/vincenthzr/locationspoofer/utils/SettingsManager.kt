@@ -125,6 +125,38 @@ class SettingsManager(context: Context) {
         get() = prefs.getString("altitude", "0.0") ?: "0.0"
         set(value) = prefs.edit().putString("altitude", value).apply()
 
+    /** 运动真实度随机强度，取值见 MotionRealism.Level.id */
+    var realismLevel: Int
+        get() = prefs.getInt("realism_level", MotionRealism.DEFAULT_LEVEL_ID)
+        set(value) = prefs.edit().putInt("realism_level", value).apply()
+
+    /** 路线模拟速度浮动范围（±百分比） */
+    var speedFluctuationPct: Int
+        get() = prefs.getInt("speed_fluctuation_pct", MotionRealism.DEFAULT_SPEED_FLUCTUATION_PCT)
+        set(value) = prefs.edit().putInt("speed_fluctuation_pct", value).apply()
+
+    /** 录制的个人步态模板（GaitTemplate.encode() 的结果），空串表示未录制 */
+    var gaitTemplate: String
+        get() = prefs.getString("gait_template", "") ?: ""
+        set(value) = prefs.edit().putString("gait_template", value).apply()
+
+    var useGaitTemplate: Boolean
+        get() = prefs.getBoolean("use_gait_template", false)
+        set(value) = prefs.edit().putBoolean("use_gait_template", value).apply()
+
+    /** 打开 App 时地图停留在上次选定的位置，而不是自动跳到真实位置 */
+    var keepLastMapPosition: Boolean
+        get() = prefs.getBoolean("keep_last_map_position", true)
+        set(value) = prefs.edit().putBoolean("keep_last_map_position", value).apply()
+
+    var lastMapLat: String
+        get() = prefs.getString("last_map_lat", "") ?: ""
+        set(value) = prefs.edit().putString("last_map_lat", value).apply()
+
+    var lastMapLng: String
+        get() = prefs.getString("last_map_lng", "") ?: ""
+        set(value) = prefs.edit().putString("last_map_lng", value).apply()
+
     var satelliteCount: String
         get() = prefs.getString("satellite_count", "10") ?: "10"
         set(value) = prefs.edit().putString("satellite_count", value).apply()

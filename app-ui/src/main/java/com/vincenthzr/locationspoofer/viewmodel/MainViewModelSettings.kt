@@ -18,6 +18,9 @@ import com.vincenthzr.locationspoofer.ui.screen.spoofing.SpoofingIntent
 import com.vincenthzr.locationspoofer.utils.XposedModuleStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -26,18 +29,26 @@ import com.vincenthzr.locationspoofer.viewmodel.MainViewModel.ClusterData
 // MainViewModel 的设置、语言、Root 方案、搜索、API Key 与坐标系相关扩展函数
 
 // 初始化
+@OptIn(kotlinx.coroutines.FlowPreview::class)
 internal fun MainViewModel.initialize() {
     viewModelScope.launch(Dispatchers.IO) {
         mergeLegacyRecords()
         val root = locationRepository.recoverAfterBoot(context)
+
+        // 模拟中恢复模拟坐标；否则（开启了"停留在上次位置"时）恢复上次选定的位置，不再自动跳到真实位置（issue #68）
+        val restoredPosition = when {
+            settingsRepository.isSpoofingActive -> settingsRepository.lastSpoofedLat to settingsRepository.lastSpoofedLng
+            settingsRepository.keepLastMapPosition -> settingsRepository.getLastMapPosition()
+            else -> null
+        }
 
         _uiState.update {
             it.copy(
                 isInitializing = false,
                 hasRootAccess = root,
                 isSpoofingActive = settingsRepository.isSpoofingActive,
-                latitudeInput = if (settingsRepository.isSpoofingActive) settingsRepository.lastSpoofedLat else it.latitudeInput,
-                longitudeInput = if (settingsRepository.isSpoofingActive) settingsRepository.lastSpoofedLng else it.longitudeInput,
+                latitudeInput = restoredPosition?.first ?: it.latitudeInput,
+                longitudeInput = restoredPosition?.second ?: it.longitudeInput,
                 routePlanStage = RoutePlanStage.IDLE,
                 amapApiKey = settingsRepository.getAmapApiKey(),
                 baiduApiKey = settingsRepository.getBaiduApiKey(),
@@ -46,10 +57,23 @@ internal fun MainViewModel.initialize() {
                 checkBetaUpdates = settingsRepository.checkBetaUpdates
             )
         }
-        if (!settingsRepository.isSpoofingActive) {
+        if (restoredPosition == null) {
             fetchCurrentLocation(context)
         }
         refreshRecordCount()
+    }
+
+    // 持续记录当前选定的位置，供下次打开时恢复；路线模拟时位置每 100ms 变一次，按 2 秒采样落盘
+    viewModelScope.launch {
+        _uiState
+            .map { it.latitudeInput to it.longitudeInput }
+            .distinctUntilChanged()
+            .sample(2_000)
+            .collect { (lat, lng) ->
+                if (lat.toDoubleOrNull() != null && lng.toDoubleOrNull() != null) {
+                    settingsRepository.setLastMapPosition(lat, lng)
+                }
+            }
     }
 
     viewModelScope.launch {

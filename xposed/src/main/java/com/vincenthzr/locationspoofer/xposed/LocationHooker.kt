@@ -656,13 +656,15 @@ class LocationHooker : XposedModule() {
                                     val fCount = capturedFusedLocationCallbacks.size
 
                                     val isStationary = motion.speed <= 0.05
-                                    val (targetLat, targetLng) = getAppTargetCoordinate(motion.lat, motion.lng, newConfig, "GCJ-02")
+                                    // 标准 android.location.Location 按规范是 WGS-84，高德等 App 会自行转 GCJ-02；
+                                    // 这里若直接给 GCJ-02 会被二次加密、偏移数百米（issue #62）
+                                    val (targetLat, targetLng) = getAppTargetCoordinate(motion.lat, motion.lng, newConfig, "WGS-84")
                                     val pushLat = if (isStationary) targetLat else getJitteredLocation(targetLat, targetLng).first
                                     val pushLng = if (isStationary) targetLng else getJitteredLocation(targetLat, targetLng).second
                                     val pushSpeed = motion.speed
                                     val pushBearing = motion.bearing
                                     val pushAccuracy = if (isStationary) 2.5f else getJitteredAccuracy()
-                                    val pushAltitude = newConfig.optDouble("altitude", 25.0)
+                                    val pushAltitude = RouteEngine.realisticAltitude(newConfig)
 
                                     val mainHandler = try {
                                         android.os.Handler(android.os.Looper.getMainLooper())

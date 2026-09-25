@@ -21,4 +21,9 @@ object SpoofingState {
     var routeJson = "[]"
     var isRouteMode = false
     var enableJitter = true
+
+    // 开始模拟时对真实度参数做快照：速度浮动决定"累计距离随时间的函数"，模拟途中改设置会让路线位置突然跳一段，
+    // 所以本次会话内固定不变，修改在下次开始模拟时生效。-1 表示没有快照（如进程重启后），直接读当前设置。
+    var realismLevel = -1
+    var speedFluctuationPct = -1
 }

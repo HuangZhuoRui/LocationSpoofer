@@ -148,7 +148,7 @@ internal fun LocationHooker.hookAMapSDK(classLoader: ClassLoader) {
                 var result = chain.proceed(chain.args.toTypedArray())
                 val config = readConfig()
                 if (config != null && config.optBoolean("active", false)) {
-                    result = config.optDouble("altitude", 25.0)
+                    result = RouteEngine.realisticAltitude(config)
                 }
                 return@hookAllMethods result
             }
@@ -229,7 +229,7 @@ internal fun LocationHooker.hookAMapSDK(classLoader: ClassLoader) {
                                     try { XposedHelpers.callMethod(amapLoc, "setAccuracy", getJitteredAccuracy()) } catch (_: Throwable) {}
                                     try { XposedHelpers.callMethod(amapLoc, "setSpeed", motion.speed) } catch (_: Throwable) {}
                                     try { XposedHelpers.callMethod(amapLoc, "setBearing", motion.bearing) } catch (_: Throwable) {}
-                                    try { XposedHelpers.callMethod(amapLoc, "setAltitude", config.optDouble("altitude", 25.0)) } catch (_: Throwable) {}
+                                    try { XposedHelpers.callMethod(amapLoc, "setAltitude", RouteEngine.realisticAltitude(config)) } catch (_: Throwable) {}
                                     try { XposedHelpers.callMethod(amapLoc, "setTime", System.currentTimeMillis()) } catch (_: Throwable) {}
                                     try { XposedHelpers.callMethod(amapLoc, "setSatellites", config.optInt("satellite_count", 20)) } catch (_: Throwable) {}
                                     try { XposedHelpers.callMethod(amapLoc, "setGpsAccuracyStatus", 1) } catch (_: Throwable) {}

@@ -61,6 +61,7 @@ import com.vincenthzr.locationspoofer.viewmodel.ManageDataViewModel
 import com.vincenthzr.locationspoofer.viewmodel.addRoutePoint
 import com.vincenthzr.locationspoofer.viewmodel.fetchCurrentLocation
 import com.vincenthzr.locationspoofer.viewmodel.finishSelectingPoints
+import com.vincenthzr.locationspoofer.viewmodel.joystickMaxSpeedMs
 import com.vincenthzr.locationspoofer.viewmodel.isDomesticEnvironment
 import com.vincenthzr.locationspoofer.viewmodel.performLocalSearch
 import com.vincenthzr.locationspoofer.viewmodel.restartSelectingPoints
@@ -415,7 +416,7 @@ fun RouteTab(
                 if (isRunning && isManual) {
                     JoystickPanel(
                         viewModel = viewModel,
-                        maxSpeedMs = uiState.routeSimMode.speedMs.toFloat()
+                        maxSpeedMs = viewModel.joystickMaxSpeedMs()
                     )
                 }
 

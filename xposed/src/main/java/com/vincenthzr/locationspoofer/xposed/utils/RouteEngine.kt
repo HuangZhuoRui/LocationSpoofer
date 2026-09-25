@@ -1,6 +1,7 @@
 package com.vincenthzr.locationspoofer.xposed.utils
 
 import org.json.JSONArray
+import com.vincenthzr.locationspoofer.utils.MotionRealism
 import org.json.JSONObject
 import kotlin.math.*
 
@@ -77,6 +78,37 @@ object RouteEngine {
         cachedRouteSignature = signature
     }
 
+    /**
+     * 摇杆模式：App 约每秒写一次"当前位置 + 方向 + 速度"，两次写入之间在这里按方向和速度往前推算，
+     * 让被 Hook 的 App 看到连续移动而不是每秒跳一下。推算时长有上限，防止 App 被杀后位置一直漂走。
+     */
+    private const val JOYSTICK_MAX_EXTRAPOLATION_MS = 3000L
+    private const val EARTH_RADIUS_M = 6378137.0
+
+    private fun extrapolateJoystick(
+        config: JSONObject,
+        now: Long,
+        baseLat: Double,
+        baseLng: Double,
+        bearing: Float
+    ): SpoofedMotion {
+        val speed = config.optDouble("speed_m_s", 0.0)
+        val startTime = config.optLong("start_timestamp", 0L)
+        if (speed <= 0.0 || startTime <= 0L) return SpoofedMotion(baseLat, baseLng, bearing, 0f)
+
+        val elapsedSec = (now - startTime).coerceIn(0L, JOYSTICK_MAX_EXTRAPOLATION_MS) / 1000.0
+        val angularDist = speed * elapsedSec / EARTH_RADIUS_M
+        val bearingRad = Math.toRadians(bearing.toDouble())
+        val latRad = Math.toRadians(baseLat)
+        val lngRad = Math.toRadians(baseLng)
+        val newLatRad = asin(sin(latRad) * cos(angularDist) + cos(latRad) * sin(angularDist) * cos(bearingRad))
+        val newLngRad = lngRad + atan2(
+            sin(bearingRad) * sin(angularDist) * cos(latRad),
+            cos(angularDist) - sin(latRad) * sin(newLatRad)
+        )
+        return SpoofedMotion(Math.toDegrees(newLatRad), Math.toDegrees(newLngRad), bearing, speed.toFloat())
+    }
+
     fun calculateCurrentPosition(config: JSONObject, now: Long = System.currentTimeMillis()): SpoofedMotion {
         val isRouteMode = config.optBoolean("is_route_mode", false)
         val routeArray = config.optJSONArray("route_points")
@@ -85,6 +117,9 @@ object RouteEngine {
         val baseBearing = config.optDouble("sim_bearing", 0.0).toFloat()
 
         if (!isRouteMode || routeArray == null || routeArray.length() < 2) {
+            if (config.optString("sim_mode") == "JOYSTICK") {
+                return extrapolateJoystick(config, now, baseLat, baseLng, baseBearing)
+            }
             return SpoofedMotion(baseLat, baseLng, baseBearing, 0f)
         }
 
@@ -104,7 +139,8 @@ object RouteEngine {
         val rawStartTime = config.optLong("start_timestamp", 0L)
         val startTime = if (rawStartTime > 0L) rawStartTime else now
         val elapsedSec = ((now - startTime).coerceAtLeast(0L)) / 1000.0
-        val distTraveled = elapsedSec * speed
+        val realism = realismSession(config, startTime)
+        val distTraveled = realism.distance(speed, elapsedSec)
 
         if (stopAtDestination && distTraveled >= totalDist) {
             val lastPt = points.last()
@@ -145,6 +181,22 @@ object RouteEngine {
         val curLng = fromPt.lng + (toPt.lng - fromPt.lng) * ratio
         val bearing = if (forward) calculateBearing(fromPt, toPt) else calculateBearing(toPt, fromPt)
 
-        return SpoofedMotion(curLat, curLng, bearing, speed.toFloat())
+        return SpoofedMotion(curLat, curLng, bearing, realism.speed(speed, elapsedSec).toFloat())
     }
+
+    /** 设置的海拔叠加随时间缓慢漂移的起伏（幅度由随机强度决定），各进程对同一时刻给出一致的值 */
+    fun realisticAltitude(config: JSONObject, now: Long = System.currentTimeMillis()): Double {
+        val base = config.optDouble("altitude", 25.0)
+        val start = config.optLong("start_timestamp", 0L)
+        if (start <= 0L) return base
+        return realismSession(config, start).altitude(base, (now - start).coerceAtLeast(0L) / 1000.0)
+    }
+
+    /** 配置里缺少真实度字段（旧版 App 写的配置）时按"关闭 + 不浮动"处理，行为与旧版一致 */
+    fun realismSession(config: JSONObject, startTimestamp: Long = config.optLong("start_timestamp", 0L)): MotionRealism.Session =
+        MotionRealism.session(
+            startTimestamp,
+            config.optInt("realism_level", MotionRealism.Level.OFF.id),
+            config.optInt("speed_fluctuation_pct", 0)
+        )
 }

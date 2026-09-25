@@ -162,6 +162,48 @@ class SettingsRepository(private val settingsManager: SettingsManager) {
             settingsManager.altitude = value
         }
 
+    var realismLevel: Int
+        get() = settingsManager.realismLevel
+        set(value) {
+            settingsManager.realismLevel = value
+        }
+
+    var speedFluctuationPct: Int
+        get() = settingsManager.speedFluctuationPct
+        set(value) {
+            settingsManager.speedFluctuationPct = value
+        }
+
+    var gaitTemplate: String
+        get() = settingsManager.gaitTemplate
+        set(value) {
+            settingsManager.gaitTemplate = value
+        }
+
+    var useGaitTemplate: Boolean
+        get() = settingsManager.useGaitTemplate
+        set(value) {
+            settingsManager.useGaitTemplate = value
+        }
+
+    var keepLastMapPosition: Boolean
+        get() = settingsManager.keepLastMapPosition
+        set(value) {
+            settingsManager.keepLastMapPosition = value
+        }
+
+    /** 最后一次选定的地图位置（GCJ-02），未保存过时返回 null */
+    fun getLastMapPosition(): Pair<String, String>? {
+        val lat = settingsManager.lastMapLat
+        val lng = settingsManager.lastMapLng
+        return if (lat.isNotBlank() && lng.isNotBlank()) lat to lng else null
+    }
+
+    fun setLastMapPosition(lat: String, lng: String) {
+        settingsManager.lastMapLat = lat
+        settingsManager.lastMapLng = lng
+    }
+
     var satelliteCount: String
         get() = settingsManager.satelliteCount
         set(value) {

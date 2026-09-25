@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.vincenthzr.locationspoofer.ui.theme.AccentOrange
 import com.vincenthzr.locationspoofer.viewmodel.MainViewModel
 import com.vincenthzr.locationspoofer.viewmodel.moveByJoystick
+import com.vincenthzr.locationspoofer.viewmodel.stopJoystick
 import kotlin.math.atan2
 import kotlin.math.sqrt
 
@@ -50,10 +51,12 @@ fun JoystickPanel(viewModel: MainViewModel, maxSpeedMs: Float = 10f) {
                     onDragEnd = {
                         thumbOffset = Offset.Zero
                         joystickState = Pair(0.0, 0f)
+                        viewModel.stopJoystick()
                     },
                     onDragCancel = {
                         thumbOffset = Offset.Zero
                         joystickState = Pair(0.0, 0f)
+                        viewModel.stopJoystick()
                     }
                 ) { change, dragAmount ->
                     change.consume()

@@ -49,7 +49,7 @@ internal fun LocationHooker.hookLocationGetters(classLoader: ClassLoader, curren
                     val provider = try { (thisObj as? android.location.Location)?.provider } catch (_: Throwable) { null }
                     when (provider?.lowercase()) {
                         "baidu" -> "BD-09"
-                        else -> "GCJ-02"
+                        else -> "WGS-84"
                     }
                 }
             }
@@ -78,7 +78,7 @@ internal fun LocationHooker.hookLocationGetters(classLoader: ClassLoader, curren
                     val provider = try { (thisObj as? android.location.Location)?.provider } catch (_: Throwable) { null }
                     when (provider?.lowercase()) {
                         "baidu" -> "BD-09"
-                        else -> "GCJ-02"
+                        else -> "WGS-84"
                     }
                 }
             }
@@ -186,7 +186,7 @@ internal fun LocationHooker.hookLocationGetters(classLoader: ClassLoader, curren
 
             val config = readConfig()
             if (config != null && config.optBoolean("active", false)) {
-                val baseAlt = config.optDouble("altitude", 25.0)
+                val baseAlt = RouteEngine.realisticAltitude(config)
                 val enableJitter = config.optBoolean("enable_jitter", true)
                 result = if (enableJitter && baseAlt > 0.0) {
                     // 稍微抖动海拔，真实气压计存在起伏，±0.5米

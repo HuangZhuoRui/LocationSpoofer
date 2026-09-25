@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.DirectionsWalk
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -65,6 +66,7 @@ fun InfoTab(
     onNavigateToSignatureAuth: () -> Unit = {},
     onNavigateToRootDiagnostics: () -> Unit = {},
     onNavigateToVendorScheme: () -> Unit = {},
+    onNavigateToMotionRealism: () -> Unit = {},
     onNavigateToBackgroundKeepAlive: () -> Unit = {},
     onNavigateToEnvTokens: () -> Unit = {}
 ) {
@@ -104,6 +106,14 @@ fun InfoTab(
             com.vincenthzr.locationspoofer.data.model.VendorScheme.AOSP -> vendorAospText
         }
     }
+
+    val realismLevelNames = listOf(
+        stringResource(R.string.realism_level_off),
+        stringResource(R.string.realism_level_low),
+        stringResource(R.string.realism_level_medium),
+        stringResource(R.string.realism_level_high)
+    )
+    val currentRealismLevelName = realismLevelNames.getOrNull(uiState.realismLevel) ?: realismLevelNames[2]
 
     // 获取当前地图引擎名称
     val autoText = stringResource(R.string.map_engine_auto)
@@ -225,6 +235,14 @@ fun InfoTab(
                             title = stringResource(R.string.map_config),
                             previewChip = currentEngineName,
                             onClick = onNavigateToMapEngine
+                        )
+                        SettingsEntryDivider()
+                        SettingsEntryRow(
+                            icon = Icons.AutoMirrored.Rounded.DirectionsWalk,
+                            tint = AccentOrange,
+                            title = stringResource(R.string.motion_realism_title),
+                            previewChip = currentRealismLevelName,
+                            onClick = onNavigateToMotionRealism
                         )
                         SettingsEntryDivider()
                         SettingsEntryRow(

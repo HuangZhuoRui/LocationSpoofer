@@ -1,5 +1,6 @@
 package com.vincenthzr.locationspoofer.viewmodel
 
+import com.vincenthzr.locationspoofer.utils.MotionRealism
 import com.vincenthzr.locationspoofer.ui.BuildConfig
 import java.util.Locale
 import androidx.lifecycle.viewModelScope
@@ -107,6 +108,10 @@ private fun MainViewModel.getEffectiveSpeedMs(): Double {
     return if (state.routeSimMode == SimMode.CUSTOM) state.customSpeedMs
     else state.routeSimMode.speedMs
 }
+
+/** 摇杆推满时的速度；自定义速度未填或为 0 时回退到步行速度，避免摇杆推不动 */
+internal fun MainViewModel.joystickMaxSpeedMs(): Float =
+    getEffectiveSpeedMs().takeIf { it > 0.0 }?.toFloat() ?: SimMode.WALKING.speedMs.toFloat()
 
 /** 首页地图确认选点 */
 
@@ -567,10 +572,16 @@ private fun MainViewModel.startAutoRouteLoop() {
         if (speedMs <= 0.0) return@launch
 
         val tickMs = 100L
-        val tickSec = tickMs / 1000.0
         var forward = true
         var segmentIndex = 0
         var progress = 0.0 // 当前段上已走过的距离（米）
+        // 与 Xposed 端 RouteEngine 用同一个"按时间算累计距离"的函数（含速度浮动），两边算出的位置一致
+        val realism = MotionRealism.session(
+            SpoofingState.startTimestamp,
+            SpoofingState.realismLevel.takeIf { it >= 0 } ?: settingsRepository.realismLevel,
+            SpoofingState.speedFluctuationPct.takeIf { it >= 0 } ?: settingsRepository.speedFluctuationPct
+        )
+        var lastTotalDist = 0.0
 
         while (isActive) {
             val fromIdx = if (forward) segmentIndex else segmentIndex + 1
@@ -579,8 +590,10 @@ private fun MainViewModel.startAutoRouteLoop() {
             val to = points[toIdx]
             val segLen = haversineMeters(from, to)
 
-            val stepDist = speedMs * tickSec
-            progress += stepDist
+            val elapsedSec = (System.currentTimeMillis() - SpoofingState.startTimestamp).coerceAtLeast(0L) / 1000.0
+            val totalDist = realism.distance(speedMs, elapsedSec)
+            progress += (totalDist - lastTotalDist).coerceAtLeast(0.0)
+            lastTotalDist = totalDist
 
             if (progress >= segLen) {
                 // 到达当前段终点

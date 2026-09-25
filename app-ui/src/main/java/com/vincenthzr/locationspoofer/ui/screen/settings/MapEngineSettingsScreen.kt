@@ -45,6 +45,7 @@ import com.vincenthzr.locationspoofer.viewmodel.MainViewModel
 import com.vincenthzr.locationspoofer.viewmodel.setAmapApiKey
 import com.vincenthzr.locationspoofer.viewmodel.setBaiduApiKey
 import com.vincenthzr.locationspoofer.viewmodel.setGoogleApiKey
+import com.vincenthzr.locationspoofer.viewmodel.setKeepLastMapPosition
 import com.vincenthzr.locationspoofer.viewmodel.setMapEngine
 import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 
@@ -276,6 +277,34 @@ fun MapEngineSettingsScreen(
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold
                         )
+                    }
+
+                    MiuixCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        cornerRadius = 18.dp,
+                        insideMargin = PaddingValues(16.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.keep_last_map_position_title),
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = stringResource(R.string.keep_last_map_position_desc),
+                                    fontSize = 11.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                                )
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Switch(
+                                checked = uiState.keepLastMapPosition,
+                                onCheckedChange = { viewModel.setKeepLastMapPosition(it) }
+                            )
+                        }
                     }
 
                     Spacer(Modifier.height(16.dp))

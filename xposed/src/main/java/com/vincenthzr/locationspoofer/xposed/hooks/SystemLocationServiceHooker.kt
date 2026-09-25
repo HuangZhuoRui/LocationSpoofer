@@ -158,7 +158,7 @@ private fun LocationHooker.ensureCallbackHooked(callback: Any, vararg deliveryMe
                         rewriteLocationArgs(
                             innerChain.args,
                             motion,
-                            config.optDouble("altitude", 25.0),
+                            RouteEngine.realisticAltitude(config),
                             getJitteredAccuracy()
                         )
                         logLoc("[SysLoc] Rewrote location in callback $methodName for target binder (lat=${motion.lat}, lng=${motion.lng}, isGlobal=$isGlobal)"
@@ -196,7 +196,7 @@ private fun LocationHooker.startSystemLocationHeartbeat(classLoader: ClassLoader
                 if (!config.optBoolean("active", false)) return
 
                 val motion = getCurrentSpoofedMotion("WGS-84") ?: return
-                val altitude = config.optDouble("altitude", 25.0)
+                val altitude = RouteEngine.realisticAltitude(config)
                 val accuracy = getJitteredAccuracy()
 
                 // 1. 推送定位坐标给目标应用 ILocationListener
@@ -525,7 +525,7 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
                 classLoader,
                 provider,
                 motion,
-                config.optDouble("altitude", 25.0),
+                RouteEngine.realisticAltitude(config),
                 getJitteredAccuracy()
             )
 
@@ -595,7 +595,7 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
                                         classLoader,
                                         provider,
                                         motion,
-                                        config.optDouble("altitude", 25.0),
+                                        RouteEngine.realisticAltitude(config),
                                         getJitteredAccuracy()
                                     )
                                     if (fakeLoc != null) {
@@ -708,7 +708,7 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
                                     classLoader,
                                     provider,
                                     motion,
-                                    config.optDouble("altitude", 25.0),
+                                    RouteEngine.realisticAltitude(config),
                                     getJitteredAccuracy()
                                 )
                                 if (fakeLoc != null) {
@@ -875,7 +875,7 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
 
                                     val motion = getCurrentSpoofedMotion("WGS-84")
                                     if (motion != null) {
-                                        val sentences = buildMockNmeaSentences(motion, config.optDouble("altitude", 25.0), getJitteredAccuracy(), config)
+                                        val sentences = buildMockNmeaSentences(motion, RouteEngine.realisticAltitude(config), getJitteredAccuracy(), config)
                                         val nowMs = System.currentTimeMillis()
                                         for (line in sentences) {
                                             dispatchNmea(callback, nowMs, line)
@@ -971,7 +971,7 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
                                 classLoader,
                                 provider,
                                 motion,
-                                config.optDouble("altitude", 25.0),
+                                RouteEngine.realisticAltitude(config),
                                 getJitteredAccuracy()
                             )
                             if (fakeLoc != null) {
@@ -1026,7 +1026,7 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
                                         classLoader,
                                         provider,
                                         motion,
-                                        config.optDouble("altitude", 25.0),
+                                        RouteEngine.realisticAltitude(config),
                                         getJitteredAccuracy()
                                     )
                                     if (fakeLoc != null) {
@@ -1101,7 +1101,7 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
                                         classLoader,
                                         providerName,
                                         motion,
-                                        config.optDouble("altitude", 25.0),
+                                        RouteEngine.realisticAltitude(config),
                                         getJitteredAccuracy()
                                     )
                                     if (fakeLoc != null) {
@@ -1162,7 +1162,7 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
                     if (isGlobal) {
                         val motion = getCurrentSpoofedMotion("WGS-84")
                         if (motion != null) {
-                            rewriteLocationArgs(chain.args, motion, config.optDouble("altitude", 25.0), getJitteredAccuracy())
+                            rewriteLocationArgs(chain.args, motion, RouteEngine.realisticAltitude(config), getJitteredAccuracy())
                             logLoc("[SysLoc] LocationProviderManager.onReportLocation rewrote location globally")
                         }
                     }
@@ -1206,7 +1206,7 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
                         if (isTarget) {
                             val motion = getCurrentSpoofedMotion("WGS-84")
                             if (motion != null) {
-                                rewriteLocationArgs(chain.args, motion, config.optDouble("altitude", 25.0), getJitteredAccuracy())
+                                rewriteLocationArgs(chain.args, motion, RouteEngine.realisticAltitude(config), getJitteredAccuracy())
                                 logLoc("[SysLoc] Registration.acceptLocationChange rewrote location for $pkg (lat=${motion.lat}, lng=${motion.lng})")
                             }
                         }
@@ -1260,7 +1260,7 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
                         if (isTarget) {
                             val motion = getCurrentSpoofedMotion("WGS-84")
                             if (motion != null) {
-                                rewriteLocationArgs(chain.args, motion, config.optDouble("altitude", 25.0), getJitteredAccuracy())
+                                rewriteLocationArgs(chain.args, motion, RouteEngine.realisticAltitude(config), getJitteredAccuracy())
                                 logLoc("[SysLoc] ${tClazz.simpleName}.deliverOnLocationChanged rewrote location (lat=${motion.lat}, lng=${motion.lng})")
                             }
                         }
@@ -1379,7 +1379,7 @@ private fun LocationHooker.hookPendingIntentDelivery(classLoader: ClassLoader) {
             if (isTarget) {
                 val motion = getCurrentSpoofedMotion("WGS-84")
                 if (motion != null) {
-                    val altitude = config.optDouble("altitude", 25.0)
+                    val altitude = RouteEngine.realisticAltitude(config)
                     val accuracy = getJitteredAccuracy()
                     for (arg in chain.args) {
                         if (arg is android.content.Intent) {

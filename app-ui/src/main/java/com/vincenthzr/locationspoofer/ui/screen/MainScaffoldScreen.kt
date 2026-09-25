@@ -71,6 +71,7 @@ enum class MainSubScreen {
     SignatureAuth,
     RootDiagnostics,
     VendorScheme,
+    MotionRealism,
     BackgroundKeepAlive,
     EnvTokens,
     SystemHookApps
@@ -333,6 +334,7 @@ fun MainScaffoldScreen(
                             onNavigateToSignatureAuth = { currentSubScreen = MainSubScreen.SignatureAuth },
                             onNavigateToRootDiagnostics = { currentSubScreen = MainSubScreen.RootDiagnostics },
                             onNavigateToVendorScheme = { currentSubScreen = MainSubScreen.VendorScheme },
+                            onNavigateToMotionRealism = { currentSubScreen = MainSubScreen.MotionRealism },
                             onNavigateToBackgroundKeepAlive = { currentSubScreen = MainSubScreen.BackgroundKeepAlive },
                             onNavigateToEnvTokens = { currentSubScreen = MainSubScreen.EnvTokens }
                         )
@@ -409,6 +411,13 @@ fun MainScaffoldScreen(
                     )
 
                     MainSubScreen.RootDiagnostics -> com.vincenthzr.locationspoofer.ui.screen.settings.RootDiagnosticsScreen(
+                        viewModel = viewModel,
+                        uiState = uiState,
+                        isDark = isDark,
+                        onClose = { currentSubScreen = MainSubScreen.None }
+                    )
+
+                    MainSubScreen.MotionRealism -> com.vincenthzr.locationspoofer.ui.screen.settings.MotionRealismScreen(
                         viewModel = viewModel,
                         uiState = uiState,
                         isDark = isDark,

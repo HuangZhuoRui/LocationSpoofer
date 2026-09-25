@@ -201,7 +201,7 @@ internal fun LocationHooker.hookLocationProviders(classLoader: ClassLoader, curr
                                                                 val provider = try { firstArg.provider } catch (_: Throwable) { null }
                                                                 when (provider?.lowercase()) {
                                                                     "baidu" -> "BD-09"
-                                                                    else -> "GCJ-02"
+                                                                    else -> "WGS-84"
                                                                 }
                                                             }
                                                         }
@@ -212,7 +212,7 @@ internal fun LocationHooker.hookLocationProviders(classLoader: ClassLoader, curr
                                                             firstArg.accuracy = getJitteredAccuracy()
                                                             firstArg.speed = motion.speed
                                                             firstArg.bearing = motion.bearing
-                                                            firstArg.altitude = config.optDouble("altitude", 25.0)
+                                                            firstArg.altitude = RouteEngine.realisticAltitude(config)
                                                             firstArg.time = System.currentTimeMillis()
                                                             firstArg.elapsedRealtimeNanos = android.os.SystemClock.elapsedRealtimeNanos()
                                                             try {
@@ -236,7 +236,7 @@ internal fun LocationHooker.hookLocationProviders(classLoader: ClassLoader, curr
                                                                         val provider = try { loc.provider } catch (_: Throwable) { null }
                                                                         when (provider?.lowercase()) {
                                                                             "baidu" -> "BD-09"
-                                                                            else -> "GCJ-02"
+                                                                            else -> "WGS-84"
                                                                         }
                                                                     }
                                                                 }
@@ -247,7 +247,7 @@ internal fun LocationHooker.hookLocationProviders(classLoader: ClassLoader, curr
                                                                     loc.accuracy = getJitteredAccuracy()
                                                                     loc.speed = motion.speed
                                                                     loc.bearing = motion.bearing
-                                                                    loc.altitude = config.optDouble("altitude", 25.0)
+                                                                    loc.altitude = RouteEngine.realisticAltitude(config)
                                                                     loc.time = System.currentTimeMillis()
                                                                     loc.elapsedRealtimeNanos = android.os.SystemClock.elapsedRealtimeNanos()
                                                                     try {
@@ -303,7 +303,7 @@ internal fun LocationHooker.hookLocationProviders(classLoader: ClassLoader, curr
                     val provider = chain.args.getOrNull(0) as? String ?: "gps"
                     val defaultSys = when (provider.lowercase()) {
                         "baidu" -> "BD-09"
-                        else -> "GCJ-02"
+                        else -> "WGS-84"
                     }
                     val motion = getCurrentSpoofedMotion(defaultSys)
                     if (motion != null) {
@@ -325,7 +325,7 @@ internal fun LocationHooker.hookLocationProviders(classLoader: ClassLoader, curr
                             XposedHelpers.callMethod(fakeLoc, "setAccuracy", getJitteredAccuracy())
                             XposedHelpers.callMethod(fakeLoc, "setSpeed", motion.speed)
                             XposedHelpers.callMethod(fakeLoc, "setBearing", motion.bearing)
-                            XposedHelpers.callMethod(fakeLoc, "setAltitude", config.optDouble("altitude", 25.0))
+                            XposedHelpers.callMethod(fakeLoc, "setAltitude", RouteEngine.realisticAltitude(config))
                             XposedHelpers.callMethod(fakeLoc, "setTime", timeNow)
                             XposedHelpers.callMethod(fakeLoc, "setElapsedRealtimeNanos", android.os.SystemClock.elapsedRealtimeNanos())
                             try {
@@ -385,7 +385,7 @@ internal fun LocationHooker.hookLocationProviders(classLoader: ClassLoader, curr
                 val provider = chain.args.getOrNull(0) as? String ?: "gps"
                 val defaultSys = when (provider.lowercase()) {
                     "baidu" -> "BD-09"
-                    else -> "GCJ-02"
+                    else -> "WGS-84"
                 }
                 val motion = getCurrentSpoofedMotion(defaultSys) ?: return@hookAllMethods result
                 try {
@@ -397,7 +397,7 @@ internal fun LocationHooker.hookLocationProviders(classLoader: ClassLoader, curr
                     XposedHelpers.callMethod(fakeLoc, "setAccuracy", getJitteredAccuracy())
                     XposedHelpers.callMethod(fakeLoc, "setSpeed", motion.speed)
                     XposedHelpers.callMethod(fakeLoc, "setBearing", motion.bearing)
-                    XposedHelpers.callMethod(fakeLoc, "setAltitude", config.optDouble("altitude", 25.0))
+                    XposedHelpers.callMethod(fakeLoc, "setAltitude", RouteEngine.realisticAltitude(config))
                     XposedHelpers.callMethod(fakeLoc, "setTime", System.currentTimeMillis())
                     XposedHelpers.callMethod(
                         fakeLoc, "setElapsedRealtimeNanos",

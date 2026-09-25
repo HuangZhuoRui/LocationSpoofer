@@ -4,6 +4,7 @@ import android.content.Context
 import android.location.Geocoder
 import com.vincenthzr.locationspoofer.data.BuildConfig
 import com.vincenthzr.locationspoofer.data.model.RoutePoint
+import com.vincenthzr.locationspoofer.data.state.SpoofingState
 import com.vincenthzr.locationspoofer.utils.CoordinateUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -77,9 +78,12 @@ class ConfigManager(private val context: Context, private val rootManager: RootM
             lastGeocodedLng = lng
             try {
                 val geocoder = android.location.Geocoder(context, java.util.Locale.CHINA)
+                // lat/lng 是 GCJ-02，而 Geocoder 按 Android 规范接收 WGS-84；直接传 GCJ-02 会被后端再加密一次，
+                // 偏出数百米、反查到错误的街道（issue #62：广州塔 → 赏湖街）
+                val wgs = CoordinateUtils.gcj02ToWgs84(lat, lng)
 
                 @Suppress("DEPRECATION")
-                val addresses = geocoder.getFromLocation(lat, lng, 1)
+                val addresses = geocoder.getFromLocation(wgs.lat, wgs.lng, 1)
                 if (!addresses.isNullOrEmpty()) {
                     val addr = addresses[0]
                     cachedProvince = addr.adminArea ?: ""
@@ -155,6 +159,10 @@ class ConfigManager(private val context: Context, private val rootManager: RootM
             // 厂商适配方案同样是常驻设置项（在"厂商适配方案"页配置），不随每次模拟会话变化，
             // 这里和 system_hook_packages 一样直接读取最新值，不需要调用方逐层透传。
             put("vendor_override", settingsManager.vendorOverride)
+            // 运动真实度同为常驻设置项（"运动真实度"页），Xposed 端据此给速度、步频、海拔、加速度加起伏
+            put("realism_level", SpoofingState.realismLevel.takeIf { it >= 0 } ?: settingsManager.realismLevel)
+            put("speed_fluctuation_pct", SpoofingState.speedFluctuationPct.takeIf { it >= 0 } ?: settingsManager.speedFluctuationPct)
+            put("gait_template", if (settingsManager.useGaitTemplate) settingsManager.gaitTemplate else "")
         }
         val cellCount = json.optJSONArray("cell_json")?.length() ?: 0
 

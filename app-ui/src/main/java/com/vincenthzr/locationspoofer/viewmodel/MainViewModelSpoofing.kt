@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 // MainViewModel 的模拟开关、摇杆移动与持续扫描相关扩展函数
@@ -168,10 +169,58 @@ internal fun MainViewModel.moveByJoystick(bearing: Double, intensity: Float, max
         )
     }
     // 实时同步给 SpoofingState
+    val now = System.currentTimeMillis()
     SpoofingState.latitude = newLat
     SpoofingState.longitude = newLng
     SpoofingState.simBearing = bearing.toFloat()
-    SpoofingState.startTimestamp = System.currentTimeMillis()
+    SpoofingState.startTimestamp = now
+
+    // 被 Hook 的 App 只认配置文件，不写文件它们就一直停在起点（issue #63）。
+    // 落盘是 root 写文件，按节流间隔写入；两次写入之间由 Xposed 端 RouteEngine 按方向 + 速度推算位置
+    if (now - lastJoystickSyncTime >= JOYSTICK_SYNC_INTERVAL_MS) {
+        lastJoystickSyncTime = now
+        syncJoystickConfig(newLat, newLng, bearing.toFloat(), (maxSpeedMs * intensity).toDouble(), now)
+    }
+}
+
+private const val JOYSTICK_SYNC_INTERVAL_MS = 1000L
+
+/** 松开摇杆：立即写入速度 0，让 Xposed 端停止推算位置 */
+internal fun MainViewModel.stopJoystick() {
+    val lat = _uiState.value.latitudeInput.toDoubleOrNull() ?: return
+    val lng = _uiState.value.longitudeInput.toDoubleOrNull() ?: return
+    lastJoystickSyncTime = 0L
+    syncJoystickConfig(lat, lng, _uiState.value.simBearing, 0.0, System.currentTimeMillis())
+}
+
+private fun MainViewModel.syncJoystickConfig(lat: Double, lng: Double, bearing: Float, speedMs: Double, timestamp: Long) {
+    val state = _uiState.value
+    if (!state.isSpoofingActive) return
+    viewModelScope.launch {
+        joystickSyncMutex.withLock {
+            locationRepository.updateConfig(
+                lat = lat,
+                lng = lng,
+                simMode = "JOYSTICK",
+                simBearing = bearing,
+                startTime = timestamp,
+                routePoints = emptyList(),
+                isRouteMode = false,
+                appCoordinateSystems = state.appCoordinateSystems,
+                wifiJson = state.collectedWifiJson,
+                cellJson = state.collectedCellJson,
+                bluetoothJson = state.collectedBluetoothJson,
+                mockWifi = state.mockWifi && (BuildConfig.GLOBAL_SCHEME || state.canMockWifi),
+                mockCell = state.mockCell,
+                mockBluetooth = state.mockBluetooth && (BuildConfig.GLOBAL_SCHEME || state.canMockBluetooth),
+                enableJitter = state.enableJitter,
+                speedMs = speedMs,
+                enableStepSimulation = state.enableStepSimulation,
+                stepCadenceSpm = state.stepCadenceSpm,
+                isAutoCadence = state.isAutoCadence
+            )
+        }
+    }
 }
 
 // 路线规划状态机

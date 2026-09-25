@@ -2,6 +2,8 @@ package com.vincenthzr.locationspoofer.data.model
 
 import androidx.annotation.StringRes
 import com.vincenthzr.locationspoofer.ui.R
+import com.vincenthzr.locationspoofer.utils.GaitTemplate
+import com.vincenthzr.locationspoofer.utils.MotionRealism
 
 enum class WifiLoadStatus { IDLE, LOADING, DONE }
 
@@ -43,6 +45,14 @@ enum class RouteRunMode {
     LOOP
 }
 
+sealed interface GaitRecordingState {
+    data object Idle : GaitRecordingState
+    data class Countdown(val secondsLeft: Int) : GaitRecordingState
+    data class Recording(val progress: Float) : GaitRecordingState
+    data object Processing : GaitRecordingState
+    data class Failed(val reason: GaitTemplate.Reason) : GaitRecordingState
+}
+
 enum class AppMapType {
     NORMAL,
     SATELLITE,
@@ -58,6 +68,14 @@ data class AppState(
     val hasRootAccess: Boolean = false,
     val rootSolution: RootSolution = RootSolution.AUTO,
     val vendorScheme: VendorScheme = VendorScheme.AUTO,
+    val realismLevel: Int = MotionRealism.DEFAULT_LEVEL_ID,
+    val speedFluctuationPct: Int = MotionRealism.DEFAULT_SPEED_FLUCTUATION_PCT,
+    /** 已录制步态模板的步频（步/分钟），null 表示尚未录制 */
+    val gaitTemplateCadence: Int? = null,
+    val gaitTemplateStrides: Int = 0,
+    val useGaitTemplate: Boolean = false,
+    val gaitRecording: GaitRecordingState = GaitRecordingState.Idle,
+    val keepLastMapPosition: Boolean = true,
     val isTestingRootSetup: Boolean = false,
     val rootSetupTestResult: RootSetupTestResult? = null,
     val isRestartingHookedApps: Boolean = false,

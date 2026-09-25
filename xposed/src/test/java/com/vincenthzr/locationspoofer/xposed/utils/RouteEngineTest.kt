@@ -102,4 +102,39 @@ class RouteEngineTest {
         assertEquals(a.second, atStart.lng, 1e-6)
         assertTrue(atStart.speed > 0f)
     }
+
+    private fun joystickConfig(speed: Double, bearing: Double, startTimestamp: Long) = JSONObject().apply {
+        put("is_route_mode", false)
+        put("sim_mode", "JOYSTICK")
+        put("lat", 31.5)
+        put("lng", 120.5)
+        put("sim_bearing", bearing)
+        put("speed_m_s", speed)
+        put("start_timestamp", startTimestamp)
+    }
+
+    @Test
+    fun `joystick mode extrapolates along the bearing between config writes`() {
+        val motion = RouteEngine.calculateCurrentPosition(joystickConfig(5.0, 0.0, 1_000L), now = 2_000L)
+        // 正北 5 m/s 走 1 秒 ≈ 纬度增加 5 / 111 km
+        assertEquals(31.5 + 5.0 / 111_320.0, motion.lat, 1e-6)
+        assertEquals(120.5, motion.lng, 1e-9)
+        assertEquals(5f, motion.speed)
+    }
+
+    @Test
+    fun `joystick extrapolation is capped when the app stops writing config`() {
+        val capped = RouteEngine.calculateCurrentPosition(joystickConfig(5.0, 90.0, 1_000L), now = 61_000L)
+        val atCap = RouteEngine.calculateCurrentPosition(joystickConfig(5.0, 90.0, 1_000L), now = 4_000L)
+        assertEquals(atCap.lng, capped.lng, 1e-12)
+        assertTrue(capped.lng > 120.5)
+    }
+
+    @Test
+    fun `released joystick stays at the written coordinate`() {
+        val motion = RouteEngine.calculateCurrentPosition(joystickConfig(0.0, 45.0, 1_000L), now = 5_000L)
+        assertEquals(31.5, motion.lat, 0.0)
+        assertEquals(120.5, motion.lng, 0.0)
+        assertEquals(0f, motion.speed)
+    }
 }

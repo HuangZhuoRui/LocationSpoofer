@@ -22,7 +22,9 @@ import android.hardware.SensorEventListener
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import com.vincenthzr.locationspoofer.utils.GaitTemplate
 import com.vincenthzr.locationspoofer.xposed.LocationHooker
+import com.vincenthzr.locationspoofer.xposed.utils.RouteEngine
 import com.vincenthzr.locationspoofer.xposed.utils.XposedHelpers
 import org.json.JSONObject
 import java.lang.reflect.Constructor
@@ -41,10 +43,16 @@ object SensorStepHooker {
     val capturedListeners = CopyOnWriteArrayList<CapturedSensorListener>()
     private val hookedListenerClasses = ConcurrentHashMap<Class<*>, Boolean>()
 
-    // 基准步数（随开机时间/首次启动初始化）
-    private var baseBootSteps: Long = 2350L
-    private var lastCalculatedSteps: Long = 2350L
-    private var lastStepInitTime: Long = 0L
+    // 真实计步器自开机以来单调递增：换会话 / 摇杆每次写配置导致 start_timestamp 变化时，
+    // 把已累计的步数接续为新的起点，而不是回到初始值
+    private const val INITIAL_BOOT_STEPS = 2350.0
+    @Volatile private var stepBase: Double = INITIAL_BOOT_STEPS
+    @Volatile private var lastStepsFloat: Double = INITIAL_BOOT_STEPS
+    @Volatile private var lastStepInitTime: Long = 0L
+
+    private val noiseRng = java.util.Random()
+    @Volatile private var cachedTemplateSource: String? = null
+    @Volatile private var cachedTemplate: GaitTemplate? = null
 
     // 缓存虚拟 Sensor 实例
     private var mockStepCounterSensor: Sensor? = null
@@ -226,46 +234,53 @@ object SensorStepHooker {
     }
 
     private fun applySyntheticVibration(values: FloatArray, config: JSONObject, speed: Double) {
-        val now = SystemClock.elapsedRealtime()
-        val isAutoCadence = config.optBoolean("is_auto_cadence", true)
-        val cadenceSpm = if (isAutoCadence) calculateAutoCadence(speed) else config.optInt("step_cadence_spm", 165)
-        val freq = cadenceSpm / 60.0
-        val omega = 2.0 * Math.PI * freq
-        val t = (now % 60000) / 1000.0
+        val now = System.currentTimeMillis()
+        val stepsFloat = calculateCurrentStepsFloat(config, now)
+        val motionSpeed = RouteEngine.calculateCurrentPosition(config, now).speed.toDouble().takeIf { it > 0.0 } ?: speed
+        val synthetic = RouteEngine.realismSession(config).accelerometer(stepsFloat, motionSpeed, gaitTemplate(config), noiseRng)
+        values[0] = synthetic[0]
+        values[1] = synthetic[1]
+        values[2] = synthetic[2]
+    }
 
-        val impactAmp = (1.5 + (speed * 0.4).coerceAtMost(3.0)).toFloat()
-        // Z轴 垂直冲击
-        values[2] = 9.8f + impactAmp * Math.sin(omega * t).toFloat()
-        // Y轴 前后摆动
-        values[1] = (impactAmp * 0.35f) * Math.cos(omega * t).toFloat()
-        // X轴 左右交替
-        values[0] = (impactAmp * 0.2f) * Math.sin(omega * 0.5 * t).toFloat()
+    /** 用户录制的步态模板（配置里的编码字符串），按字符串内容缓存解码结果 */
+    private fun gaitTemplate(config: JSONObject): GaitTemplate? {
+        val source = config.optString("gait_template", "")
+        if (source != cachedTemplateSource) {
+            cachedTemplate = GaitTemplate.decode(source)
+            cachedTemplateSource = source
+        }
+        return cachedTemplate
     }
 
     /**
      * 计算当前仿真总步数
      */
-    fun calculateCurrentSteps(config: JSONObject, now: Long = System.currentTimeMillis()): Long {
+    fun calculateCurrentSteps(config: JSONObject, now: Long = System.currentTimeMillis()): Long =
+        calculateCurrentStepsFloat(config, now).toLong()
+
+    /** 连续的累计步数：整数部分是步数，小数部分是当前这一步的相位，供加速度波形对齐 */
+    private fun calculateCurrentStepsFloat(config: JSONObject, now: Long): Double {
         val startTime = config.optLong("start_timestamp", now)
         if (lastStepInitTime != startTime) {
             lastStepInitTime = startTime
-            baseBootSteps = 2350L
+            stepBase = lastStepsFloat
         }
 
         val speed = config.optDouble("speed_m_s", 0.0)
-        if (speed <= 0.05) return lastCalculatedSteps
+        if (speed <= 0.05) return lastStepsFloat
 
         val elapsedSec = ((now - startTime).coerceAtLeast(0L)) / 1000.0
         val isAutoCadence = config.optBoolean("is_auto_cadence", true)
-        val cadenceSpm = if (isAutoCadence) {
+        val baseCadence = if (isAutoCadence) {
             calculateAutoCadence(speed)
         } else {
             config.optInt("step_cadence_spm", 165).coerceIn(60, 240)
         }
 
-        val stepsToAdd = (elapsedSec * (cadenceSpm / 60.0)).toLong()
-        lastCalculatedSteps = baseBootSteps + stepsToAdd
-        return lastCalculatedSteps
+        val steps = stepBase + RouteEngine.realismSession(config, startTime).steps(baseCadence.toDouble(), elapsedSec)
+        lastStepsFloat = steps
+        return steps
     }
 
     /**

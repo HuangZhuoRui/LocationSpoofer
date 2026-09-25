@@ -100,6 +100,8 @@ class LocationRepository(
         SpoofingState.latitude = lat
         SpoofingState.longitude = lng
         SpoofingState.startTimestamp = startTime
+        SpoofingState.realismLevel = settingsManager.realismLevel
+        SpoofingState.speedFluctuationPct = settingsManager.speedFluctuationPct
         SpoofingState.simMode = simMode
         SpoofingState.simBearing = simBearing
         SpoofingState.wifiJson = wifiJson

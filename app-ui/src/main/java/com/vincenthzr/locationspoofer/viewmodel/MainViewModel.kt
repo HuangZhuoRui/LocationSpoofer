@@ -9,6 +9,7 @@ import com.vincenthzr.locationspoofer.data.model.AppMapType
 import com.vincenthzr.locationspoofer.data.model.MapEngine
 import com.vincenthzr.locationspoofer.data.model.RootSolution
 import com.vincenthzr.locationspoofer.data.model.VendorScheme
+import com.vincenthzr.locationspoofer.utils.GaitTemplate
 import com.vincenthzr.locationspoofer.data.repository.LocationRepository
 import com.vincenthzr.locationspoofer.data.repository.SettingsRepository
 import com.vincenthzr.locationspoofer.data.repository.WifiRepository
@@ -40,6 +41,10 @@ class MainViewModel(
 ) : ViewModel() {
     internal var lastMapMoveTime = 0L
     internal var mapMoveJob: Job? = null
+    internal var lastJoystickSyncTime = 0L
+    internal var gaitRecordingJob: Job? = null
+    /** 摇杆的配置写入是异步 root 写文件，串行化保证"松手停下"那次写入不会被之前还在路上的写入覆盖 */
+    internal val joystickSyncMutex = kotlinx.coroutines.sync.Mutex()
 
     internal val _uiState = MutableStateFlow(
         AppState(
@@ -59,6 +64,12 @@ class MainViewModel(
                 RootSolution.AUTO
             },
             vendorScheme = VendorScheme.fromId(settingsRepository.getVendorOverride()),
+            realismLevel = settingsRepository.realismLevel,
+            speedFluctuationPct = settingsRepository.speedFluctuationPct,
+            gaitTemplateCadence = GaitTemplate.decode(settingsRepository.gaitTemplate)?.cadenceSpm,
+            gaitTemplateStrides = GaitTemplate.decode(settingsRepository.gaitTemplate)?.strideCount ?: 0,
+            useGaitTemplate = settingsRepository.useGaitTemplate,
+            keepLastMapPosition = settingsRepository.keepLastMapPosition,
             savedLocations = settingsRepository.getSavedLocations(),
             savedRoutes = emptyList(), // 将由 Room Flow 填充
             currentLanguage = settingsRepository.getLanguage(),
