@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.suseoaa.locationspoofer.data.model.AppState
+import com.suseoaa.locationspoofer.ui.BuildConfig
 import com.suseoaa.locationspoofer.ui.R
 import com.suseoaa.locationspoofer.ui.theme.AccentBlue
 import com.suseoaa.locationspoofer.ui.theme.AccentGreen
@@ -70,7 +71,13 @@ fun StartSpoofingDialog(
                 )
                 Spacer(Modifier.height(16.dp))
 
-                if (uiState.canMockWifi || uiState.wigleToken.isNotBlank()) {
+                // 全局方案由系统服务实时合成 Wi-Fi/基站/蓝牙数据，开关始终可用；
+                // 非全局方案只有采集到对应数据（或配置了在线数据源 Token）时才显示
+                val showWifiToggle = BuildConfig.GLOBAL_SCHEME || uiState.canMockWifi || uiState.wigleToken.isNotBlank()
+                val showCellToggle = BuildConfig.GLOBAL_SCHEME || uiState.canMockCell || uiState.opencellidToken.isNotBlank()
+                val showBluetoothToggle = BuildConfig.GLOBAL_SCHEME || uiState.canMockBluetooth
+
+                if (showWifiToggle) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -94,7 +101,7 @@ fun StartSpoofingDialog(
                     }
                 }
 
-                if (uiState.canMockCell || uiState.opencellidToken.isNotBlank()) {
+                if (showCellToggle) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -118,7 +125,7 @@ fun StartSpoofingDialog(
                     }
                 }
 
-                if (uiState.canMockBluetooth) {
+                if (showBluetoothToggle) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()

@@ -1,5 +1,6 @@
 package com.suseoaa.locationspoofer.viewmodel
 
+import com.suseoaa.locationspoofer.ui.BuildConfig
 import android.content.Context
 import java.util.Locale
 import androidx.lifecycle.viewModelScope
@@ -9,6 +10,7 @@ import com.suseoaa.locationspoofer.data.model.RoutePlanStage
 import com.suseoaa.locationspoofer.data.model.AppMapType
 import com.suseoaa.locationspoofer.data.model.MapEngine
 import com.suseoaa.locationspoofer.data.model.RootSolution
+import com.suseoaa.locationspoofer.data.model.VendorScheme
 import com.suseoaa.locationspoofer.data.model.SearchMode
 import com.suseoaa.locationspoofer.data.state.SpoofingState
 import com.suseoaa.locationspoofer.ui.screen.AppPoiItem
@@ -145,6 +147,16 @@ internal fun MainViewModel.setRootSolution(solution: RootSolution) {
     _uiState.update { it.copy(rootSolution = solution) }
 }
 
+/**
+ * 设置手动选择的厂商适配方案。system_server 里的 [com.suseoaa.locationspoofer.xposed.hooks.vendor.VendorRegistry]
+ * 只在进程启动、Hook 安装的那一刻读取这个值（见 `VendorRegistry.applyManualOverride`），
+ * 所以切换方案后需要重启设备才能真正生效，UI 侧应提示用户这一点。
+ */
+internal fun MainViewModel.setVendorScheme(scheme: VendorScheme) {
+    settingsRepository.setVendorOverride(scheme.id)
+    _uiState.update { it.copy(vendorScheme = scheme) }
+}
+
 internal fun MainViewModel.testRootSetup() {
     viewModelScope.launch(Dispatchers.IO) {
         _uiState.update { it.copy(isTestingRootSetup = true) }
@@ -157,10 +169,41 @@ internal fun MainViewModel.dismissRootSetupTestResult() {
     _uiState.update { it.copy(rootSetupTestResult = null) }
 }
 
-/** 从 LSPosed 作用域拉取当前 Hook 的目标 App 列表，触发"确认重启应用"弹窗 */
+/** 从 LSPosed 作用域与系统级 Hook 目标应用拉取当前生效的目标 App 列表，触发"确认重启应用"弹窗 */
 
 internal fun MainViewModel.requestRestartHookedApps() {
-    val apps = lsposedManager.getHookedApps(context)
+    if (!BuildConfig.GLOBAL_SCHEME) {
+        _uiState.update { it.copy(hookedAppsToRestart = lsposedManager.getHookedApps(context)) }
+        return
+    }
+    val targetPackages = mutableSetOf<String>()
+    targetPackages.addAll(lsposedManager.getHookedApps(context).map { it.packageName })
+    targetPackages.addAll(settingsRepository.getSystemHookPackages())
+
+    val exempt = setOf(
+        context.packageName,
+        "android",
+        "system",
+        "system_server",
+        "com.android.systemui",
+        "com.android.phone",
+        "com.android.bluetooth",
+        "com.android.server.telecom",
+        "com.xiaomi.metoknlp",
+        "com.google.android.gms"
+    )
+    val pm = context.packageManager
+    val apps = targetPackages.filter { it.isNotBlank() && !exempt.contains(it) }.mapNotNull { pkg ->
+        try {
+            val info = pm.getApplicationInfo(pkg, 0)
+            val label = pm.getApplicationLabel(info).toString()
+            val isSystem = (info.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+            com.suseoaa.locationspoofer.data.model.AppInfoItem(pkg, label, isSystem)
+        } catch (_: Exception) {
+            com.suseoaa.locationspoofer.data.model.AppInfoItem(pkg, pkg, false)
+        }
+    }.sortedBy { it.appName }
+
     _uiState.update { it.copy(hookedAppsToRestart = apps) }
 }
 
@@ -424,6 +467,104 @@ internal fun MainViewModel.setAppCoordinateSystem(pkg: String, sys: String) {
                 if (SpoofingState.isRouteMode) parseRoutePoints(SpoofingState.routeJson) else emptyList(),
                 SpoofingState.isRouteMode,
                 currentMap
+            )
+        }
+    }
+}
+
+/** 进入"系统级模拟应用"选择页时按需加载全量已安装 App 列表 */
+internal fun MainViewModel.loadInstalledAppsForSystemHook() {
+    _uiState.update { it.copy(isLoadingInstalledApps = true) }
+    viewModelScope.launch(Dispatchers.IO) {
+        val apps = lsposedManager.getAllInstalledApps(context)
+        _uiState.update { it.copy(installedAppsForSystemHook = apps, isLoadingInstalledApps = false) }
+    }
+}
+
+internal fun MainViewModel.setSystemHookGlobalMode(enabled: Boolean) {
+    settingsRepository.isSystemHookGlobalMode = enabled
+    _uiState.update { it.copy(isSystemHookGlobalMode = enabled) }
+
+    if (_uiState.value.isSpoofingActive) {
+        viewModelScope.launch {
+            locationRepository.updateConfig(
+                SpoofingState.latitude,
+                SpoofingState.longitude,
+                SpoofingState.simMode,
+                SpoofingState.simBearing,
+                SpoofingState.startTimestamp,
+                if (SpoofingState.isRouteMode) parseRoutePoints(SpoofingState.routeJson) else emptyList(),
+                SpoofingState.isRouteMode,
+                _uiState.value.appCoordinateSystems
+            )
+        }
+    }
+}
+
+internal fun MainViewModel.selectAllUserAppsForSystemHook() {
+    val userAppPkgs = _uiState.value.installedAppsForSystemHook
+        .filter { !it.isSystem }
+        .map { it.packageName }
+        .toSet()
+    val newSet = _uiState.value.systemHookPackages + userAppPkgs
+    settingsRepository.setSystemHookPackages(newSet)
+    _uiState.update { it.copy(systemHookPackages = newSet) }
+
+    if (_uiState.value.isSpoofingActive) {
+        viewModelScope.launch {
+            locationRepository.updateConfig(
+                SpoofingState.latitude,
+                SpoofingState.longitude,
+                SpoofingState.simMode,
+                SpoofingState.simBearing,
+                SpoofingState.startTimestamp,
+                if (SpoofingState.isRouteMode) parseRoutePoints(SpoofingState.routeJson) else emptyList(),
+                SpoofingState.isRouteMode,
+                _uiState.value.appCoordinateSystems
+            )
+        }
+    }
+}
+
+internal fun MainViewModel.clearAllSystemHookApps() {
+    val emptySet = emptySet<String>()
+    settingsRepository.setSystemHookPackages(emptySet)
+    _uiState.update { it.copy(systemHookPackages = emptySet) }
+
+    if (_uiState.value.isSpoofingActive) {
+        viewModelScope.launch {
+            locationRepository.updateConfig(
+                SpoofingState.latitude,
+                SpoofingState.longitude,
+                SpoofingState.simMode,
+                SpoofingState.simBearing,
+                SpoofingState.startTimestamp,
+                if (SpoofingState.isRouteMode) parseRoutePoints(SpoofingState.routeJson) else emptyList(),
+                SpoofingState.isRouteMode,
+                _uiState.value.appCoordinateSystems
+            )
+        }
+    }
+}
+
+internal fun MainViewModel.setSystemHookPackageEnabled(pkg: String, enabled: Boolean) {
+    val currentSet = _uiState.value.systemHookPackages.toMutableSet()
+    if (enabled) currentSet.add(pkg) else currentSet.remove(pkg)
+    settingsRepository.setSystemHookPackages(currentSet)
+    _uiState.update { it.copy(systemHookPackages = currentSet) }
+
+    // 如果模拟处于开启状态，立即刷新配置文件让新的 system_hook_packages 生效
+    if (_uiState.value.isSpoofingActive) {
+        viewModelScope.launch {
+            locationRepository.updateConfig(
+                SpoofingState.latitude,
+                SpoofingState.longitude,
+                SpoofingState.simMode,
+                SpoofingState.simBearing,
+                SpoofingState.startTimestamp,
+                if (SpoofingState.isRouteMode) parseRoutePoints(SpoofingState.routeJson) else emptyList(),
+                SpoofingState.isRouteMode,
+                _uiState.value.appCoordinateSystems
             )
         }
     }

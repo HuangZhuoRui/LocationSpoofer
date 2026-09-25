@@ -268,27 +268,64 @@ internal fun LocationHooker.constructCellIdentityByType(
         }
 
         "NR" -> {
-            // Android 11+: (int pci, int tac, long nci, int[] bands, String mcc, String mnc, String alphaLong, String alphaShort) — 8 参数
-            tryNewInstance(pci, tacOrLac, ciOrCid.toLong(), IntArray(0), mccStr, mncStr, "", "")
-            // Android 12+: 10 参数
+            // Android 10: (int pci, int tac, int nrArfcn, String mcc, String mnc, long nci, String alphaLong, String alphaShort) — 8 参数
+            tryNewInstance(pci, tacOrLac, 0, mccStr, mncStr, ciOrCid.toLong(), "", "")
+            // Android 11+: (int pci, int tac, int nrArfcn, int[] bands, String mcc, String mnc, long nci, String alphaLong, String alphaShort, Collection additionalPlmns) — 10 参数
                 ?: tryNewInstance(
                     pci,
                     tacOrLac,
-                    ciOrCid.toLong(),
+                    0,
                     IntArray(0),
                     mccStr,
                     mncStr,
+                    ciOrCid.toLong(),
                     "",
                     "",
-                    emptyList<Any>(),
-                    null
+                    emptyList<Any>()
                 )
         }
 
         else -> null
     }
 
-    if (identity != null) return identity
+    val arraySetClass = XposedHelpers.findClassIfExists("android.util.ArraySet", clazz.classLoader)
+    val emptyPlmnSet: Any = if (arraySetClass != null) {
+        try {
+            XposedHelpers.newInstance(arraySetClass)
+        } catch (_: Throwable) {
+            java.util.Collections.emptySet<String>()
+        }
+    } else {
+        java.util.Collections.emptySet<String>()
+    }
+
+    fun sanitizeCellIdentity(target: Any) {
+        try {
+            val plmns = XposedHelpers.getObjectField(target, "mAdditionalPlmns")
+            if (plmns == null) {
+                XposedHelpers.setObjectField(target, "mAdditionalPlmns", emptyPlmnSet)
+            }
+        } catch (_: Throwable) {
+            try {
+                XposedHelpers.setObjectField(target, "mAdditionalPlmns", emptyPlmnSet)
+            } catch (_: Throwable) {}
+        }
+        try {
+            if (XposedHelpers.getObjectField(target, "mAlphaLong") == null) {
+                XposedHelpers.setObjectField(target, "mAlphaLong", "")
+            }
+        } catch (_: Throwable) {}
+        try {
+            if (XposedHelpers.getObjectField(target, "mAlphaShort") == null) {
+                XposedHelpers.setObjectField(target, "mAlphaShort", "")
+            }
+        } catch (_: Throwable) {}
+    }
+
+    if (identity != null) {
+        sanitizeCellIdentity(identity)
+        return identity
+    }
 
     // 阶段二：Unsafe.allocateInstance + 反射写字段
     // 字段初始值为 0（非 MAX_VALUE），避免 JIT 内联问题
@@ -400,6 +437,7 @@ internal fun LocationHooker.constructCellIdentityByType(
             }
         }
         XposedBridge.log("[LocationSpoofer][CellMock] Unsafe.allocateInstance succeeded for $type: CI=$ciOrCid, TAC=$tacOrLac")
+        sanitizeCellIdentity(obj)
         return obj
     } catch (e: Throwable) {
         XposedBridge.log("[LocationSpoofer][CellMock] Unsafe failed for $type: $e")
@@ -500,5 +538,6 @@ internal fun LocationHooker.constructCellIdentityByType(
         }
     }
     XposedBridge.log("[LocationSpoofer][CellMock] MinCtor fallback used for $type identity")
+    sanitizeCellIdentity(fallbackObj)
     return fallbackObj
 }

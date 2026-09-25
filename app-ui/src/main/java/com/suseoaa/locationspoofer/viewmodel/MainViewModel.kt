@@ -8,6 +8,7 @@ import com.suseoaa.locationspoofer.data.model.AppState
 import com.suseoaa.locationspoofer.data.model.AppMapType
 import com.suseoaa.locationspoofer.data.model.MapEngine
 import com.suseoaa.locationspoofer.data.model.RootSolution
+import com.suseoaa.locationspoofer.data.model.VendorScheme
 import com.suseoaa.locationspoofer.data.repository.LocationRepository
 import com.suseoaa.locationspoofer.data.repository.SettingsRepository
 import com.suseoaa.locationspoofer.data.repository.WifiRepository
@@ -57,11 +58,14 @@ class MainViewModel(
             } catch (e: Exception) {
                 RootSolution.AUTO
             },
+            vendorScheme = VendorScheme.fromId(settingsRepository.getVendorOverride()),
             savedLocations = settingsRepository.getSavedLocations(),
             savedRoutes = emptyList(), // 将由 Room Flow 填充
             currentLanguage = settingsRepository.getLanguage(),
             isLanguageSet = settingsRepository.isLanguageSet(),
             appCoordinateSystems = settingsRepository.getAppCoordinateSystems(),
+            systemHookPackages = settingsRepository.getSystemHookPackages(),
+            isSystemHookGlobalMode = settingsRepository.isSystemHookGlobalMode,
             mockWifi = settingsRepository.mockWifi,
             mockCell = settingsRepository.mockCell,
             mockBluetooth = settingsRepository.mockBluetooth,

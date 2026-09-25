@@ -87,6 +87,18 @@ object XposedHelpers {
         return field.get(obj)
     }
 
+    fun getIntField(obj: Any, fieldName: String): Int {
+        val field = findFieldInternal(obj.javaClass, fieldName)
+            ?: throw NoSuchFieldException(fieldName)
+        return field.getInt(obj)
+    }
+
+    fun getStaticObjectField(clazz: Class<*>, fieldName: String): Any? {
+        val field = findFieldInternal(clazz, fieldName)
+            ?: throw NoSuchFieldException(fieldName)
+        return field.get(null)
+    }
+
     fun setObjectField(obj: Any, fieldName: String, value: Any?) {
         val field = findFieldInternal(obj.javaClass, fieldName)
             ?: throw NoSuchFieldException(fieldName)
@@ -284,13 +296,13 @@ object XposedBridge {
             android.util.Log.e("LocationSpoofer", msg, t)
         } catch (_: Throwable) {}
     }
-    fun logOpenCellIdEvery(key: String, msg: String, intervalMs: Long = 10_000L) {
+    fun logOpenCellIdEvery(key: String, msg: String, intervalMs: Long = 5_000L) {
         val now = System.currentTimeMillis()
         val last = openCellLogLastTimes[key] ?: 0L
         if (now - last > intervalMs) {
             openCellLogLastTimes[key] = now
             try {
-                android.util.Log.d("LocationSpoofer", "[$key] $msg")
+                android.util.Log.i("LocationSpoofer", "[$key] $msg")
             } catch (_: Throwable) {}
         }
     }

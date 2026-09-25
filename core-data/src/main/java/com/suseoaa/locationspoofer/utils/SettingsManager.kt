@@ -2,6 +2,7 @@ package com.suseoaa.locationspoofer.utils
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.suseoaa.locationspoofer.data.BuildConfig
 import com.suseoaa.locationspoofer.data.model.RoutePoint
 import com.suseoaa.locationspoofer.data.model.SavedLocation
 import com.suseoaa.locationspoofer.data.model.SavedRoute
@@ -11,6 +12,24 @@ import org.json.JSONObject
 class SettingsManager(context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+
+    init {
+        // 自动升级迁移：
+        // 修复之前版本将 mockWifi / mockCell / mockBluetooth 错误绑定导致旧配置中被意外写入 false 的历史遗留问题。
+        // 在系统级 Hook 架构下，Wi-Fi、基站与蓝牙均由系统服务自动实时合成高拟真环境数据，
+        // 必须默认保持开启以彻底杜绝高德/阿里/抖音等通过物理 Wi-Fi BSSID 与基站反查真实位置。
+        // 同时确保系统级全局模拟模式（is_system_hook_global_mode）默认开启。
+        // 仅全局方案执行：非全局方案不改动用户已有的开关设置。
+        if (BuildConfig.GLOBAL_SCHEME && !prefs.getBoolean("mock_switches_migrated_v3", false)) {
+            prefs.edit()
+                .putBoolean("mock_wifi", true)
+                .putBoolean("mock_cell", true)
+                .putBoolean("mock_bluetooth", true)
+                .putBoolean("is_system_hook_global_mode", true)
+                .putBoolean("mock_switches_migrated_v3", true)
+                .apply()
+        }
+    }
 
     var isDarkMode: Boolean
         get() = prefs.getBoolean("is_dark_mode", true)
@@ -55,6 +74,11 @@ class SettingsManager(context: Context) {
     var rootSolution: String
         get() = prefs.getString("root_solution", "AUTO") ?: "AUTO"
         set(value) = prefs.edit().putString("root_solution", value).apply()
+
+    /** 用户在"厂商适配方案"设置页手动选中的 [com.suseoaa.locationspoofer.data.model.VendorScheme.id]；"auto" 表示走自动识别。 */
+    var vendorOverride: String
+        get() = prefs.getString("vendor_override", "auto") ?: "auto"
+        set(value) = prefs.edit().putString("vendor_override", value).apply()
 
     var ignoredVersion: String
         get() = prefs.getString("ignored_version", "") ?: ""
@@ -244,4 +268,30 @@ class SettingsManager(context: Context) {
         map.forEach { (k, v) -> jsonObj.put(k, v) }
         prefs.edit().putString("app_coordinate_systems", jsonObj.toString()).apply()
     }
+
+    /** system_server 级定位 Hook（实验性）里被勾选生效的目标 App 包名集合 */
+    fun getSystemHookPackages(): Set<String> {
+        val jsonString = prefs.getString("system_hook_packages", "[]") ?: "[]"
+        val set = mutableSetOf<String>()
+        try {
+            val jsonArray = JSONArray(jsonString)
+            for (i in 0 until jsonArray.length()) {
+                set.add(jsonArray.getString(i))
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return set
+    }
+
+    fun setSystemHookPackages(packages: Set<String>) {
+        val jsonArray = JSONArray()
+        packages.forEach { jsonArray.put(it) }
+        prefs.edit().putString("system_hook_packages", jsonArray.toString()).apply()
+    }
+
+    /** 是否开启全局模拟模式（除本应用与系统基础核心外对所有应用生效） */
+    var isSystemHookGlobalMode: Boolean
+        get() = prefs.getBoolean("is_system_hook_global_mode", true)
+        set(value) = prefs.edit().putBoolean("is_system_hook_global_mode", value).apply()
 }

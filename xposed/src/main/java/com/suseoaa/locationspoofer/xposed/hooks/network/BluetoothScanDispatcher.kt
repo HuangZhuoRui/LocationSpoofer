@@ -598,14 +598,25 @@ internal fun LocationHooker.dispatchScanResultToCallback(callback: Any, scanResu
         var c: Class<*>? = callback.javaClass
         while (c != null && c != Any::class.java) {
             for (m in c.declaredMethods) {
-                if (m.name == "onScanResult" && m.parameterCount == 2) {
-                    try {
-                        m.isAccessible = true
-                        m.invoke(callback, 1 /* CALLBACK_TYPE_ALL_MATCHES */, scanResultObj)
-                        dispatched = true
-                        break
-                    } catch (e: Throwable) {
-                        XposedBridge.log("[LocationSpoofer] dispatch onScanResult direct error: ${e.cause ?: e}")
+                if (m.name == "onScanResult") {
+                    if (m.parameterCount == 2) {
+                        try {
+                            m.isAccessible = true
+                            m.invoke(callback, 1 /* CALLBACK_TYPE_ALL_MATCHES */, scanResultObj)
+                            dispatched = true
+                            break
+                        } catch (e: Throwable) {
+                            XposedBridge.log("[LocationSpoofer] dispatch onScanResult (2-args) direct error: ${e.cause ?: e}")
+                        }
+                    } else if (m.parameterCount == 1) {
+                        try {
+                            m.isAccessible = true
+                            m.invoke(callback, scanResultObj)
+                            dispatched = true
+                            break
+                        } catch (e: Throwable) {
+                            XposedBridge.log("[LocationSpoofer] dispatch onScanResult (1-arg) direct error: ${e.cause ?: e}")
+                        }
                     }
                 }
             }
@@ -616,7 +627,12 @@ internal fun LocationHooker.dispatchScanResultToCallback(callback: Any, scanResu
             try {
                 XposedHelpers.callMethod(callback, "onScanResult", 1, scanResultObj)
                 dispatched = true
-            } catch (_: Throwable) {}
+            } catch (_: Throwable) {
+                try {
+                    XposedHelpers.callMethod(callback, "onScanResult", scanResultObj)
+                    dispatched = true
+                } catch (_: Throwable) {}
+            }
         }
         if (!dispatched) {
             try {

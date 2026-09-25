@@ -428,50 +428,12 @@ internal fun LocationHooker.buildFakeCellInfoList(
             } catch (e: Throwable) { /* 忽略 */
             }
 
-            // 构造CellIdentityLte并注入字段
-            val cellIdentity = try {
-                // Android 9+ 构造器: (int ci, int pci, int tac, int earfcn, ...mcc, mnc...)
-                XposedHelpers.newInstance(
-                    cellIdentityLteClass,
-                    mcc, mnc, ci, pci, tac
-                )
-            } catch (e: Throwable) {
-                // 降级: 用空构造器+反射写字段
-                val identity = XposedHelpers.newInstance(cellIdentityLteClass)
-                try {
-                    XposedHelpers.setIntField(identity, "mMcc", mcc)
-                } catch (e2: Throwable) {
-                }
-                try {
-                    XposedHelpers.setIntField(identity, "mMnc", mnc)
-                } catch (e2: Throwable) {
-                }
-                try {
-                    XposedHelpers.setObjectField(identity, "mMccStr", mcc.toString())
-                } catch (e2: Throwable) {
-                }
-                try {
-                    XposedHelpers.setObjectField(
-                        identity,
-                        "mMncStr",
-                        if (mnc < 10) "0$mnc" else mnc.toString()
-                    )
-                } catch (e2: Throwable) {
-                }
-                try {
-                    XposedHelpers.setIntField(identity, "mCi", ci)
-                } catch (e2: Throwable) {
-                }
-                try {
-                    XposedHelpers.setIntField(identity, "mPci", pci)
-                } catch (e2: Throwable) {
-                }
-                try {
-                    XposedHelpers.setIntField(identity, "mTac", tac)
-                } catch (e2: Throwable) {
-                }
-                identity
-            }
+            // 构造CellIdentityLte并注入字段（使用安全的 Unsafe/最小参数反射引擎）
+            val mccStr = mcc.toString()
+            val mncStr = if (mnc < 10) "0$mnc" else mnc.toString()
+            val cellIdentity = constructCellIdentityByType(
+                "LTE", cellIdentityLteClass, mcc, mccStr, mnc, mncStr, tac, ci, pci
+            )
 
             // 将CellIdentityLte写入CellInfoLte
             try {

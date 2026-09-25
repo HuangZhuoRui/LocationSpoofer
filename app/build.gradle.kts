@@ -49,6 +49,20 @@ android {
             }
         }
     }
+
+    // 模拟方案维度：scoped = 在 LSPosed 作用域里的目标 App 进程内 Hook；global = Hook system_server 等系统进程，对全设备生效。
+    // app / app-ui / core-data / xposed 四个模块必须声明完全相同的维度与 flavor，否则变体无法对齐。
+    flavorDimensions += "scheme"
+    productFlavors {
+        create("scoped") {
+            dimension = "scheme"
+            buildConfigField("boolean", "GLOBAL_SCHEME", "false")
+        }
+        create("global") {
+            dimension = "scheme"
+            buildConfigField("boolean", "GLOBAL_SCHEME", "true")
+        }
+    }
     signingConfigs {
         create("release") {
             val keystorePath = System.getenv("KEYSTORE_FILE_PATH")

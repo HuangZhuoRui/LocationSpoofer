@@ -119,7 +119,16 @@ jobs:
           if [ -z "$FEATS" ] && [ -z "$FIXES" ]; then
             echo "常规更新与优化" >> changelog.txt
           fi
-          
+
+          cat >> changelog.txt <<'NOTES'
+
+          ## 安装包说明
+          - `LocationSpoofer-scoped-*`：非全局方案，在 LSPosed 作用域中勾选需要模拟的应用
+          - `LocationSpoofer-global-*`：全局方案，作用域勾选系统框架、电话、蓝牙，对全设备生效
+          - 两个方案二选一安装；绝大多数设备选择 `arm64-v8a`，32 位设备选择 `armeabi-v7a`
+          - 各系统的适配进度见 [ADAPTATION_PROGRESS.md](${{ github.server_url }}/${{ github.repository }}/blob/main/ADAPTATION_PROGRESS.md)
+          NOTES
+
           cat changelog.txt
           
       - name: Setup Java
@@ -146,21 +155,38 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon :app:assembleRelease
+          # 两个模拟方案变体：scoped（非全局，Hook 目标 App 进程）与 global（全局，Hook 系统进程）。
+          # 必须分两次调用：同一次调用里并行打包多个变体 × ABI 拆分时，AGP 的 ApkFlinger 签名摘要任务
+          # 会和打包写文件任务抢占 ForkJoinPool 公共线程池而互相死锁（构建永久挂起、CPU 空闲）。
+          ./gradlew --no-daemon :app:assembleScopedRelease
+          ./gradlew --no-daemon :app:assembleGlobalRelease
 
-          # 重命名打包好的 APK，准备发布
-          APK_DIR="app/build/outputs/apk/release"
-          # 寻找构建出来的 apk 并重命名
-          find $APK_DIR -name "*.apk" -print0 | while IFS= read -r -d '' file; do
-            BASENAME=$(basename "$file")
-            if [[ "$BASENAME" == *"arm64-v8a"* ]]; then
-              mv "$file" "$APK_DIR/LocationSpoofer-arm64-v8a-${{ steps.check_version.outputs.tag }}.apk"
-            elif [[ "$BASENAME" == *"armeabi-v7a"* ]]; then
-              mv "$file" "$APK_DIR/LocationSpoofer-armeabi-v7a-${{ steps.check_version.outputs.tag }}.apk"
-            else
-              mv "$file" "$APK_DIR/LocationSpoofer-${{ steps.check_version.outputs.tag }}.apk"
-            fi
+          # 统一重命名为 LocationSpoofer-<scheme>-<abi>-<tag>.apk 收集到 dist 目录。
+          # App 内更新检查（UpdateViewModel.isAssetForCurrentScheme）依赖文件名里的 -<scheme>- 标记挑选对应方案的安装包。
+          TAG="${{ steps.check_version.outputs.tag }}"
+          DIST_DIR="app/build/outputs/apk/dist"
+          mkdir -p "$DIST_DIR"
+          for SCHEME in scoped global; do
+            APK_DIR="app/build/outputs/apk/$SCHEME/release"
+            find "$APK_DIR" -name "*.apk" -print0 | while IFS= read -r -d '' file; do
+              BASENAME=$(basename "$file")
+              if [[ "$BASENAME" == *"arm64-v8a"* ]]; then
+                mv "$file" "$DIST_DIR/LocationSpoofer-$SCHEME-arm64-v8a-$TAG.apk"
+              elif [[ "$BASENAME" == *"armeabi-v7a"* ]]; then
+                mv "$file" "$DIST_DIR/LocationSpoofer-$SCHEME-armeabi-v7a-$TAG.apk"
+              else
+                mv "$file" "$DIST_DIR/LocationSpoofer-$SCHEME-$TAG.apk"
+              fi
+            done
           done
+          ls -l "$DIST_DIR"
+
+          # 2 个方案 × 2 个 ABI，缺任何一个都不发版，避免发出只有单一方案的残缺 Release
+          APK_COUNT=$(find "$DIST_DIR" -name "LocationSpoofer-*.apk" | wc -l)
+          if [ "$APK_COUNT" -ne 4 ]; then
+            echo "错误：预期 4 个安装包（scoped/global × arm64-v8a/armeabi-v7a），实际 $APK_COUNT 个，终止发版。"
+            exit 1
+          fi
 
       - name: Publish GitHub Release
         if: steps.check_version.outputs.changed == 'true'
@@ -170,6 +196,6 @@ jobs:
           name: LocationSpoofer ${{ steps.check_version.outputs.tag }}
           body_path: changelog.txt
           prerelease: ${{ steps.check_version.outputs.is_prerelease == 'true' }}
-          files: app/build/outputs/apk/release/LocationSpoofer-*.apk
+          files: app/build/outputs/apk/dist/LocationSpoofer-*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

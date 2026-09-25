@@ -70,8 +70,10 @@ enum class MainSubScreen {
     MapEngineSettings,
     SignatureAuth,
     RootDiagnostics,
+    VendorScheme,
     BackgroundKeepAlive,
-    EnvTokens
+    EnvTokens,
+    SystemHookApps
 }
 
 @Composable
@@ -316,7 +318,8 @@ fun MainScaffoldScreen(
                                 currentSubScreen = MainSubScreen.CoordinateConfig
                             },
                             onNavigateToScanner = { currentSubScreen = MainSubScreen.ScannerMap },
-                            onNavigateToManageData = { currentSubScreen = MainSubScreen.ManageData }
+                            onNavigateToManageData = { currentSubScreen = MainSubScreen.ManageData },
+                            onNavigateToSystemHookApps = { currentSubScreen = MainSubScreen.SystemHookApps }
                         )
 
                         BottomTab.Info.ordinal -> com.suseoaa.locationspoofer.ui.screen.tabs.InfoTab(
@@ -329,6 +332,7 @@ fun MainScaffoldScreen(
                             onNavigateToMapEngine = { currentSubScreen = MainSubScreen.MapEngineSettings },
                             onNavigateToSignatureAuth = { currentSubScreen = MainSubScreen.SignatureAuth },
                             onNavigateToRootDiagnostics = { currentSubScreen = MainSubScreen.RootDiagnostics },
+                            onNavigateToVendorScheme = { currentSubScreen = MainSubScreen.VendorScheme },
                             onNavigateToBackgroundKeepAlive = { currentSubScreen = MainSubScreen.BackgroundKeepAlive },
                             onNavigateToEnvTokens = { currentSubScreen = MainSubScreen.EnvTokens }
                         )
@@ -411,6 +415,13 @@ fun MainScaffoldScreen(
                         onClose = { currentSubScreen = MainSubScreen.None }
                     )
 
+                    MainSubScreen.VendorScheme -> com.suseoaa.locationspoofer.ui.screen.settings.VendorSchemeScreen(
+                        viewModel = viewModel,
+                        uiState = uiState,
+                        isDark = isDark,
+                        onClose = { currentSubScreen = MainSubScreen.None }
+                    )
+
                     MainSubScreen.BackgroundKeepAlive -> com.suseoaa.locationspoofer.ui.screen.settings.BackgroundKeepAliveScreen(
                         viewModel = viewModel,
                         uiState = uiState,
@@ -423,6 +434,12 @@ fun MainScaffoldScreen(
                         uiState = uiState,
                         isDark = isDark,
                         onClose = { currentSubScreen = MainSubScreen.None }
+                    )
+
+                    MainSubScreen.SystemHookApps -> SystemHookAppsScreen(
+                        viewModel = viewModel,
+                        uiState = uiState,
+                        onBack = { currentSubScreen = MainSubScreen.None }
                     )
 
                     MainSubScreen.None -> Unit

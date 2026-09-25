@@ -1,5 +1,6 @@
 package com.suseoaa.locationspoofer.viewmodel
 
+import com.suseoaa.locationspoofer.ui.BuildConfig
 import androidx.lifecycle.viewModelScope
 import com.suseoaa.locationspoofer.ui.R
 import com.suseoaa.locationspoofer.data.db.LocationRecord
@@ -61,9 +62,9 @@ internal fun MainViewModel.startSpoofing() {
             updatedState.collectedWifiJson,
             updatedState.collectedCellJson,
             updatedState.collectedBluetoothJson,
-            updatedState.mockWifi && updatedState.canMockWifi,
+            updatedState.mockWifi && (BuildConfig.GLOBAL_SCHEME || updatedState.canMockWifi),
             updatedState.mockCell,
-            updatedState.mockBluetooth && updatedState.canMockBluetooth,
+            updatedState.mockBluetooth && (BuildConfig.GLOBAL_SCHEME || updatedState.canMockBluetooth),
             updatedState.enableJitter
         )
 
@@ -87,10 +88,38 @@ internal fun MainViewModel.startSpoofing() {
  */
 
 private suspend fun MainViewModel.restartHookedAppsSilently() {
-    val apps = lsposedManager.getHookedApps(context)
-    if (apps.isNotEmpty()) {
+    if (!BuildConfig.GLOBAL_SCHEME) {
+        // 非全局方案：重启 LSPosed 作用域里勾选的全部 App（包括承担融合定位的 GMS）
+        val apps = lsposedManager.getHookedApps(context)
+        if (apps.isNotEmpty()) {
+            locationRepository.checkRootAccess() // 重新下发 sepolicy 规则，确保重启后读到的是最新的
+            locationRepository.forceStopApps(apps.map { it.packageName })
+        }
+        return
+    }
+    val targetPackages = mutableSetOf<String>()
+    // 1. LSPosed 传统作用域勾选的应用
+    targetPackages.addAll(lsposedManager.getHookedApps(context).map { it.packageName })
+    // 2. 系统级 Hook 目标应用包名列表
+    targetPackages.addAll(settingsRepository.getSystemHookPackages())
+
+    // 严格排除系统核心组件、电话服务、SystemUI 与自身，避免误杀核心服务或导致自身退出
+    val exempt = setOf(
+        context.packageName,
+        "android",
+        "system",
+        "system_server",
+        "com.android.systemui",
+        "com.android.phone",
+        "com.android.bluetooth",
+        "com.android.server.telecom",
+        "com.xiaomi.metoknlp",
+        "com.google.android.gms"
+    )
+    val toKill = targetPackages.filter { it.isNotBlank() && !exempt.contains(it) }
+    if (toKill.isNotEmpty()) {
         locationRepository.checkRootAccess() // 重新下发 sepolicy 规则，确保重启后读到的是最新的
-        locationRepository.forceStopApps(apps.map { it.packageName })
+        locationRepository.forceStopApps(toKill)
     }
 }
 

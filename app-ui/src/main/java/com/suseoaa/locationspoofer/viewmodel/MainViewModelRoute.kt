@@ -1,5 +1,6 @@
 package com.suseoaa.locationspoofer.viewmodel
 
+import com.suseoaa.locationspoofer.ui.BuildConfig
 import java.util.Locale
 import androidx.lifecycle.viewModelScope
 import com.suseoaa.locationspoofer.ui.R
@@ -144,9 +145,9 @@ internal fun MainViewModel.confirmMapPoint(lat: Double, lng: Double, isDragging:
                 wifiJson = updatedState.collectedWifiJson,
                 cellJson = updatedState.collectedCellJson,
                 bluetoothJson = updatedState.collectedBluetoothJson,
-                mockWifi = updatedState.mockWifi && updatedState.canMockWifi,
+                mockWifi = updatedState.mockWifi && (BuildConfig.GLOBAL_SCHEME || updatedState.canMockWifi),
                 mockCell = updatedState.mockCell,
-                mockBluetooth = updatedState.mockBluetooth && updatedState.canMockBluetooth,
+                mockBluetooth = updatedState.mockBluetooth && (BuildConfig.GLOBAL_SCHEME || updatedState.canMockBluetooth),
                 enableJitter = updatedState.enableJitter
             )
         }

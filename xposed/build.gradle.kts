@@ -13,9 +13,26 @@ android {
         minSdk = 26
     }
 
+    // 与 app/build.gradle.kts 中的 scheme 维度保持一致。
+    // META-INF/xposed/scope.list 按 flavor 放在 src/scoped/resources 与 src/global/resources 下。
+    flavorDimensions += "scheme"
+    productFlavors {
+        create("scoped") {
+            dimension = "scheme"
+            buildConfigField("boolean", "GLOBAL_SCHEME", "false")
+        }
+        create("global") {
+            dimension = "scheme"
+            buildConfigField("boolean", "GLOBAL_SCHEME", "true")
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+    buildFeatures {
+        buildConfig = true
     }
 }
 

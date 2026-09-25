@@ -18,11 +18,13 @@ class LocationApp : Application(), XposedServiceHelper.OnServiceListener {
     override fun onCreate() {
         super.onCreate()
 
-        try {
-            XposedServiceHelper.registerListener(this)
-        } catch (e: Throwable) {
-            e.printStackTrace()
-        }
+        Thread {
+            try {
+                XposedServiceHelper.registerListener(this@LocationApp)
+            } catch (e: Throwable) {
+                e.printStackTrace()
+            }
+        }.start()
 
         val prefs = getSharedPreferences("app_settings", MODE_PRIVATE)
         MapsInitializer.updatePrivacyShow(this, true, true)
@@ -66,6 +68,15 @@ class LocationApp : Application(), XposedServiceHelper.OnServiceListener {
             androidContext(this@LocationApp)
             modules(appModules)
         }
+
+        Thread {
+            try {
+                val configManager: com.suseoaa.locationspoofer.utils.ConfigManager by org.koin.java.KoinJavaComponent.inject(
+                    com.suseoaa.locationspoofer.utils.ConfigManager::class.java
+                )
+                configManager.syncDomainConfigs()
+            } catch (_: Throwable) {}
+        }.start()
     }
 
     override fun onServiceBind(service: XposedService) {

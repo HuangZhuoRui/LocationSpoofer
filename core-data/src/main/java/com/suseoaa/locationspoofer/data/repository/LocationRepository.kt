@@ -109,6 +109,12 @@ class LocationRepository(
         SpoofingState.isRouteMode = isRouteMode
         SpoofingState.enableJitter = enableJitter
 
+        // 与 stopSpoofing() 里的 revokeMockLocation() 对称：上一次停止模拟时会把
+        // android:mock_location 重置为 default（用于避免被系统安全中心一直记录为"模拟中"），
+        // 如果这里不重新授予，第二次开始模拟时该 AppOps 就会一直停留在 default，
+        // 导致"模拟一次后关闭再开就再也无法模拟"。
+        rootManager.grantMockLocation()
+
         val alt = settingsManager.altitude.toDoubleOrNull() ?: 0.0
         val satCount = settingsManager.satelliteCount.toIntOrNull() ?: 20
         configManager.saveConfig(
