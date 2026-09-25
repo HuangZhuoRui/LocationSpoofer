@@ -40,7 +40,7 @@
         
         <meta-data
             android:name="com.amap.api.v2.apikey"
-            android:value="5b24b0b05cec9290b712ddc749d86661" />
+            android:value="bdd6ae6c613b2a45b5583197f565423b" />
         
         <meta-data
             android:name="com.google.android.geo.API_KEY"
@@ -48,7 +48,7 @@
 
         <meta-data
             android:name="com.baidu.lbsapi.API_KEY"
-            android:value="EdHJttwnB21sc9FWEUxGmvEHOhlFJyyt" />
+            android:value="Io41bNEhfVx3CCsud5jjrft3UOpeh2WF" />
         
         <activity
             android:name=".MainActivity"

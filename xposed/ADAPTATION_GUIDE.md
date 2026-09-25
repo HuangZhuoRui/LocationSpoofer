@@ -19,7 +19,7 @@
 
 本项目 Hook 的对象——`LocationManagerService`、`WifiServiceImpl`、`PhoneInterfaceManager`、`ConnectivityService`、`AppOpsService`、`TelephonyRegistry`……——全部是 **`system_server` 进程内部的实现类**，不是 Android SDK 对外暴露的公共 API。这意味着：
 
-* 它们**没有版本兼容承诺**。Google 每个 Android 大版本都可能重命名、拆分、合并这些类，或者把它们的返回类型从裸的 `List<T>` 换成 `ParceledListSlice<T>`（`getScanResults` 就是活生生的例子，见 [SystemWifiServiceHooker.kt](src/main/java/com/suseoaa/locationspoofer/xposed/hooks/SystemWifiServiceHooker.kt) 里的返回类型反射判断）。
+* 它们**没有版本兼容承诺**。Google 每个 Android 大版本都可能重命名、拆分、合并这些类，或者把它们的返回类型从裸的 `List<T>` 换成 `ParceledListSlice<T>`（`getScanResults` 就是活生生的例子，见 [SystemWifiServiceHooker.kt](src/main/java/com/vincenthzr/locationspoofer/xposed/hooks/SystemWifiServiceHooker.kt) 里的返回类型反射判断）。
 * Android 12 起，部分系统服务（Wi-Fi、Connectivity 等）被搬进了 **APEX 模块**（`com.android.wifi`、`com.android.tethering` 等），运行在独立的 ClassLoader 里，`system_server` 的默认 ClassLoader 根本 `Class.forName` 不到它们。
 * **小米 HyperOS/MIUI、ColorOS、EMUI/HarmonyOS(套壳安卓的版本)** 这些定制 ROM，会在 AOSP 实现基础上插入自己的中间层、重写方法逻辑，甚至换掉整个实现类。同一个 Android 13，不同厂商的 `LocationManagerService` 内部字段名可能都不一样。
 
@@ -74,7 +74,7 @@ adb shell dumpsys package android      # 查看 framework 包的版本/签名信
 
 ### 方法四：项目里已有的"多候选名 + ClassLoader 扫描 + addService 拦截"三重兜底
 
-对于 APEX 模块化、或者初始化时机不确定的服务，本项目已经沉淀了一套通用兜底模式，新写 Hook 时应该直接复用这个模式，而不是自己发明新写法。以 [SystemWifiServiceHooker.kt](src/main/java/com/suseoaa/locationspoofer/xposed/hooks/SystemWifiServiceHooker.kt) 里的 `findWifiServiceClass` / `findConnectivityServiceClass` 为例，思路分三层：
+对于 APEX 模块化、或者初始化时机不确定的服务，本项目已经沉淀了一套通用兜底模式，新写 Hook 时应该直接复用这个模式，而不是自己发明新写法。以 [SystemWifiServiceHooker.kt](src/main/java/com/vincenthzr/locationspoofer/xposed/hooks/SystemWifiServiceHooker.kt) 里的 `findWifiServiceClass` / `findConnectivityServiceClass` 为例，思路分三层：
 
 1. **直接 `findClassIfExists`**：先假设是最常见的情况，用几个已知候选类名直接尝试加载；
 2. **扫描所有活跃线程的 `contextClassLoader`**：APEX 模块的类通常挂在专属 Handler 线程（比如 `WifiHandlerThread`）的 ClassLoader 上，遍历 `Thread.getAllStackTraces().keys`，按线程名关键字筛出可能相关的线程，从它们的 ClassLoader 里再找一次；也可以检查 `com.android.server.LocalServices` 的 `sLocalServiceObjects` 静态字段，里面登记了所有 "LocalService" 的运行时实例，直接从实例反查 `.javaClass.classLoader`；
@@ -100,20 +100,20 @@ adb shell dumpsys package android      # 查看 framework 包的版本/签名信
 
 ## 按厂商 / 系统版本分包：vendor 适配框架
 
-上面讲的都是"怎么找到目标类"，找到之后**别把各家的类名/差异堆进同一个 Hook 函数里**——项目已经内置了一套适配框架，位于 [`hooks/vendor/`](src/main/java/com/suseoaa/locationspoofer/xposed/hooks/vendor/)，专门收纳这些差异。
+上面讲的都是"怎么找到目标类"，找到之后**别把各家的类名/差异堆进同一个 Hook 函数里**——项目已经内置了一套适配框架，位于 [`hooks/vendor/`](src/main/java/com/vincenthzr/locationspoofer/xposed/hooks/vendor/)，专门收纳这些差异。
 
 适配粒度只分两层：**厂商**（是不是小米/HyperOS、OPPO/ColorOS……）和**系统大版本**（同一厂商内跨大版本更新，比如 HyperOS 3 升到 HyperOS 4）。不按具体机型（市场型号）分——同厂商子品牌/旗舰机型通常共用同一套系统，差异很小，没必要为每个机型单开文件。
 
 核心用法一句话：共享 Hook 代码在查找系统服务类时先问 `VendorRegistry.resolveClass(组件, classLoader)`，未命中再回落自己原有逻辑；各厂商的类名候选/定制逻辑写在 `vendor/profiles/` 下各自的 `object` 里，某厂商内需要跨版本区分时再在 `vendor/profiles/versions/` 下加一个继承 `SystemVersionVendor` 的适配器覆盖差异部分。新增一个厂商或版本只需加一个文件 + 在 `VendorRegistry.ALL` 注册，**不用动任何共享 Hook 代码**。
 
-详细的架构说明、三个扩展点（`classCandidates` / `additionalExemptPackages` / `installExtraHooks`）的取舍、以及"如何新增厂商适配器 / 系统版本适配器"的完整步骤，见该包内的 [`README.md`](src/main/java/com/suseoaa/locationspoofer/xposed/hooks/vendor/README.md)。所以本文方法一~五定位到的差异，最终都应该落到对应的 vendor 适配器里，而不是散落在各个 `SystemXxxHooker` 中。
+详细的架构说明、三个扩展点（`classCandidates` / `additionalExemptPackages` / `installExtraHooks`）的取舍、以及"如何新增厂商适配器 / 系统版本适配器"的完整步骤，见该包内的 [`README.md`](src/main/java/com/vincenthzr/locationspoofer/xposed/hooks/vendor/README.md)。所以本文方法一~五定位到的差异，最终都应该落到对应的 vendor 适配器里，而不是散落在各个 `SystemXxxHooker` 中。
 
 ---
 
 ## OEM 定制 ROM 的特殊坑
 
 * **小米 HyperOS / MIUI**：会在系统定位、Wi-Fi、AppOps 等服务里插入自己的风控/检测逻辑（对应本项目 `AntiDetectionHooker.kt`、`SystemAppOpsHooker.kt` 里专门处理的部分），排查时除了看 AOSP 对应类，还要留意 `com.miui.*`、`com.xiaomi.*` 包名下有没有相关的辅助类参与了判断。
-* **SELinux 域名因方案而异**：不同 Root 方案（Magisk / APatch / KernelSU 及其分支）打 sepolicy 补丁用的工具、参数语法、以及内核里实际存在的域名/属性都可能不同（比如某些定制内核压根没有某个 `untrusted_app_*` 变体）。参考 [RootManager.kt](../core-data/src/main/java/com/suseoaa/locationspoofer/utils/RootManager.kt) 里 `TOOL_CANDIDATES` 按方案分组、`SEPOLICY_READ_DOMAINS` 拆成单条 `allow` 语句分别下发再统计成功率的写法——新增域名或适配新方案时延续这个"分组探测、单条容错"的模式，不要写成一条大杂烩规则一次性下发。
+* **SELinux 域名因方案而异**：不同 Root 方案（Magisk / APatch / KernelSU 及其分支）打 sepolicy 补丁用的工具、参数语法、以及内核里实际存在的域名/属性都可能不同（比如某些定制内核压根没有某个 `untrusted_app_*` 变体）。参考 [RootManager.kt](../core-data/src/main/java/com/vincenthzr/locationspoofer/utils/RootManager.kt) 里 `TOOL_CANDIDATES` 按方案分组、`SEPOLICY_READ_DOMAINS` 拆成单条 `allow` 语句分别下发再统计成功率的写法——新增域名或适配新方案时延续这个"分组探测、单条容错"的模式，不要写成一条大杂烩规则一次性下发。
 * **APEX 模块版本漂移**：同一 Android 大版本号下，不同设备的 Google Play 系统更新（Project Mainline）可能已经把 APEX 模块升级到了不同的小版本，AOSP 源码 tag 对应的 APEX 代码不一定和真机完全一致，遇到诡异的方法签名不匹配问题时，优先信真机反编译结果，不要迷信源码 tag。
 
 ---

@@ -7,7 +7,7 @@
 -keep interface de.robv.android.xposed.** { *; }
 -keep class io.github.libxposed.** { *; }
 -keep interface io.github.libxposed.** { *; }
--keep class com.suseoaa.locationspoofer.xposed.** { *; }
+-keep class com.vincenthzr.locationspoofer.xposed.** { *; }
 # libxposed-api 在 :xposed 模块里是 compileOnly（由 LSPosed 框架在运行时提供，不打进 APK），
 # compileOnly 依赖不会传递给依赖方 :app 的 R8，所以这里需要显式 -dontwarn 而不是仅靠 -keep。
 -dontwarn io.github.libxposed.api.**
@@ -39,11 +39,11 @@
 }
 
 # Models / Utils
--keep class com.suseoaa.locationspoofer.utils.ConfigManager { *; }
--keep class com.suseoaa.locationspoofer.utils.LSPosedManager { *; }
--keep class com.suseoaa.locationspoofer.provider.** { *; }
--keep class com.suseoaa.locationspoofer.data.** { *; }
--keepclassmembers class com.suseoaa.locationspoofer.data.** { *; }
+-keep class com.vincenthzr.locationspoofer.utils.ConfigManager { *; }
+-keep class com.vincenthzr.locationspoofer.utils.LSPosedManager { *; }
+-keep class com.vincenthzr.locationspoofer.provider.** { *; }
+-keep class com.vincenthzr.locationspoofer.data.** { *; }
+-keepclassmembers class com.vincenthzr.locationspoofer.data.** { *; }
 
 # General safety for Android lifecycle
 -keep class * extends android.app.Application { *; }

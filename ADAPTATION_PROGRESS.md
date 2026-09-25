@@ -4,7 +4,7 @@
 只登记在真机上实际测过的结果，没测过的一律写"未验证"，不要凭推测填写。
 
 - 两个方案的区别见 Release 说明：`scoped` = 非全局（Hook 作用域内的目标 App），`global` = 全局（Hook 系统进程）。
-- 全局方案按系统走不同的适配器，架构说明见 [vendor/README.md](xposed/src/main/java/com/suseoaa/locationspoofer/xposed/hooks/vendor/README.md)，
+- 全局方案按系统走不同的适配器，架构说明见 [vendor/README.md](xposed/src/main/java/com/vincenthzr/locationspoofer/xposed/hooks/vendor/README.md)，
   如何定位系统接口见 [ADAPTATION_GUIDE.md](xposed/ADAPTATION_GUIDE.md)。
 
 **状态说明**：✅ 实测通过 · ⚠️ 部分可用（见备注） · ❌ 实测不可用 · ❔ 未验证

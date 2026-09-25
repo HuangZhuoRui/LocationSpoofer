@@ -113,7 +113,7 @@ LocationSpoofer 基于 **MVVM + Clean Architecture** 构建，代码按职责拆
 * **依赖注入**：Koin。按模块拆分为 `coreDataModule`（`core-data`）、`serviceModule`（`service`）、`viewModelModule`（`app-ui`），由 `app` 模块的 `appModules`（`List<Module>`）统一聚合并在 `LocationApp.onCreate()` 中 `startKoin`。新增可注入类型时，在对应模块的 `di/XxxModule.kt` 里补充绑定，不要绕开 DI 手动 `new`。
 * **本地存储**：Room Database（SQLite，位于 `core-data`），涉及空间查询的部分需配备空间索引优化。
 * **Xposed Hook 核心层**：
-  * 位于 `xposed` 模块的 `com.suseoaa.locationspoofer.xposed` 包，入口类 `LocationHooker`；具体 Hook 实现按类型拆分在 `hooks/`（定位/GNSS/地图 SDK/计步/反检测）与 `hooks/network/`（Wi-Fi/基站/蓝牙/连接状态）两个子包，新增 Hook 时优先归类到已有子包，而不是堆到 `xposed` 根包或 `LocationHooker.kt` 里。
+  * 位于 `xposed` 模块的 `com.vincenthzr.locationspoofer.xposed` 包，入口类 `LocationHooker`；具体 Hook 实现按类型拆分在 `hooks/`（定位/GNSS/地图 SDK/计步/反检测）与 `hooks/network/`（Wi-Fi/基站/蓝牙/连接状态）两个子包，新增 Hook 时优先归类到已有子包，而不是堆到 `xposed` 根包或 `LocationHooker.kt` 里。
   * 严格遵循 **LSPosed API 101+ / libxposed (Service 模式)** 规范。
   * 高频 Hook 线程 0-IO 原则：`LocationHooker` 内置后台守护线程按调用方 UID 轮询多份配置文件路径（默认 1000ms，读取失败时退避到 10s/60s）写入内存缓存，Hook 方法只从内存直读，不做任何同步 IO。
   * 跨进程配置传递不使用 `ContentProvider`（Android 11+ 包可见性下会卡死主线程），而是由 `core-data` 的 `ConfigManager` 以 Root 权限把 JSON 配置同时写入 `/data/local/tmp/`、`/data/system/`、应用私有目录三份路径，权限收紧为 `644`，并由 `RootManager` 动态注入专属 SELinux 类型（而非笼统的 `shell_data_file`）按需授权，不要为了图省事退回到 `777` 或复用通用 SELinux 类型。

@@ -1,5 +1,6 @@
 @file:Suppress("DEPRECATION")
 
+import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -9,7 +10,7 @@ plugins {
 }
 
 android {
-    namespace = "com.suseoaa.locationspoofer"
+    namespace = "com.vincenthzr.locationspoofer"
     compileSdk = 37
 
     fun getLocalConfig(key: String): String? {
@@ -28,7 +29,7 @@ android {
         System.getenv("GOOGLE_MAPS_API_KEY") ?: getLocalConfig("GOOGLE_MAPS_API_KEY") ?: ""
 
     defaultConfig {
-        applicationId = "com.suseoaa.locationspoofer"
+        applicationId = "com.vincenthzr.locationspoofer"
         minSdk = 26
         targetSdk = 37
         versionCode = providers.gradleProperty("APP_VERSION_CODE").get().toInt()
@@ -63,22 +64,36 @@ android {
             buildConfigField("boolean", "GLOBAL_SCHEME", "true")
         }
     }
+
+    // CI 用环境变量（见 .github/workflows/release.yml），本地用仓库根目录的 keystore.properties（已被 gitignore）
+    val keystoreProps = Properties().apply {
+        val f = rootProject.file("keystore.properties")
+        if (f.exists()) f.inputStream().use { load(it) }
+    }
+    fun signingValue(env: String, prop: String): String? =
+        System.getenv(env)?.takeIf { it.isNotBlank() } ?: keystoreProps.getProperty(prop)?.takeIf { it.isNotBlank() }
+
+    val keystorePath = signingValue("KEYSTORE_FILE_PATH", "storeFile")
+    val hasReleaseKeystore = keystorePath != null && file(keystorePath).exists()
+
     signingConfigs {
         create("release") {
-            val keystorePath = System.getenv("KEYSTORE_FILE_PATH")
-                ?: "/Users/vincent/Desktop/SUSE-APP-Key/APP-Key.jks"
-            if (file(keystorePath).exists()) {
-                storeFile = file(keystorePath)
-                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "LinuxisUbuntu18"
-                keyAlias = System.getenv("KEY_ALIAS") ?: "suse-app-key"
-                keyPassword = System.getenv("KEY_PASSWORD") ?: "LinuxisUbuntu18"
+            if (hasReleaseKeystore) {
+                storeFile = file(keystorePath!!)
+                storePassword = signingValue("KEYSTORE_PASSWORD", "storePassword")
+                keyAlias = signingValue("KEY_ALIAS", "keyAlias")
+                keyPassword = signingValue("KEY_PASSWORD", "keyPassword")
             }
+            // v3 为以后的密钥轮换（lineage）预留；API 26–27 设备仍按 v2 校验，所以 v2 保持开启
+            enableV2Signing = true
+            enableV3Signing = true
         }
     }
 
     buildTypes {
         debug {
-            signingConfig = signingConfigs.getByName("release")
+            // 没配置发布密钥时回退到 debug 签名，保证新克隆仓库的人也能直接编译调试
+            signingConfig = signingConfigs.getByName(if (hasReleaseKeystore) "release" else "debug")
             buildConfigField("String", "GOOGLE_MAPS_API_KEY", "\"$googleMapsApiKey\"")
         }
         release {
