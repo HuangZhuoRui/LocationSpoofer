@@ -6,6 +6,7 @@ import java.util.Locale
 import androidx.lifecycle.viewModelScope
 import com.vincenthzr.locationspoofer.ui.R
 import com.vincenthzr.locationspoofer.data.model.RoutePoint
+import com.vincenthzr.locationspoofer.utils.AltitudeModel
 import com.vincenthzr.locationspoofer.data.model.RoutePlanStage
 import com.vincenthzr.locationspoofer.data.model.AppMapType
 import com.vincenthzr.locationspoofer.data.model.MapEngine
@@ -343,6 +344,12 @@ fun MainViewModel.getSavedLanguage(): String = settingsRepository.getLanguage()
 internal fun MainViewModel.setAltitude(altitude: String) {
     settingsRepository.altitude = altitude
     _uiState.update { it.copy(altitudeInput = altitude) }
+}
+
+internal fun MainViewModel.setAltitudeVariation(meters: Int) {
+    val value = meters.coerceIn(0, AltitudeModel.MAX_VARIATION_M)
+    settingsRepository.altitudeVariationM = value
+    _uiState.update { it.copy(altitudeVariationM = value) }
 }
 
 internal fun MainViewModel.setSatelliteCount(count: String) {

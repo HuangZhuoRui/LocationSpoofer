@@ -137,33 +137,24 @@ internal fun MainViewModel.stopSpoofing() {
     }
 }
 
-/** 打开 / 关闭悬浮摇杆 */
-internal fun MainViewModel.toggleFloatingJoystick() {
-    setFloatingJoystickVisible(!locationRepository.isFloatingJoystickShowing)
-}
-
 /**
- * 显示 / 关闭悬浮摇杆。还没有"显示在其他应用上层"权限时跳到系统授权页并返回 false，
- * 用户授权回来后需要再触发一次。
+ * 悬浮摇杆只服务于"摇杆手动控制"的路线模拟，没有"显示在其他应用上层"权限时无法操作。
+ * 缺权限时提示并跳到系统授权页，返回 false，由调用方放弃这次启动；用户授权回来后重新开始即可。
  */
-internal fun MainViewModel.setFloatingJoystickVisible(visible: Boolean): Boolean {
-    if (visible == locationRepository.isFloatingJoystickShowing) return true
-    if (visible && !android.provider.Settings.canDrawOverlays(context)) {
-        android.widget.Toast.makeText(
-            context,
-            context.getString(R.string.overlay_permission_required),
-            android.widget.Toast.LENGTH_LONG
-        ).show()
-        context.startActivity(
-            android.content.Intent(
-                android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                android.net.Uri.parse("package:${context.packageName}")
-            ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
-        return false
-    }
-    locationRepository.setFloatingJoystickVisible(context, visible)
-    return true
+internal fun MainViewModel.ensureOverlayPermission(): Boolean {
+    if (android.provider.Settings.canDrawOverlays(context)) return true
+    android.widget.Toast.makeText(
+        context,
+        context.getString(R.string.overlay_permission_required),
+        android.widget.Toast.LENGTH_LONG
+    ).show()
+    context.startActivity(
+        android.content.Intent(
+            android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            android.net.Uri.parse("package:${context.packageName}")
+        ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    )
+    return false
 }
 
 // 路线规划状态机

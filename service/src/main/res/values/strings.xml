@@ -4,7 +4,6 @@
     <string name="spoofing_service_content">Spoofing location: %1$s, %2$s</string>
     <string name="spoofing_service_channel_name">Location Spoofer Service</string>
     <string name="spoofing_bg_notification_title">Location Spoofing Background Notification</string>
-    <string name="close_joystick">Close Joystick</string>
     <string name="floating_joystick_title">Joystick</string>
     <string name="fj_collapse">Collapse</string>
     <string name="fj_preset_walking">Walk</string>

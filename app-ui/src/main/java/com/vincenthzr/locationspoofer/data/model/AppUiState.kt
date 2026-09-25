@@ -3,6 +3,7 @@ package com.vincenthzr.locationspoofer.data.model
 import androidx.annotation.StringRes
 import com.vincenthzr.locationspoofer.ui.R
 import com.vincenthzr.locationspoofer.utils.GaitTemplate
+import com.vincenthzr.locationspoofer.utils.AltitudeModel
 import com.vincenthzr.locationspoofer.utils.MotionRealism
 
 enum class WifiLoadStatus { IDLE, LOADING, DONE }
@@ -149,6 +150,7 @@ data class AppState(
     val enableJitter: Boolean = true,
     val restartAppsOnSpoof: Boolean = true,
     val altitudeInput: String = "0.0",
+    val altitudeVariationM: Int = AltitudeModel.DEFAULT_VARIATION_M,
     val satelliteCountInput: String = "20",
     val canMockWifi: Boolean = false,
     val canMockCell: Boolean = false,

@@ -199,6 +199,8 @@ internal fun MainViewModel.startRoutePlanning() {
         return
     }
     if (state.routePoints.size < 2) return
+    // 手动模式完全靠悬浮摇杆操作，没有悬浮窗权限就不启动，免得路线停在起点无法控制
+    if (state.routeRunMode == RouteRunMode.MANUAL && !ensureOverlayPermission()) return
 
     if (state.useRealRoute) {
         _uiState.update { it.copy(isFetchingRoute = true) }
@@ -353,11 +355,8 @@ private fun MainViewModel.startSimulationWithPoints(pointsToRun: List<RoutePoint
         val preset = MotionController.SpeedPreset(_uiState.value.routeSimMode.name, joystickMaxSpeedMs().toDouble())
         // 手动模式同样加载路线，只是以暂停状态开始、由悬浮摇杆控制，点"开始"后沿路线前进
         motionController.onRouteStarted(pointsToRun, preset, _uiState.value.stopAtDestination, now, startPaused = !isLoop)
-        if (!isLoop) {
-            // 手动模式只能用悬浮摇杆操作；记下是自动打开的，停止路线时一并关掉
-            val alreadyShowing = locationRepository.isFloatingJoystickShowing
-            floatingJoystickOpenedForRoute = !alreadyShowing && setFloatingJoystickVisible(true)
-        }
+        // 悬浮摇杆只在手动模式下出现；停止模拟后它会随 MotionController 结束会话自行关闭
+        if (!isLoop) locationRepository.setFloatingJoystickVisible(context, true)
         _uiState.update {
             it.copy(isSpoofingActive = true)
         }
@@ -381,10 +380,6 @@ internal fun MainViewModel.stopRoutePlanning() {
     locationSyncJob?.cancel()
     locationSyncJob = null
     motionController.onStopped()
-    if (floatingJoystickOpenedForRoute) {
-        setFloatingJoystickVisible(false)
-        floatingJoystickOpenedForRoute = false
-    }
     viewModelScope.launch {
         locationRepository.stopSpoofing(context)
         _uiState.update {

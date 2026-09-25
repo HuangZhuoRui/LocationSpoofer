@@ -236,6 +236,7 @@ data class ExportedSettings(
     val mockBluetooth: Boolean = true,
     val enableJitter: Boolean = true,
     val altitude: String = "",
+    val altitudeVariationM: Int? = null,
     val satelliteCount: String = "",
     val mapType: String = "",
     val mapEngine: String = ""

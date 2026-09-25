@@ -161,6 +161,7 @@ class ConfigManager(private val context: Context, private val rootManager: RootM
         json.put("realism_level", SpoofingState.realismLevel.takeIf { it >= 0 } ?: settingsManager.realismLevel)
         json.put("speed_fluctuation_pct", SpoofingState.speedFluctuationPct.takeIf { it >= 0 } ?: settingsManager.speedFluctuationPct)
         json.put("gait_template", if (settingsManager.useGaitTemplate) settingsManager.gaitTemplate else "")
+        json.put("altitude_variation_m", settingsManager.altitudeVariationM)
     }
 
     private fun refreshGeocodeIfMoved(lat: Double, lng: Double) {

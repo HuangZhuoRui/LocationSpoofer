@@ -425,6 +425,13 @@
     <string name="saved_locations_count_format">%d favorite locations saved</string>
     <string name="map_save_location_hint">Select point on map and tap Save to bookmark places</string>
     <string name="altitude_meter">Altitude (meters)</string>
+    <string name="altitude_simulation">Altitude</string>
+    <string name="altitude_fixed_value">Fixed %1$s m</string>
+    <string name="altitude_range_value">%1$s – %2$s m</string>
+    <string name="altitude_variation">Variation</string>
+    <string name="altitude_variation_off">Fixed</string>
+    <string name="altitude_variation_value">±%1$d m</string>
+    <string name="altitude_variation_desc">Rises and falls gently like terrain: the same spot always has the same altitude and slopes stay under 8%, so larger ranges change more gradually</string>
     <string name="satellite_count">Satellite Count</string>
     <string name="tag_bluetooth">Bluetooth</string>
     <string name="tag_cell">Cell</string>

@@ -1,5 +1,6 @@
 package com.vincenthzr.locationspoofer.xposed.utils
 
+import com.vincenthzr.locationspoofer.utils.AltitudeModel
 import com.vincenthzr.locationspoofer.utils.CoordinateUtils.LatLng
 import com.vincenthzr.locationspoofer.utils.GeoMath
 import com.vincenthzr.locationspoofer.utils.MotionRealism
@@ -83,12 +84,17 @@ object RouteEngine {
         return SpoofedMotion(pos.lat, pos.lng, pos.bearing, currentSpeed)
     }
 
-    /** 设置的海拔叠加随时间缓慢漂移的起伏（幅度由随机强度决定），各进程对同一时刻给出一致的值 */
+    /**
+     * 当前位置的海拔：基准海拔 ± 变化范围内随地形起伏，叠加随机强度对应的缓慢漂移（见 [AltitudeModel]），
+     * 各进程对同一时刻给出一致的值。旧版配置没有变化范围字段时，按随机强度的漂移幅度处理。
+     */
     fun realisticAltitude(config: JSONObject, now: Long = System.currentTimeMillis()): Double {
         val base = config.optDouble("altitude", 25.0)
-        val start = config.optLong("start_timestamp", 0L)
-        if (start <= 0L) return base
-        return realismSession(config, start).altitude(base, (now - start).coerceAtLeast(0L) / 1000.0)
+        val drift = MotionRealism.Level.fromId(config.optInt("realism_level", MotionRealism.Level.OFF.id)).altitudeAmplitudeM
+        val variation = config.optDouble("altitude_variation_m", drift)
+        if (variation <= 0.0) return base
+        val pos = calculateCurrentPosition(config, now)
+        return AltitudeModel.altitude(base, variation, drift, pos.lat, pos.lng, now)
     }
 
     /** 配置里缺少真实度字段（旧版 App 写的配置）时按"关闭 + 不浮动"处理，行为与旧版一致 */

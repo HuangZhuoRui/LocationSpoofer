@@ -17,7 +17,6 @@ class MotionRealismTest {
         assertEquals(3.0 * 125.0, s.distance(3.0, 125.0), 1e-9)
         assertEquals(3.0, s.speed(3.0, 125.0), 1e-12)
         assertEquals(165.0 / 60.0 * 125.0, s.steps(165.0, 125.0), 1e-9)
-        assertEquals(42.0, s.altitude(42.0, 125.0), 0.0)
     }
 
     @Test
@@ -61,14 +60,6 @@ class MotionRealismTest {
         }
         assertTrue(maxCadence - minCadence > 5)
         assertTrue(minCadence > 170 * 0.85 && maxCadence < 170 * 1.15)
-    }
-
-    @Test
-    fun `altitude drifts within the level amplitude`() {
-        val s = MotionRealism.Session(start, MotionRealism.Level.HIGH, 0)
-        val values = (0..3600 step 10).map { s.altitude(50.0, it.toDouble()) }
-        assertTrue(values.all { it in 45.0..55.0 })
-        assertTrue(values.max() - values.min() > 2.0)
     }
 
     @Test

@@ -30,7 +30,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.MyLocation
-import androidx.compose.material.icons.rounded.Gamepad
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Storage
@@ -68,7 +67,6 @@ import com.vincenthzr.locationspoofer.ui.theme.AccentBlue
 import com.vincenthzr.locationspoofer.ui.theme.noRippleClickable
 import com.vincenthzr.locationspoofer.viewmodel.FavoriteToggleResult
 import com.vincenthzr.locationspoofer.viewmodel.MainViewModel
-import com.vincenthzr.locationspoofer.viewmodel.toggleFloatingJoystick
 import com.vincenthzr.locationspoofer.viewmodel.ManageDataViewModel
 import com.vincenthzr.locationspoofer.viewmodel.fetchCurrentLocation
 import com.vincenthzr.locationspoofer.viewmodel.handleSpoofingIntent
@@ -80,6 +78,7 @@ import com.vincenthzr.locationspoofer.viewmodel.removeSavedLocation
 import com.vincenthzr.locationspoofer.viewmodel.saveCurrentLocation
 import com.vincenthzr.locationspoofer.viewmodel.selectCollectedLocation
 import com.vincenthzr.locationspoofer.viewmodel.setAltitude
+import com.vincenthzr.locationspoofer.viewmodel.setAltitudeVariation
 import com.vincenthzr.locationspoofer.viewmodel.setMapEngine
 import com.vincenthzr.locationspoofer.viewmodel.setMapType
 import com.vincenthzr.locationspoofer.viewmodel.setSatelliteCount
@@ -283,10 +282,6 @@ fun LocationTab(
                                 mapController?.animateCamera(lat, lng, 16f)
                             }
                         }
-                    )
-                    MapControlButton(
-                        icon = Icons.Rounded.Gamepad,
-                        onClick = { viewModel.toggleFloatingJoystick() }
                     )
                     MapControlButton(
                         icon = Icons.Rounded.Layers,
@@ -573,6 +568,7 @@ fun LocationTab(
             onToggleJitter = viewModel::toggleEnableJitter,
             onToggleRestartApps = viewModel::toggleRestartAppsOnSpoof,
             onAltitudeChange = viewModel::setAltitude,
+            onAltitudeVariationChange = viewModel::setAltitudeVariation,
             onSatelliteCountChange = viewModel::setSatelliteCount
         )
     }

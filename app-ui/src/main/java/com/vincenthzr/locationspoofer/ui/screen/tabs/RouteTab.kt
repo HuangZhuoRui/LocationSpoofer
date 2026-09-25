@@ -56,7 +56,8 @@ import com.vincenthzr.locationspoofer.ui.theme.AccentOrange
 import com.vincenthzr.locationspoofer.ui.theme.noRippleClickable
 import com.vincenthzr.locationspoofer.ui.components.MapCoverageHelper
 import com.vincenthzr.locationspoofer.viewmodel.MainViewModel
-import com.vincenthzr.locationspoofer.viewmodel.toggleFloatingJoystick
+import com.vincenthzr.locationspoofer.viewmodel.setAltitude
+import com.vincenthzr.locationspoofer.viewmodel.setAltitudeVariation
 import com.vincenthzr.locationspoofer.viewmodel.ManageDataViewModel
 import com.vincenthzr.locationspoofer.viewmodel.addRoutePoint
 import com.vincenthzr.locationspoofer.viewmodel.fetchCurrentLocation
@@ -443,10 +444,6 @@ fun RouteTab(
                                 }
                             }
                         )
-                        RouteControlButton(
-                            icon = Icons.Rounded.Gamepad,
-                            onClick = { viewModel.toggleFloatingJoystick() }
-                        )
                     }
                 }
 
@@ -620,6 +617,8 @@ fun RouteTab(
             onToggleCell = viewModel::toggleMockCell,
             onToggleBluetooth = viewModel::toggleMockBluetooth,
             onToggleJitter = viewModel::toggleEnableJitter,
+            onAltitudeChange = viewModel::setAltitude,
+            onAltitudeVariationChange = viewModel::setAltitudeVariation,
             onSatelliteCountChange = viewModel::setSatelliteCount
         )
     }

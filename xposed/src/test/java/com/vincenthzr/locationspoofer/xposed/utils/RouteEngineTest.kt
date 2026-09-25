@@ -155,4 +155,28 @@ class RouteEngineTest {
         val later = RouteEngine.calculateCurrentPosition(cfg(200.0, 500_000L), now = 510_000L)
         assertEquals(220.0 / 111_320.0, later.lat, 2e-6)
     }
+
+    @Test
+    fun `route altitude follows the terrain within the configured range`() {
+        fun cfg(variation: Double?) = JSONObject().apply {
+            put("is_route_mode", true)
+            put("route_points", pointsJson(40.0 to 116.0, 40.05 to 116.0))
+            put("speed_m_s", 1.4)
+            put("start_timestamp", 1_000_000L)
+            put("altitude", 80.0)
+            put("realism_level", 2)
+            variation?.let { put("altitude_variation_m", it) }
+        }
+        assertEquals(80.0, RouteEngine.realisticAltitude(cfg(0.0), now = 2_000_000L), 0.0)
+
+        val values = (0..3600 step 5).map { RouteEngine.realisticAltitude(cfg(30.0), now = 1_000_000L + it * 1000L) }
+        assertTrue(values.all { it in 50.0..110.0 })
+        assertTrue(values.max() - values.min() > 5.0)
+        // 相邻 5 秒（步行 7 米）的海拔变化不超过坡度上限加漂移
+        assertTrue(values.zipWithNext { a, b -> kotlin.math.abs(b - a) }.max() < 7 * 0.08 + 0.5)
+
+        // 旧版配置没有变化范围字段时按随机强度的漂移幅度（中档 ±3 米）处理
+        val legacy = (0..600 step 10).map { RouteEngine.realisticAltitude(cfg(null), now = 1_000_000L + it * 1000L) }
+        assertTrue(legacy.all { it in 77.0..83.0 })
+    }
 }

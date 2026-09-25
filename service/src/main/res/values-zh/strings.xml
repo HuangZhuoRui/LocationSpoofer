@@ -4,7 +4,6 @@
     <string name="spoofing_service_content">正在模拟位置: %1$s, %2$s</string>
     <string name="spoofing_service_channel_name">位置模拟服务</string>
     <string name="spoofing_bg_notification_title">模拟定位后台保活通知</string>
-    <string name="close_joystick">关闭摇杆</string>
     <string name="floating_joystick_title">摇杆</string>
     <string name="fj_collapse">收起</string>
     <string name="fj_preset_walking">步行</string>

@@ -68,6 +68,7 @@ import kotlin.math.sqrt
 /**
  * 悬浮摇杆：浮在其他 App 之上操作模拟位置，所有操作都转给进程级 [MotionController]，
  * 和 App 里的界面共用同一份状态。可以收起成小圆点，减少对下层 App 的遮挡。
+ * 只在"摇杆手动控制"的路线模拟中出现，没有关闭按钮；路线停止（且录制的路线已保存或丢弃）后自动关闭。
  */
 class FloatingJoystickService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
 
@@ -91,10 +92,14 @@ class FloatingJoystickService : Service(), LifecycleOwner, ViewModelStoreOwner, 
         savedStateRegistryController.performRestore(null)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        motionController.syncFromSpoofingStateIfIdle()
         showFloatingWindow()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+        lifecycleScope.launch {
+            motionController.state.collect {
+                if (!it.hasRoute && !it.hasPendingRecording) stopSelf()
+            }
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -130,8 +135,7 @@ class FloatingJoystickService : Service(), LifecycleOwner, ViewModelStoreOwner, 
                         onStopRecording = { motionController.stopRecording() },
                         onSaveRecording = { name -> saveRecording(name) },
                         onDiscardRecording = { motionController.discardRecording() },
-                        onNeedKeyboard = { setFocusable(it) },
-                        onClose = { stopSelf() }
+                        onNeedKeyboard = { setFocusable(it) }
                     )
                 }
             }
@@ -237,8 +241,7 @@ private fun FloatingJoystickOverlay(
     onStopRecording: () -> Unit,
     onSaveRecording: (String) -> Unit,
     onDiscardRecording: () -> Unit,
-    onNeedKeyboard: (Boolean) -> Unit,
-    onClose: () -> Unit
+    onNeedKeyboard: (Boolean) -> Unit
 ) {
     val palette = if (isSystemInDarkTheme()) DarkPalette else LightPalette
     var collapsed by remember { mutableStateOf(false) }
@@ -293,7 +296,7 @@ private fun FloatingJoystickOverlay(
 
         Joystick(enabled = state.joystickEnabled, palette = palette, onJoystick = onJoystick)
         SpeedSegments(state, palette, onPreset)
-        ActionTabs(state, palette, onPause, onResume, onStartRecording, onStopRecording, onCollapse = { collapsed = true }, onClose = onClose)
+        ActionTabs(state, palette, onPause, onResume, onStartRecording, onStopRecording, onCollapse = { collapsed = true })
     }
 }
 
@@ -454,8 +457,7 @@ private fun ActionTabs(
     onResume: () -> Unit,
     onStartRecording: () -> Unit,
     onStopRecording: () -> Unit,
-    onCollapse: () -> Unit,
-    onClose: () -> Unit
+    onCollapse: () -> Unit
 ) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         if (state.hasRoute) {
@@ -487,10 +489,6 @@ private fun ActionTabs(
         TabButton(
             Icons.Rounded.Remove, stringResource(R.string.fj_collapse),
             container = palette.variant, content = palette.textSecondary, enabled = true, onClick = onCollapse
-        )
-        TabButton(
-            Icons.Rounded.Close, stringResource(R.string.close_joystick),
-            container = palette.variant, content = palette.textSecondary, enabled = true, onClick = onClose
         )
     }
 }

@@ -34,6 +34,7 @@ fun StartSpoofingDialog(
     onToggleJitter: () -> Unit,
     onToggleRestartApps: () -> Unit,
     onAltitudeChange: (String) -> Unit,
+    onAltitudeVariationChange: (Int) -> Unit,
     onSatelliteCountChange: (String) -> Unit
 ) {
     LocalizedDialog(
@@ -197,39 +198,27 @@ fun StartSpoofingDialog(
                 }
 
                 Spacer(Modifier.height(8.dp))
-                Row(
+                AltitudeSettingsCard(
+                    altitudeInput = uiState.altitudeInput,
+                    variationM = uiState.altitudeVariationM,
+                    onAltitudeChange = onAltitudeChange,
+                    onVariationChange = onAltitudeVariationChange
+                )
+                Spacer(Modifier.height(8.dp))
+                androidx.compose.material3.OutlinedTextField(
+                    value = uiState.satelliteCountInput,
+                    onValueChange = onSatelliteCountChange,
+                    label = { Text(stringResource(R.string.satellite_count), fontSize = 12.sp) },
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    androidx.compose.material3.OutlinedTextField(
-                        value = uiState.altitudeInput,
-                        onValueChange = onAltitudeChange,
-                        label = { Text(stringResource(R.string.altitude_meter), fontSize = 12.sp) },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
-                        ),
-                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = AccentBlue,
-                            focusedLabelColor = AccentBlue
-                        )
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                    ),
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = AccentBlue,
+                        focusedLabelColor = AccentBlue
                     )
-                    androidx.compose.material3.OutlinedTextField(
-                        value = uiState.satelliteCountInput,
-                        onValueChange = onSatelliteCountChange,
-                        label = { Text(stringResource(R.string.satellite_count), fontSize = 12.sp) },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
-                        ),
-                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = AccentBlue,
-                            focusedLabelColor = AccentBlue
-                        )
-                    )
-                }
+                )
 
                 Spacer(Modifier.height(24.dp))
                 Row(

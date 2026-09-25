@@ -12,7 +12,7 @@ import kotlin.math.sin
 /**
  * 运动真实度引擎：给速度、步频（步幅）、海拔、加速度计波形加上自然起伏。
  *
- * 速度、步频、海拔这些"慢变量"都是以模拟开始时间为种子的确定性函数——system_server、每个被 Hook 的
+ * 速度、步频这些"慢变量"都是以模拟开始时间为种子的确定性函数——system_server、每个被 Hook 的
  * App 进程、以及 App 自己的路线进度都在各自独立计算位置和步数，必须对同一时刻算出同样的结果，
  * 否则不同进程之间的距离、步数会对不上。随机强度为 [Level.OFF] 且速度浮动为 0 时退化为匀速匀步频。
  */
@@ -22,7 +22,7 @@ object MotionRealism {
         val id: Int,
         /** 步频独立于速度的相对起伏幅度 */
         val cadenceVariation: Double,
-        /** 海拔缓慢漂移的幅度（米） */
+        /** 海拔随时间漂移的幅度（米），由 [AltitudeModel] 使用 */
         val altitudeAmplitudeM: Double,
         /** 每一步冲击力度的相对差异 */
         val stepAmplitudeVariation: Double,
@@ -50,7 +50,6 @@ object MotionRealism {
 
     private const val SPEED_SALT = 0x5EED5EEDL
     private const val CADENCE_SALT = 0x0CADE0CEL
-    private const val ALTITUDE_SALT = 0x0A171707L
     private const val STEP_SALT = 0x57E9057EL
 
     /**
@@ -94,7 +93,6 @@ object MotionRealism {
         private val fluctuation = this.speedFluctuationPct / 100.0
         private val speedNoise = SmoothNoise(startTimestamp xor SPEED_SALT, 20.0, 600.0)
         private val cadenceNoise = SmoothNoise(startTimestamp xor CADENCE_SALT, 3.0, 60.0)
-        private val altitudeNoise = SmoothNoise(startTimestamp xor ALTITUDE_SALT, 30.0, 400.0)
 
         fun speed(baseSpeed: Double, elapsedSec: Double): Double =
             baseSpeed * (1 + fluctuation * speedNoise.value(elapsedSec))
@@ -113,9 +111,6 @@ object MotionRealism {
             elapsedSec + CADENCE_SHARE_OF_SPEED * fluctuation * speedNoise.integral(elapsedSec) +
                 level.cadenceVariation * cadenceNoise.integral(elapsedSec)
             )
-
-        fun altitude(baseAltitude: Double, elapsedSec: Double): Double =
-            baseAltitude + level.altitudeAmplitudeM * altitudeNoise.value(elapsedSec)
 
         /**
          * 加速度计读数（含重力，m/s²），坐标约定：Z 竖直、Y 前后、X 左右。

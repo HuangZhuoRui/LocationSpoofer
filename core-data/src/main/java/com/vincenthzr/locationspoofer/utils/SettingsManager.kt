@@ -125,6 +125,11 @@ class SettingsManager(context: Context) {
         get() = prefs.getString("altitude", "0.0") ?: "0.0"
         set(value) = prefs.edit().putString("altitude", value).apply()
 
+    /** 海拔相对基准值的最大起伏（±米），0 表示固定海拔 */
+    var altitudeVariationM: Int
+        get() = prefs.getInt("altitude_variation_m", AltitudeModel.DEFAULT_VARIATION_M)
+        set(value) = prefs.edit().putInt("altitude_variation_m", value).apply()
+
     /** 运动真实度随机强度，取值见 MotionRealism.Level.id */
     var realismLevel: Int
         get() = prefs.getInt("realism_level", MotionRealism.DEFAULT_LEVEL_ID)

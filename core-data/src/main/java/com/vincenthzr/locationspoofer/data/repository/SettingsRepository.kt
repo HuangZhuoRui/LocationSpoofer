@@ -162,6 +162,12 @@ class SettingsRepository(private val settingsManager: SettingsManager) {
             settingsManager.altitude = value
         }
 
+    var altitudeVariationM: Int
+        get() = settingsManager.altitudeVariationM
+        set(value) {
+            settingsManager.altitudeVariationM = value
+        }
+
     var realismLevel: Int
         get() = settingsManager.realismLevel
         set(value) {

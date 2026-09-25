@@ -4,5 +4,4 @@
     <string name="spoofing_service_content">محاكاة الموقع: %1$s, %2$s</string>
     <string name="spoofing_service_channel_name">خدمة محاكي الموقع</string>
     <string name="spoofing_bg_notification_title">إشعار الحفاظ على تشغيل محاكاة الموقع في الخلفية</string>
-    <string name="close_joystick">إغلاق عصا التحكم</string>
 </resources>

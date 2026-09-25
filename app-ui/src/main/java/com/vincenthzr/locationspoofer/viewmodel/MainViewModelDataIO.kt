@@ -444,6 +444,7 @@ internal fun MainViewModel.exportEnvironmentData(
                     mockBluetooth = settingsRepository.mockBluetooth,
                     enableJitter = settingsRepository.enableJitter,
                     altitude = settingsRepository.altitude,
+                    altitudeVariationM = settingsRepository.altitudeVariationM,
                     satelliteCount = settingsRepository.satelliteCount,
                     mapType = settingsRepository.getMapType(),
                     mapEngine = settingsRepository.getMapEngine()
@@ -644,6 +645,7 @@ internal fun MainViewModel.applyImportPackage(
                     settingsRepository.mockBluetooth = s.mockBluetooth
                     settingsRepository.enableJitter = s.enableJitter
                     if (s.altitude.isNotBlank()) settingsRepository.altitude = s.altitude
+                    s.altitudeVariationM?.let { settingsRepository.altitudeVariationM = it }
                     if (s.satelliteCount.isNotBlank()) settingsRepository.satelliteCount = s.satelliteCount
                     if (s.mapType.isNotBlank()) settingsRepository.setMapType(s.mapType)
                     if (s.mapEngine.isNotBlank()) settingsRepository.setMapEngine(s.mapEngine)
@@ -675,6 +677,7 @@ internal fun MainViewModel.applyImportPackage(
                     mockBluetooth = settingsRepository.mockBluetooth,
                     enableJitter = settingsRepository.enableJitter,
                     altitudeInput = settingsRepository.altitude.ifBlank { it.altitudeInput },
+                    altitudeVariationM = settingsRepository.altitudeVariationM,
                     satelliteCountInput = settingsRepository.satelliteCount.ifBlank { it.satelliteCountInput },
                     amapApiKey = settingsRepository.getAmapApiKey(),
                     baiduApiKey = settingsRepository.getBaiduApiKey(),

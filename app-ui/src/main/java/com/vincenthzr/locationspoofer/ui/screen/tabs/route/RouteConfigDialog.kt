@@ -27,6 +27,7 @@ import com.vincenthzr.locationspoofer.ui.R
 import com.vincenthzr.locationspoofer.data.model.AppState
 import com.vincenthzr.locationspoofer.data.model.RouteRunMode
 import com.vincenthzr.locationspoofer.data.model.SimMode
+import com.vincenthzr.locationspoofer.ui.screen.AltitudeSettingsCard
 import com.vincenthzr.locationspoofer.ui.theme.AccentBlue
 import java.util.Locale
 
@@ -47,6 +48,8 @@ fun RouteConfigDialog(
     onToggleCell: () -> Unit = {},
     onToggleBluetooth: () -> Unit = {},
     onToggleJitter: () -> Unit = {},
+    onAltitudeChange: (String) -> Unit = {},
+    onAltitudeVariationChange: (Int) -> Unit = {},
     onSatelliteCountChange: (String) -> Unit = {}
 ) {
     Dialog(
@@ -492,6 +495,13 @@ fun RouteConfigDialog(
                         )
                     }
                 }
+
+                AltitudeSettingsCard(
+                    altitudeInput = uiState.altitudeInput,
+                    variationM = uiState.altitudeVariationM,
+                    onAltitudeChange = onAltitudeChange,
+                    onVariationChange = onAltitudeVariationChange
+                )
 
                 // 真实道路匹配开关
                 Surface(

@@ -424,6 +424,13 @@
     <string name="saved_locations_count_format">已收藏 %d 个常用坐标点</string>
     <string name="map_save_location_hint">在地图选点后点击「收藏」按钮即可快速保存常用地点</string>
     <string name="altitude_meter">海拔 (米)</string>
+    <string name="altitude_simulation">海拔</string>
+    <string name="altitude_fixed_value">固定 %1$s 米</string>
+    <string name="altitude_range_value">%1$s ~ %2$s 米</string>
+    <string name="altitude_variation">变化范围</string>
+    <string name="altitude_variation_off">固定</string>
+    <string name="altitude_variation_value">±%1$d 米</string>
+    <string name="altitude_variation_desc">按地形平缓起伏，同一地点海拔一致，坡度不超过 8%；范围越大起伏越舒缓</string>
     <string name="satellite_count">卫星数</string>
     <string name="tag_bluetooth">蓝牙</string>
     <string name="tag_cell">基站</string>

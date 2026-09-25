@@ -44,8 +44,6 @@ class MainViewModel(
     internal var lastMapMoveTime = 0L
     internal var mapMoveJob: Job? = null
     internal var gaitRecordingJob: Job? = null
-    /** 手动路线模式开始时自动打开了悬浮摇杆，停止路线时需要关掉 */
-    internal var floatingJoystickOpenedForRoute = false
 
     internal val _uiState = MutableStateFlow(
         AppState(
@@ -84,6 +82,7 @@ class MainViewModel(
             enableJitter = settingsRepository.enableJitter,
             restartAppsOnSpoof = settingsRepository.restartAppsOnSpoof,
             altitudeInput = settingsRepository.altitude,
+            altitudeVariationM = settingsRepository.altitudeVariationM,
             satelliteCountInput = settingsRepository.satelliteCount,
             wigleToken = settingsRepository.getWigleApiToken(),
             opencellidToken = settingsRepository.getOpencellidApiToken()

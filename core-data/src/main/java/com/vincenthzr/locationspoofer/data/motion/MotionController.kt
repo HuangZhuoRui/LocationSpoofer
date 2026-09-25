@@ -193,7 +193,7 @@ class MotionController(
         tickJob = null
     }
 
-    /** 进程重启后界面状态丢失但模拟仍在进行时，按 SpoofingState 恢复成定点模拟，供悬浮窗使用 */
+    /** 进程重启后界面状态丢失但模拟仍在进行时，按 SpoofingState 恢复成定点模拟 */
     fun syncFromSpoofingStateIfIdle() {
         if (_state.value.mode == Mode.IDLE && SpoofingState.isActive) {
             onStaticStarted(SpoofingState.latitude, SpoofingState.longitude)
