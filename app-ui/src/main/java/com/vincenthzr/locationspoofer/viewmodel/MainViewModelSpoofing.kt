@@ -13,7 +13,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 // MainViewModel 的模拟开关、摇杆移动与持续扫描相关扩展函数
@@ -68,6 +67,7 @@ internal fun MainViewModel.startSpoofing() {
             updatedState.mockBluetooth && (BuildConfig.GLOBAL_SCHEME || updatedState.canMockBluetooth),
             updatedState.enableJitter
         )
+        motionController.onStaticStarted(lat, lng)
 
         // 稍作等待，确保 root shell 完全同步到磁盘
         kotlinx.coroutines.delay(200)
@@ -128,8 +128,7 @@ internal fun MainViewModel.stopSpoofing() {
     settingsRepository.isSpoofingActive = false
     locationSyncJob?.cancel()
     locationSyncJob = null
-    autoRouteJob?.cancel()
-    autoRouteJob = null
+    motionController.onStopped()
     viewModelScope.launch {
         locationRepository.stopSpoofing(context)
         _uiState.update {
@@ -138,89 +137,33 @@ internal fun MainViewModel.stopSpoofing() {
     }
 }
 
-// 摇杆控制
-internal fun MainViewModel.moveByJoystick(bearing: Double, intensity: Float, maxSpeedMs: Float) {
-    val elapsedSec = 0.1
-    val distance = maxSpeedMs * intensity * elapsedSec
-    val R = 6378137.0
-    val bearingRad = Math.toRadians(bearing)
-    val lat = _uiState.value.latitudeInput.toDoubleOrNull() ?: return
-    val lng = _uiState.value.longitudeInput.toDoubleOrNull() ?: return
-    val latRad = Math.toRadians(lat)
-    val lngRad = Math.toRadians(lng)
-    val newLatRad = Math.asin(
-        kotlin.math.sin(latRad) * kotlin.math.cos(distance / R) +
-                kotlin.math.cos(latRad) * kotlin.math.sin(distance / R) * kotlin.math.cos(
-            bearingRad
-        )
-    )
-    val newLngRad = lngRad + kotlin.math.atan2(
-        kotlin.math.sin(bearingRad) * kotlin.math.sin(distance / R) * kotlin.math.cos(latRad),
-        kotlin.math.cos(distance / R) - kotlin.math.sin(latRad) * kotlin.math.sin(newLatRad)
-    )
-    val newLat = Math.toDegrees(newLatRad)
-    val newLng = Math.toDegrees(newLngRad)
-    _uiState.update {
-        it.copy(
-            latitudeInput = String.format("%.6f", newLat),
-            longitudeInput = String.format("%.6f", newLng),
-            simBearing = bearing.toFloat(),
-            showCoordinateError = false
-        )
-    }
-    // 实时同步给 SpoofingState
-    val now = System.currentTimeMillis()
-    SpoofingState.latitude = newLat
-    SpoofingState.longitude = newLng
-    SpoofingState.simBearing = bearing.toFloat()
-    SpoofingState.startTimestamp = now
-
-    // 被 Hook 的 App 只认配置文件，不写文件它们就一直停在起点（issue #63）。
-    // 落盘是 root 写文件，按节流间隔写入；两次写入之间由 Xposed 端 RouteEngine 按方向 + 速度推算位置
-    if (now - lastJoystickSyncTime >= JOYSTICK_SYNC_INTERVAL_MS) {
-        lastJoystickSyncTime = now
-        syncJoystickConfig(newLat, newLng, bearing.toFloat(), (maxSpeedMs * intensity).toDouble(), now)
-    }
+/** 打开 / 关闭悬浮摇杆 */
+internal fun MainViewModel.toggleFloatingJoystick() {
+    setFloatingJoystickVisible(!locationRepository.isFloatingJoystickShowing)
 }
 
-private const val JOYSTICK_SYNC_INTERVAL_MS = 1000L
-
-/** 松开摇杆：立即写入速度 0，让 Xposed 端停止推算位置 */
-internal fun MainViewModel.stopJoystick() {
-    val lat = _uiState.value.latitudeInput.toDoubleOrNull() ?: return
-    val lng = _uiState.value.longitudeInput.toDoubleOrNull() ?: return
-    lastJoystickSyncTime = 0L
-    syncJoystickConfig(lat, lng, _uiState.value.simBearing, 0.0, System.currentTimeMillis())
-}
-
-private fun MainViewModel.syncJoystickConfig(lat: Double, lng: Double, bearing: Float, speedMs: Double, timestamp: Long) {
-    val state = _uiState.value
-    if (!state.isSpoofingActive) return
-    viewModelScope.launch {
-        joystickSyncMutex.withLock {
-            locationRepository.updateConfig(
-                lat = lat,
-                lng = lng,
-                simMode = "JOYSTICK",
-                simBearing = bearing,
-                startTime = timestamp,
-                routePoints = emptyList(),
-                isRouteMode = false,
-                appCoordinateSystems = state.appCoordinateSystems,
-                wifiJson = state.collectedWifiJson,
-                cellJson = state.collectedCellJson,
-                bluetoothJson = state.collectedBluetoothJson,
-                mockWifi = state.mockWifi && (BuildConfig.GLOBAL_SCHEME || state.canMockWifi),
-                mockCell = state.mockCell,
-                mockBluetooth = state.mockBluetooth && (BuildConfig.GLOBAL_SCHEME || state.canMockBluetooth),
-                enableJitter = state.enableJitter,
-                speedMs = speedMs,
-                enableStepSimulation = state.enableStepSimulation,
-                stepCadenceSpm = state.stepCadenceSpm,
-                isAutoCadence = state.isAutoCadence
-            )
-        }
+/**
+ * 显示 / 关闭悬浮摇杆。还没有"显示在其他应用上层"权限时跳到系统授权页并返回 false，
+ * 用户授权回来后需要再触发一次。
+ */
+internal fun MainViewModel.setFloatingJoystickVisible(visible: Boolean): Boolean {
+    if (visible == locationRepository.isFloatingJoystickShowing) return true
+    if (visible && !android.provider.Settings.canDrawOverlays(context)) {
+        android.widget.Toast.makeText(
+            context,
+            context.getString(R.string.overlay_permission_required),
+            android.widget.Toast.LENGTH_LONG
+        ).show()
+        context.startActivity(
+            android.content.Intent(
+                android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                android.net.Uri.parse("package:${context.packageName}")
+            ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+        return false
     }
+    locationRepository.setFloatingJoystickVisible(context, visible)
+    return true
 }
 
 // 路线规划状态机
@@ -264,28 +207,15 @@ internal fun MainViewModel.toggleRestartAppsOnSpoof() {
 }
 
 private fun MainViewModel.syncMockSettings() {
-    if (_uiState.value.isSpoofingActive) {
-        val state = _uiState.value
-        val lat = state.latitudeInput.toDoubleOrNull() ?: return
-        val lng = state.longitudeInput.toDoubleOrNull() ?: return
-        viewModelScope.launch {
-            locationRepository.updateConfig(
-                lat = lat,
-                lng = lng,
-                simMode = if (state.routePlanStage == com.vincenthzr.locationspoofer.data.model.RoutePlanStage.RUNNING) state.routeSimMode.name else "STILL",
-                simBearing = state.simBearing,
-                startTime = SpoofingState.startTimestamp,
-                routePoints = state.routePoints,
-                isRouteMode = state.routePlanStage == com.vincenthzr.locationspoofer.data.model.RoutePlanStage.RUNNING,
-                appCoordinateSystems = state.appCoordinateSystems,
-                wifiJson = state.collectedWifiJson,
-                cellJson = state.collectedCellJson,
-                bluetoothJson = state.collectedBluetoothJson,
-                mockWifi = state.mockWifi,
-                mockCell = state.mockCell,
-                mockBluetooth = state.mockBluetooth,
-                enableJitter = state.enableJitter
-            )
+    if (!_uiState.value.isSpoofingActive) return
+    val state = _uiState.value
+    // 只改开关字段，不动位置与路线状态（整份重写会用界面里过时的状态覆盖掉悬浮窗 / 路线的运动状态）
+    viewModelScope.launch {
+        locationRepository.patchConfig { json ->
+            json.put("mock_wifi", state.mockWifi && (BuildConfig.GLOBAL_SCHEME || state.canMockWifi))
+            json.put("mock_cell", state.mockCell)
+            json.put("mock_bluetooth", state.mockBluetooth && (BuildConfig.GLOBAL_SCHEME || state.canMockBluetooth))
+            json.put("enable_jitter", state.enableJitter)
         }
     }
 }

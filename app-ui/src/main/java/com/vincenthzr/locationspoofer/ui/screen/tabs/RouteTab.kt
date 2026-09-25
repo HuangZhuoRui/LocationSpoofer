@@ -49,7 +49,6 @@ import com.vincenthzr.locationspoofer.ui.components.MapTypeDialog
 import com.vincenthzr.locationspoofer.ui.components.MarkerType
 import com.vincenthzr.locationspoofer.ui.screen.AppPoiItem
 import com.vincenthzr.locationspoofer.ui.screen.HomeSearchBar
-import com.vincenthzr.locationspoofer.ui.screen.JoystickPanel
 import com.vincenthzr.locationspoofer.ui.screen.performPoiSearch
 import com.vincenthzr.locationspoofer.ui.screen.tabs.route.*
 import com.vincenthzr.locationspoofer.ui.theme.AccentBlue
@@ -57,11 +56,11 @@ import com.vincenthzr.locationspoofer.ui.theme.AccentOrange
 import com.vincenthzr.locationspoofer.ui.theme.noRippleClickable
 import com.vincenthzr.locationspoofer.ui.components.MapCoverageHelper
 import com.vincenthzr.locationspoofer.viewmodel.MainViewModel
+import com.vincenthzr.locationspoofer.viewmodel.toggleFloatingJoystick
 import com.vincenthzr.locationspoofer.viewmodel.ManageDataViewModel
 import com.vincenthzr.locationspoofer.viewmodel.addRoutePoint
 import com.vincenthzr.locationspoofer.viewmodel.fetchCurrentLocation
 import com.vincenthzr.locationspoofer.viewmodel.finishSelectingPoints
-import com.vincenthzr.locationspoofer.viewmodel.joystickMaxSpeedMs
 import com.vincenthzr.locationspoofer.viewmodel.isDomesticEnvironment
 import com.vincenthzr.locationspoofer.viewmodel.performLocalSearch
 import com.vincenthzr.locationspoofer.viewmodel.restartSelectingPoints
@@ -412,14 +411,6 @@ fun RouteTab(
                     }
                 }
 
-                // 摇杆控制面板（手动模拟时显示）
-                if (isRunning && isManual) {
-                    JoystickPanel(
-                        viewModel = viewModel,
-                        maxSpeedMs = viewModel.joystickMaxSpeedMs()
-                    )
-                }
-
                 // 右侧悬浮地图控制按钮组
                 val animatedBottomPadding by animateDpAsState(
                     targetValue = bottomBarHeight + bottomActionHeightDp + 16.dp,
@@ -451,6 +442,10 @@ fun RouteTab(
                                     mapController?.animateCamera(lat, lng, 16f)
                                 }
                             }
+                        )
+                        RouteControlButton(
+                            icon = Icons.Rounded.Gamepad,
+                            onClick = { viewModel.toggleFloatingJoystick() }
                         )
                     }
                 }

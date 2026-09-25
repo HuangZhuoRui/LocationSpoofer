@@ -34,6 +34,8 @@ internal fun MainViewModel.initialize() {
     viewModelScope.launch(Dispatchers.IO) {
         mergeLegacyRecords()
         val root = locationRepository.recoverAfterBoot(context)
+        // 进程重启后恢复的模拟是定点状态，让运动控制器（悬浮摇杆）接上这个位置
+        motionController.syncFromSpoofingStateIfIdle()
 
         // 模拟中恢复模拟坐标；否则（开启了"停留在上次位置"时）恢复上次选定的位置，不再自动跳到真实位置（issue #68）
         val restoredPosition = when {
@@ -62,6 +64,8 @@ internal fun MainViewModel.initialize() {
         }
         refreshRecordCount()
     }
+
+    observeMotionController()
 
     // 持续记录当前选定的位置，供下次打开时恢复；路线模拟时位置每 100ms 变一次，按 2 秒采样落盘
     viewModelScope.launch {
@@ -482,16 +486,8 @@ internal fun MainViewModel.setAppCoordinateSystem(pkg: String, sys: String) {
     // 如果模拟处于开启状态，则更新配置
     if (_uiState.value.isSpoofingActive) {
         viewModelScope.launch {
-            locationRepository.updateConfig(
-                SpoofingState.latitude,
-                SpoofingState.longitude,
-                SpoofingState.simMode,
-                SpoofingState.simBearing,
-                SpoofingState.startTimestamp,
-                if (SpoofingState.isRouteMode) parseRoutePoints(SpoofingState.routeJson) else emptyList(),
-                SpoofingState.isRouteMode,
-                currentMap
-            )
+            // 只刷新坐标系映射与常驻设置字段（系统级模拟目标等由 patchConfig 自动刷新），不动位置与路线状态
+            locationRepository.patchConfig { it.put("app_coordinate_systems", org.json.JSONObject(currentMap)) }
         }
     }
 }
@@ -511,16 +507,8 @@ internal fun MainViewModel.setSystemHookGlobalMode(enabled: Boolean) {
 
     if (_uiState.value.isSpoofingActive) {
         viewModelScope.launch {
-            locationRepository.updateConfig(
-                SpoofingState.latitude,
-                SpoofingState.longitude,
-                SpoofingState.simMode,
-                SpoofingState.simBearing,
-                SpoofingState.startTimestamp,
-                if (SpoofingState.isRouteMode) parseRoutePoints(SpoofingState.routeJson) else emptyList(),
-                SpoofingState.isRouteMode,
-                _uiState.value.appCoordinateSystems
-            )
+            // 只刷新坐标系映射与常驻设置字段（系统级模拟目标等由 patchConfig 自动刷新），不动位置与路线状态
+            locationRepository.patchConfig { it.put("app_coordinate_systems", org.json.JSONObject(_uiState.value.appCoordinateSystems)) }
         }
     }
 }
@@ -536,16 +524,8 @@ internal fun MainViewModel.selectAllUserAppsForSystemHook() {
 
     if (_uiState.value.isSpoofingActive) {
         viewModelScope.launch {
-            locationRepository.updateConfig(
-                SpoofingState.latitude,
-                SpoofingState.longitude,
-                SpoofingState.simMode,
-                SpoofingState.simBearing,
-                SpoofingState.startTimestamp,
-                if (SpoofingState.isRouteMode) parseRoutePoints(SpoofingState.routeJson) else emptyList(),
-                SpoofingState.isRouteMode,
-                _uiState.value.appCoordinateSystems
-            )
+            // 只刷新坐标系映射与常驻设置字段（系统级模拟目标等由 patchConfig 自动刷新），不动位置与路线状态
+            locationRepository.patchConfig { it.put("app_coordinate_systems", org.json.JSONObject(_uiState.value.appCoordinateSystems)) }
         }
     }
 }
@@ -557,16 +537,8 @@ internal fun MainViewModel.clearAllSystemHookApps() {
 
     if (_uiState.value.isSpoofingActive) {
         viewModelScope.launch {
-            locationRepository.updateConfig(
-                SpoofingState.latitude,
-                SpoofingState.longitude,
-                SpoofingState.simMode,
-                SpoofingState.simBearing,
-                SpoofingState.startTimestamp,
-                if (SpoofingState.isRouteMode) parseRoutePoints(SpoofingState.routeJson) else emptyList(),
-                SpoofingState.isRouteMode,
-                _uiState.value.appCoordinateSystems
-            )
+            // 只刷新坐标系映射与常驻设置字段（系统级模拟目标等由 patchConfig 自动刷新），不动位置与路线状态
+            locationRepository.patchConfig { it.put("app_coordinate_systems", org.json.JSONObject(_uiState.value.appCoordinateSystems)) }
         }
     }
 }
@@ -580,16 +552,8 @@ internal fun MainViewModel.setSystemHookPackageEnabled(pkg: String, enabled: Boo
     // 如果模拟处于开启状态，立即刷新配置文件让新的 system_hook_packages 生效
     if (_uiState.value.isSpoofingActive) {
         viewModelScope.launch {
-            locationRepository.updateConfig(
-                SpoofingState.latitude,
-                SpoofingState.longitude,
-                SpoofingState.simMode,
-                SpoofingState.simBearing,
-                SpoofingState.startTimestamp,
-                if (SpoofingState.isRouteMode) parseRoutePoints(SpoofingState.routeJson) else emptyList(),
-                SpoofingState.isRouteMode,
-                _uiState.value.appCoordinateSystems
-            )
+            // 只刷新坐标系映射与常驻设置字段（系统级模拟目标等由 patchConfig 自动刷新），不动位置与路线状态
+            locationRepository.patchConfig { it.put("app_coordinate_systems", org.json.JSONObject(_uiState.value.appCoordinateSystems)) }
         }
     }
 }
@@ -602,16 +566,8 @@ internal fun MainViewModel.removeAppCoordinateSystem(pkg: String) {
 
     if (_uiState.value.isSpoofingActive) {
         viewModelScope.launch {
-            locationRepository.updateConfig(
-                SpoofingState.latitude,
-                SpoofingState.longitude,
-                SpoofingState.simMode,
-                SpoofingState.simBearing,
-                SpoofingState.startTimestamp,
-                if (SpoofingState.isRouteMode) parseRoutePoints(SpoofingState.routeJson) else emptyList(),
-                SpoofingState.isRouteMode,
-                currentMap
-            )
+            // 只刷新坐标系映射与常驻设置字段（系统级模拟目标等由 patchConfig 自动刷新），不动位置与路线状态
+            locationRepository.patchConfig { it.put("app_coordinate_systems", org.json.JSONObject(currentMap)) }
         }
     }
 }

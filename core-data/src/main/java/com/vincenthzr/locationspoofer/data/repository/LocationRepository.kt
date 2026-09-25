@@ -102,6 +102,7 @@ class LocationRepository(
         SpoofingState.startTimestamp = startTime
         SpoofingState.realismLevel = settingsManager.realismLevel
         SpoofingState.speedFluctuationPct = settingsManager.speedFluctuationPct
+        SpoofingState.routeDistanceOffset = 0.0
         SpoofingState.simMode = simMode
         SpoofingState.simBearing = simBearing
         SpoofingState.wifiJson = wifiJson
@@ -192,6 +193,22 @@ class LocationRepository(
 
         // 3. 彻底重置系统的 mock_location 状态，防止被澎湃OS/系统安全中心记录为模拟中
         rootManager.revokeMockLocation()
+    }
+
+    val isFloatingJoystickShowing: Boolean get() = spoofingServiceController.isFloatingJoystickShowing
+
+    fun setFloatingJoystickVisible(context: Context, visible: Boolean) =
+        spoofingServiceController.setFloatingJoystickVisible(context, visible)
+
+    /** 只改配置里的部分字段，见 [ConfigManager.patchConfig] */
+    suspend fun patchConfig(mutate: (JSONObject) -> Unit): Boolean = configManager.patchConfig(mutate)
+
+    /** 路线 / 摇杆移动过程中刷新周边 Wi-Fi、基站、蓝牙数据，不改动位置和运动状态 */
+    suspend fun updateEnvironment(wifiJson: String, cellJson: String, bluetoothJson: String) {
+        SpoofingState.wifiJson = wifiJson
+        SpoofingState.cellJson = cellJson
+        SpoofingState.bluetoothJson = bluetoothJson
+        configManager.patchConfig { configManager.putEnvironment(it, wifiJson, cellJson, bluetoothJson) }
     }
 
     suspend fun updateConfig(

@@ -5,4 +5,20 @@
     <string name="spoofing_service_channel_name">位置模拟服务</string>
     <string name="spoofing_bg_notification_title">模拟定位后台保活通知</string>
     <string name="close_joystick">关闭摇杆</string>
+    <string name="floating_joystick_title">摇杆</string>
+    <string name="fj_collapse">收起</string>
+    <string name="fj_preset_walking">步行</string>
+    <string name="fj_preset_running">跑步</string>
+    <string name="fj_preset_cycling">骑行</string>
+    <string name="fj_preset_driving">驾车</string>
+    <string name="fj_preset_custom">自定义</string>
+    <string name="fj_pause">暂停</string>
+    <string name="fj_resume">开始</string>
+    <string name="fj_record">录制路线</string>
+    <string name="fj_stop_record">结束录制</string>
+    <string name="fj_route_name_hint">路线名称</string>
+    <string name="fj_default_route_name">摇杆路线 %1$s</string>
+    <string name="fj_save">保存</string>
+    <string name="fj_discard">放弃</string>
+    <string name="fj_saved_toast">路线已保存</string>
 </resources>

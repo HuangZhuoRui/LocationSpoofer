@@ -72,6 +72,9 @@
     <string name="root_solution_apatch">APatch</string>
     <string name="root_solution_sukisu_ultra">SukiSU Ultra</string>
     <string name="root_solution_resukisu_ultra">ReSukiSU Ultra</string>
+    <string name="floating_joystick">悬浮摇杆</string>
+    <string name="overlay_permission_required">请允许"显示在其他应用上层"，然后再次打开悬浮摇杆</string>
+    <string name="overlay_permission_on_launch">悬浮摇杆需要"显示在其他应用上层"权限，请在打开的页面中允许</string>
     <string name="motion_realism_title">运动真实度</string>
     <string name="motion_realism_desc">让速度、步频、海拔和加速度曲线更接近真人</string>
     <string name="realism_level_title">随机强度</string>
@@ -307,7 +310,7 @@
     <string name="loop_auto_cruise">循环自动巡航</string>
     <string name="loop_auto_cruise_desc">沿路线自动移动</string>
     <string name="joystick_manual_control">摇杆手动控制</string>
-    <string name="joystick_manual_control_desc">摇杆引导沿路线</string>
+    <string name="joystick_manual_control_desc">开始后弹出悬浮摇杆，可在任意 App 上手动控制移动</string>
     <string name="cruise_speed">巡航速度</string>
     <string name="custom_speed">自定义速度</string>
     <string name="pace_format">配速: %s</string>

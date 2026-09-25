@@ -12,4 +12,10 @@ interface SpoofingServiceController {
     val isRunning: Boolean
     fun startForeground(context: Context, lat: Double, lng: Double)
     fun stop(context: Context)
+
+    /** 悬浮摇杆当前是否显示 */
+    val isFloatingJoystickShowing: Boolean
+
+    /** 显示 / 关闭悬浮摇杆；调用方需先确认已获得悬浮窗权限 */
+    fun setFloatingJoystickVisible(context: Context, visible: Boolean)
 }

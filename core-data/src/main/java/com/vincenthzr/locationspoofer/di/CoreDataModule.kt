@@ -1,6 +1,9 @@
 package com.vincenthzr.locationspoofer.di
 
 import com.vincenthzr.locationspoofer.data.db.AppDatabase
+import com.vincenthzr.locationspoofer.data.motion.ConfigMotionSink
+import com.vincenthzr.locationspoofer.data.motion.MotionController
+import com.vincenthzr.locationspoofer.data.state.SpoofingState
 import com.vincenthzr.locationspoofer.data.repository.LocationRepository
 import com.vincenthzr.locationspoofer.data.repository.SettingsRepository
 import com.vincenthzr.locationspoofer.data.repository.WifiRepository
@@ -27,6 +30,16 @@ val coreDataModule = module {
 
     single { LocationRepository(get(), get(), get(), get(), get(), get()) }
     single { SettingsRepository(get()) }
+    single {
+        val settings = get<SettingsManager>()
+        MotionController(
+            sink = ConfigMotionSink(get(), get()),
+            realismParams = {
+                (SpoofingState.realismLevel.takeIf { it >= 0 } ?: settings.realismLevel) to
+                    (SpoofingState.speedFluctuationPct.takeIf { it >= 0 } ?: settings.speedFluctuationPct)
+            }
+        )
+    }
 
     single { AppDatabase.getDatabase(androidContext()) }
     single { get<AppDatabase>().environmentDao() }

@@ -7,6 +7,8 @@ import com.vincenthzr.locationspoofer.data.model.RoutePoint
 import com.vincenthzr.locationspoofer.data.state.SpoofingState
 import com.vincenthzr.locationspoofer.utils.CoordinateUtils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -62,62 +64,8 @@ class ConfigManager(private val context: Context, private val rootManager: RootM
         }
 
 
-        val dist = FloatArray(1)
-        if (lastGeocodedLat != -999.0) {
-            android.location.Location.distanceBetween(
-                lastGeocodedLat,
-                lastGeocodedLng,
-                lat,
-                lng,
-                dist
-            )
-        }
-
-        if (lastGeocodedLat == -999.0 || dist[0] > 500f) {
-            lastGeocodedLat = lat
-            lastGeocodedLng = lng
-            try {
-                val geocoder = android.location.Geocoder(context, java.util.Locale.CHINA)
-                // lat/lng 是 GCJ-02，而 Geocoder 按 Android 规范接收 WGS-84；直接传 GCJ-02 会被后端再加密一次，
-                // 偏出数百米、反查到错误的街道（issue #62：广州塔 → 赏湖街）
-                val wgs = CoordinateUtils.gcj02ToWgs84(lat, lng)
-
-                @Suppress("DEPRECATION")
-                val addresses = geocoder.getFromLocation(wgs.lat, wgs.lng, 1)
-                if (!addresses.isNullOrEmpty()) {
-                    val addr = addresses[0]
-                    cachedProvince = addr.adminArea ?: ""
-                    cachedCity = addr.locality ?: addr.subAdminArea ?: ""
-                    cachedDistrict = addr.subLocality ?: ""
-                    cachedStreet = addr.thoroughfare ?: ""
-                    cachedStreetNum = addr.subThoroughfare ?: ""
-                    cachedAddressText = addr.getAddressLine(0) ?: ""
-                    cachedCountry = addr.countryName ?: "中国"
-                    cachedPoiName = addr.featureName ?: ""
-                }
-            } catch (e: Exception) {
-                // 逆地理编码失败时静默降级
-            }
-        }
-
         val json = JSONObject().apply {
-            put("province", cachedProvince)
-            put("city", cachedCity)
-            put("district", cachedDistrict)
-            put("street", cachedStreet)
-            put("streetNum", cachedStreetNum)
-            put("address", cachedAddressText)
-            put("country", cachedCountry)
-            put("poiName", cachedPoiName)
-
-            val wgs = CoordinateUtils.gcj02ToWgs84(lat, lng)
-            val bd = CoordinateUtils.gcj02ToBd09(lat, lng)
-            put("wgs84_lat", wgs.lat)
-            put("wgs84_lng", wgs.lng)
-            put("bd09_lat", bd.lat)
-            put("bd09_lng", bd.lng)
-            put("lat", lat)
-            put("lng", lng)
+            putPosition(this, lat, lng)
             put("active", active)
             put("sim_mode", simMode)
             put("sim_bearing", simBearing.toDouble())
@@ -126,18 +74,7 @@ class ConfigManager(private val context: Context, private val rootManager: RootM
             put("route_points", routeArray)
             put("is_route_mode", isRouteMode)
             put("stop_at_destination", stopAtDestination)
-            val wifiObj = try {
-                JSONObject(wifiJson)
-            } catch (e: Exception) {
-                JSONObject().apply {
-                    put("isConnected", false)
-                    put("connectedWifi", JSONObject.NULL)
-                    put("nearbyWifi", JSONArray())
-                }
-            }
-            put("wifi_json", wifiObj)
-            put("cell_json", JSONArray(cellJson))
-            put("bluetooth_json", JSONArray(bluetoothJson))
+            putEnvironment(this, wifiJson, cellJson, bluetoothJson)
             put("mock_wifi", mockWifi)
             put("mock_cell", mockCell)
             put("mock_bluetooth", mockBluetooth)
@@ -152,26 +89,129 @@ class ConfigManager(private val context: Context, private val rootManager: RootM
             appCoordinateSystems.forEach { (pkg, sys) -> coordSysObj.put(pkg, sys) }
             put("app_coordinate_systems", coordSysObj)
 
-            val systemHookPackagesArr = JSONArray()
-            settingsManager.getSystemHookPackages().forEach { systemHookPackagesArr.put(it) }
-            put("system_hook_packages", systemHookPackagesArr)
-            put("system_hook_global_mode", settingsManager.isSystemHookGlobalMode)
-            // 厂商适配方案同样是常驻设置项（在"厂商适配方案"页配置），不随每次模拟会话变化，
-            // 这里和 system_hook_packages 一样直接读取最新值，不需要调用方逐层透传。
-            put("vendor_override", settingsManager.vendorOverride)
-            // 运动真实度同为常驻设置项（"运动真实度"页），Xposed 端据此给速度、步频、海拔、加速度加起伏
-            put("realism_level", SpoofingState.realismLevel.takeIf { it >= 0 } ?: settingsManager.realismLevel)
-            put("speed_fluctuation_pct", SpoofingState.speedFluctuationPct.takeIf { it >= 0 } ?: settingsManager.speedFluctuationPct)
-            put("gait_template", if (settingsManager.useGaitTemplate) settingsManager.gaitTemplate else "")
+            put("route_distance_offset", SpoofingState.routeDistanceOffset)
+            putPersistentSettings(this)
         }
-        val cellCount = json.optJSONArray("cell_json")?.length() ?: 0
+        write(json)
+    }
 
-        // 使用 stdin 写入，避免命令行过长 (ARG_MAX) 导致 su 执行失败，实现实时更新。
-        // 权限模型：DAC 只开到 644（owner=root 读写，其余只读，不再世界可写），不再落一份到 /sdcard/Download 外部存储。
-        // 两种模拟方案的"谁来读配置"不同，SELinux 标签策略也不同，见下面两个 xxxWriteCommand。
-        val jsonText = json.toString()
+    /**
+     * 在上一次写入的配置基础上只改动部分字段，其余字段原样保留；常驻设置项每次都刷新为最新值。
+     * 暂停、摇杆、周边环境数据、开关设置等局部更新都走这里，避免某个调用方用自己手里过时的整份状态
+     * 覆盖掉别人刚写入的字段（例如悬浮窗刚把路线暂停，界面的周边数据刷新又把路线模式写回去）。
+     * 还没有写过配置（未开始模拟）时返回 false。
+     */
+    suspend fun patchConfig(mutate: (JSONObject) -> Unit): Boolean = withContext(Dispatchers.IO) {
+        // 读取、修改、写入整体放在锁内：并发的局部更新若各自基于同一份旧配置修改，后写的会冲掉先写的改动
+        writeMutex.withLock {
+            val base = lastJson ?: return@withLock false
+            val json = JSONObject(base.toString())
+            mutate(json)
+            putPersistentSettings(json)
+            writeLocked(json)
+            true
+        }
+    }
+
+    /** 写入坐标及其派生字段（WGS-84 / BD-09 坐标、逆地理编码地址）；移动超过 500 米才重新逆地理编码。需在 IO 线程调用 */
+    fun putPosition(json: JSONObject, lat: Double, lng: Double) {
+        refreshGeocodeIfMoved(lat, lng)
+        json.put("province", cachedProvince)
+        json.put("city", cachedCity)
+        json.put("district", cachedDistrict)
+        json.put("street", cachedStreet)
+        json.put("streetNum", cachedStreetNum)
+        json.put("address", cachedAddressText)
+        json.put("country", cachedCountry)
+        json.put("poiName", cachedPoiName)
+
+        val wgs = CoordinateUtils.gcj02ToWgs84(lat, lng)
+        val bd = CoordinateUtils.gcj02ToBd09(lat, lng)
+        json.put("wgs84_lat", wgs.lat)
+        json.put("wgs84_lng", wgs.lng)
+        json.put("bd09_lat", bd.lat)
+        json.put("bd09_lng", bd.lng)
+        json.put("lat", lat)
+        json.put("lng", lng)
+    }
+
+    fun putEnvironment(json: JSONObject, wifiJson: String, cellJson: String, bluetoothJson: String) {
+        val wifiObj = try {
+            JSONObject(wifiJson)
+        } catch (e: Exception) {
+            JSONObject().apply {
+                put("isConnected", false)
+                put("connectedWifi", JSONObject.NULL)
+                put("nearbyWifi", JSONArray())
+            }
+        }
+        json.put("wifi_json", wifiObj)
+        json.put("cell_json", JSONArray(cellJson))
+        json.put("bluetooth_json", JSONArray(bluetoothJson))
+    }
+
+    /** 独立于每次模拟会话的常驻设置项，调用方不逐层透传，每次落盘时直接读取最新值 */
+    private fun putPersistentSettings(json: JSONObject) {
+        val systemHookPackagesArr = JSONArray()
+        settingsManager.getSystemHookPackages().forEach { systemHookPackagesArr.put(it) }
+        json.put("system_hook_packages", systemHookPackagesArr)
+        json.put("system_hook_global_mode", settingsManager.isSystemHookGlobalMode)
+        json.put("vendor_override", settingsManager.vendorOverride)
+        // 运动真实度：Xposed 端据此给速度、步频、海拔、加速度加起伏；随机强度与速度浮动在会话内取开始时的快照
+        json.put("realism_level", SpoofingState.realismLevel.takeIf { it >= 0 } ?: settingsManager.realismLevel)
+        json.put("speed_fluctuation_pct", SpoofingState.speedFluctuationPct.takeIf { it >= 0 } ?: settingsManager.speedFluctuationPct)
+        json.put("gait_template", if (settingsManager.useGaitTemplate) settingsManager.gaitTemplate else "")
+    }
+
+    private fun refreshGeocodeIfMoved(lat: Double, lng: Double) {
+        val dist = FloatArray(1)
+        if (lastGeocodedLat != -999.0) {
+            android.location.Location.distanceBetween(lastGeocodedLat, lastGeocodedLng, lat, lng, dist)
+        }
+        if (lastGeocodedLat != -999.0 && dist[0] <= 500f) return
+        lastGeocodedLat = lat
+        lastGeocodedLng = lng
+        try {
+            val geocoder = android.location.Geocoder(context, java.util.Locale.CHINA)
+            // lat/lng 是 GCJ-02，而 Geocoder 按 Android 规范接收 WGS-84；直接传 GCJ-02 会被后端再加密一次，
+            // 偏出数百米、反查到错误的街道（issue #62：广州塔 → 赏湖街）
+            val wgs = CoordinateUtils.gcj02ToWgs84(lat, lng)
+
+            @Suppress("DEPRECATION")
+            val addresses = geocoder.getFromLocation(wgs.lat, wgs.lng, 1)
+            if (!addresses.isNullOrEmpty()) {
+                val addr = addresses[0]
+                cachedProvince = addr.adminArea ?: ""
+                cachedCity = addr.locality ?: addr.subAdminArea ?: ""
+                cachedDistrict = addr.subLocality ?: ""
+                cachedStreet = addr.thoroughfare ?: ""
+                cachedStreetNum = addr.subThoroughfare ?: ""
+                cachedAddressText = addr.getAddressLine(0) ?: ""
+                cachedCountry = addr.countryName ?: "中国"
+                cachedPoiName = addr.featureName ?: ""
+            }
+        } catch (e: Exception) {
+            // 逆地理编码失败时静默降级
+        }
+    }
+
+    private val writeMutex = Mutex()
+
+    @Volatile
+    private var lastJson: JSONObject? = null
+
+    /**
+     * 使用 stdin 写入，避免命令行过长 (ARG_MAX) 导致 su 执行失败，实现实时更新。
+     * 权限模型：DAC 只开到 644（owner=root 读写，其余只读，不再世界可写），不再落一份到 /sdcard/Download 外部存储。
+     * 两种模拟方案的"谁来读配置"不同，SELinux 标签策略也不同，见下面两个 xxxWriteCommand。
+     * 写入串行化：多个来源（界面、悬浮窗、周边数据刷新）并发写同一组文件时，保证最后落盘的是最后一次写入。
+     */
+    private suspend fun write(json: JSONObject) = writeMutex.withLock { writeLocked(json) }
+
+    private suspend fun writeLocked(json: JSONObject) {
         val command = if (BuildConfig.GLOBAL_SCHEME) globalWriteCommand() else scopedWriteCommand()
-        val result = rootManager.executeCommandWithInput(command, jsonText)
+        rootManager.executeCommandWithInput(command, json.toString())
+        lastJson = json
     }
 
     /**

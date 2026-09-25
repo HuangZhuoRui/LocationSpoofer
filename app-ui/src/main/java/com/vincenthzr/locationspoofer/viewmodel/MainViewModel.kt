@@ -10,6 +10,7 @@ import com.vincenthzr.locationspoofer.data.model.MapEngine
 import com.vincenthzr.locationspoofer.data.model.RootSolution
 import com.vincenthzr.locationspoofer.data.model.VendorScheme
 import com.vincenthzr.locationspoofer.utils.GaitTemplate
+import com.vincenthzr.locationspoofer.data.motion.MotionController
 import com.vincenthzr.locationspoofer.data.repository.LocationRepository
 import com.vincenthzr.locationspoofer.data.repository.SettingsRepository
 import com.vincenthzr.locationspoofer.data.repository.WifiRepository
@@ -37,14 +38,14 @@ class MainViewModel(
     internal val environmentDao: EnvironmentDao,
     internal val wifiRepository: WifiRepository,
     internal val opencellidClient: OpenCellIdClient,
+    internal val motionController: MotionController,
     internal val context: Context
 ) : ViewModel() {
     internal var lastMapMoveTime = 0L
     internal var mapMoveJob: Job? = null
-    internal var lastJoystickSyncTime = 0L
     internal var gaitRecordingJob: Job? = null
-    /** 摇杆的配置写入是异步 root 写文件，串行化保证"松手停下"那次写入不会被之前还在路上的写入覆盖 */
-    internal val joystickSyncMutex = kotlinx.coroutines.sync.Mutex()
+    /** 手动路线模式开始时自动打开了悬浮摇杆，停止路线时需要关掉 */
+    internal var floatingJoystickOpenedForRoute = false
 
     internal val _uiState = MutableStateFlow(
         AppState(
@@ -96,7 +97,6 @@ class MainViewModel(
         _spoofingUiState.asStateFlow()
 
     internal var locationSyncJob: Job? = null
-    internal var autoRouteJob: Job? = null
     internal var continuousScanJob: Job? = null
 
     init {

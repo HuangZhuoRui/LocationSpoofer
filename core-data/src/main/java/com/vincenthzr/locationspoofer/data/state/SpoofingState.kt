@@ -26,4 +26,7 @@ object SpoofingState {
     // 所以本次会话内固定不变，修改在下次开始模拟时生效。-1 表示没有快照（如进程重启后），直接读当前设置。
     var realismLevel = -1
     var speedFluctuationPct = -1
+
+    /** 路线暂停后继续时，从暂停处的累计距离（米）接着走；新会话开始时清零 */
+    var routeDistanceOffset = 0.0
 }

@@ -67,6 +67,9 @@
     <string name="root_solution_apatch">APatch</string>
     <string name="root_solution_sukisu_ultra">SukiSU Ultra</string>
     <string name="root_solution_resukisu_ultra">ReSukiSU Ultra</string>
+    <string name="floating_joystick">Floating joystick</string>
+    <string name="overlay_permission_required">Allow "Display over other apps", then open the floating joystick again</string>
+    <string name="overlay_permission_on_launch">The floating joystick needs "Display over other apps". Please allow it on the next screen</string>
     <string name="motion_realism_title">Motion Realism</string>
     <string name="motion_realism_desc">Make speed, cadence, altitude and motion sensor data look human</string>
     <string name="realism_level_title">Randomness</string>
@@ -308,7 +311,7 @@
     <string name="loop_auto_cruise">Loop Auto-Cruise</string>
     <string name="loop_auto_cruise_desc">Move automatically along the route</string>
     <string name="joystick_manual_control">Joystick Manual Control</string>
-    <string name="joystick_manual_control_desc">Guide movement along the route via joystick</string>
+    <string name="joystick_manual_control_desc">A floating joystick appears so you can steer from any app</string>
     <string name="cruise_speed">Cruise Speed</string>
     <string name="custom_speed">Custom Speed</string>
     <string name="pace_format">Pace: %s</string>

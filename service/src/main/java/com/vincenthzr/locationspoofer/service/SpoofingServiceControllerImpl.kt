@@ -30,4 +30,12 @@ class SpoofingServiceControllerImpl : SpoofingServiceController {
         } catch (e: Throwable) {
         }
     }
+
+    override val isFloatingJoystickShowing: Boolean
+        get() = FloatingJoystickService.isShowing
+
+    override fun setFloatingJoystickVisible(context: Context, visible: Boolean) {
+        val intent = Intent(context, FloatingJoystickService::class.java)
+        if (visible) context.startService(intent) else context.stopService(intent)
+    }
 }

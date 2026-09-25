@@ -63,6 +63,8 @@ class MainActivity : ComponentActivity() {
             )
         }
 
+        // 语言切换、旋转等导致的重建不重复跳转授权页，只在冷启动时检查一次
+        overlayPromptHandled = savedInstanceState != null
         checkAndRequestPermissions()
 
         setContent {
@@ -143,7 +145,30 @@ class MainActivity : ComponentActivity() {
             requestPermissions(notGranted.toTypedArray(), 100)
         } else {
             checkBackgroundLocation()
+            requestOverlayPermissionIfNeeded()
             requestIgnoreBatteryOptimizations()
+        }
+    }
+
+    private var overlayPromptHandled = false
+
+    /** 悬浮摇杆需要"显示在其他应用上层"权限：启动时检查，没有就直接跳到系统授权页 */
+    private fun requestOverlayPermissionIfNeeded() {
+        if (overlayPromptHandled || android.provider.Settings.canDrawOverlays(this)) return
+        overlayPromptHandled = true
+        android.widget.Toast.makeText(
+            this,
+            getString(com.vincenthzr.locationspoofer.ui.R.string.overlay_permission_on_launch),
+            android.widget.Toast.LENGTH_LONG
+        ).show()
+        try {
+            startActivity(
+                android.content.Intent(
+                    android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    android.net.Uri.parse("package:$packageName")
+                )
+            )
+        } catch (_: Exception) {
         }
     }
 
@@ -181,10 +206,11 @@ class MainActivity : ComponentActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 100) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                checkBackgroundLocation()
-                requestIgnoreBatteryOptimizations()
-            }
+            val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+            if (granted) checkBackgroundLocation()
+            // 悬浮窗权限与运行时权限无关，被拒绝时也照样检查
+            requestOverlayPermissionIfNeeded()
+            if (granted) requestIgnoreBatteryOptimizations()
         }
     }
 }

@@ -5,4 +5,20 @@
     <string name="spoofing_service_channel_name">Location Spoofer Service</string>
     <string name="spoofing_bg_notification_title">Location Spoofing Background Notification</string>
     <string name="close_joystick">Close Joystick</string>
+    <string name="floating_joystick_title">Joystick</string>
+    <string name="fj_collapse">Collapse</string>
+    <string name="fj_preset_walking">Walk</string>
+    <string name="fj_preset_running">Run</string>
+    <string name="fj_preset_cycling">Bike</string>
+    <string name="fj_preset_driving">Drive</string>
+    <string name="fj_preset_custom">Custom</string>
+    <string name="fj_pause">Pause</string>
+    <string name="fj_resume">Start</string>
+    <string name="fj_record">Record</string>
+    <string name="fj_stop_record">Stop</string>
+    <string name="fj_route_name_hint">Route name</string>
+    <string name="fj_default_route_name">Joystick route %1$s</string>
+    <string name="fj_save">Save</string>
+    <string name="fj_discard">Discard</string>
+    <string name="fj_saved_toast">Route saved</string>
 </resources>

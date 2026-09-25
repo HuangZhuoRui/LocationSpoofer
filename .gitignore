@@ -35,6 +35,9 @@ google-services.json
 
 # ─── Builds / Outputs ────────────────────────────────────
 app/release/
+# 引入 scheme 变体后，Android Studio"生成签名 APK"按变体输出到这两个目录
+app/global/
+app/scoped/
 
 # Local Gradle user home/cache
 .gradle-home/

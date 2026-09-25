@@ -137,4 +137,22 @@ class RouteEngineTest {
         assertEquals(120.5, motion.lng, 0.0)
         assertEquals(0f, motion.speed)
     }
+
+    @Test
+    fun `route resumes from the paused distance offset`() {
+        // 一条正北方向约 1113 米的直线路线
+        val route = pointsJson(0.0 to 0.0, 0.01 to 0.0)
+        fun cfg(offset: Double, start: Long) = JSONObject().apply {
+            put("is_route_mode", true)
+            put("route_points", route)
+            put("speed_m_s", 2.0)
+            put("start_timestamp", start)
+            put("route_distance_offset", offset)
+        }
+        val paused = RouteEngine.calculateCurrentPosition(cfg(0.0, 1_000L), now = 101_000L) // 走了 200 米时暂停
+        val resumed = RouteEngine.calculateCurrentPosition(cfg(200.0, 500_000L), now = 500_000L) // 继续的瞬间
+        assertEquals(paused.lat, resumed.lat, 1e-9)
+        val later = RouteEngine.calculateCurrentPosition(cfg(200.0, 500_000L), now = 510_000L)
+        assertEquals(220.0 / 111_320.0, later.lat, 2e-6)
+    }
 }

@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.MyLocation
+import androidx.compose.material.icons.rounded.Gamepad
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Storage
@@ -67,6 +68,7 @@ import com.vincenthzr.locationspoofer.ui.theme.AccentBlue
 import com.vincenthzr.locationspoofer.ui.theme.noRippleClickable
 import com.vincenthzr.locationspoofer.viewmodel.FavoriteToggleResult
 import com.vincenthzr.locationspoofer.viewmodel.MainViewModel
+import com.vincenthzr.locationspoofer.viewmodel.toggleFloatingJoystick
 import com.vincenthzr.locationspoofer.viewmodel.ManageDataViewModel
 import com.vincenthzr.locationspoofer.viewmodel.fetchCurrentLocation
 import com.vincenthzr.locationspoofer.viewmodel.handleSpoofingIntent
@@ -281,6 +283,10 @@ fun LocationTab(
                                 mapController?.animateCamera(lat, lng, 16f)
                             }
                         }
+                    )
+                    MapControlButton(
+                        icon = Icons.Rounded.Gamepad,
+                        onClick = { viewModel.toggleFloatingJoystick() }
                     )
                     MapControlButton(
                         icon = Icons.Rounded.Layers,

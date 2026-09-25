@@ -1,6 +1,6 @@
 package com.vincenthzr.locationspoofer.viewmodel
 
-import com.vincenthzr.locationspoofer.utils.MotionRealism
+import com.vincenthzr.locationspoofer.data.motion.MotionController
 import com.vincenthzr.locationspoofer.ui.BuildConfig
 import java.util.Locale
 import androidx.lifecycle.viewModelScope
@@ -155,6 +155,7 @@ internal fun MainViewModel.confirmMapPoint(lat: Double, lng: Double, isDragging:
                 mockBluetooth = updatedState.mockBluetooth && (BuildConfig.GLOBAL_SCHEME || updatedState.canMockBluetooth),
                 enableJitter = updatedState.enableJitter
             )
+            motionController.onStaticStarted(lat, lng)
         }
     }
 }
@@ -183,7 +184,7 @@ internal fun MainViewModel.setIsAutoCadence(auto: Boolean) {
 
 /**
  * 开始路线模拟。
- * - 手动模式：启动 spoofing（STILL），由摇杆驱动 moveByJoystick 实时更新坐标。
+ * - 手动模式：路线以暂停状态开始并自动打开悬浮摇杆，摇杆自由移动，点"开始"后沿路线前进。
  * - 循环模式：启动 spoofing，自动沿路线点按速度移动，到终点后反向循环。
  */
 
@@ -349,13 +350,17 @@ private fun MainViewModel.startSimulationWithPoints(pointsToRun: List<RoutePoint
             stepCadenceSpm = _uiState.value.stepCadenceSpm,
             isAutoCadence = _uiState.value.isAutoCadence
         )
+        val preset = MotionController.SpeedPreset(_uiState.value.routeSimMode.name, joystickMaxSpeedMs().toDouble())
+        // 手动模式同样加载路线，只是以暂停状态开始、由悬浮摇杆控制，点"开始"后沿路线前进
+        motionController.onRouteStarted(pointsToRun, preset, _uiState.value.stopAtDestination, now, startPaused = !isLoop)
+        if (!isLoop) {
+            // 手动模式只能用悬浮摇杆操作；记下是自动打开的，停止路线时一并关掉
+            val alreadyShowing = locationRepository.isFloatingJoystickShowing
+            floatingJoystickOpenedForRoute = !alreadyShowing && setFloatingJoystickVisible(true)
+        }
         _uiState.update {
             it.copy(isSpoofingActive = true)
         }
-    }
-
-    if (isLoop) {
-        startAutoRouteLoop()
     }
 }
 
@@ -375,8 +380,11 @@ internal fun MainViewModel.stopRoutePlanning() {
     settingsRepository.isSpoofingActive = false
     locationSyncJob?.cancel()
     locationSyncJob = null
-    autoRouteJob?.cancel()
-    autoRouteJob = null
+    motionController.onStopped()
+    if (floatingJoystickOpenedForRoute) {
+        setFloatingJoystickVisible(false)
+        floatingJoystickOpenedForRoute = false
+    }
     viewModelScope.launch {
         locationRepository.stopSpoofing(context)
         _uiState.update {
@@ -555,100 +563,20 @@ internal fun MainViewModel.loadSavedRoute(route: com.vincenthzr.locationspoofer.
 // 内部工具
 
 /**
- * 循环模式自动移动。
- * 按路点顺序移动，到终点后反向，不断循环。
- * 同时实时同步坐标到 SpoofingState。
+ * 路线播放、摇杆（包括悬浮窗摇杆）移动时由进程级 MotionController 推进位置，
+ * 这里把位置同步到界面，并按移动距离刷新周边环境数据；悬浮窗切换的速度档位也同步回界面。
  */
-
-private fun MainViewModel.startAutoRouteLoop() {
-    autoRouteJob?.cancel()
-    autoRouteJob = viewModelScope.launch(Dispatchers.Default) {
-        val points = _uiState.value.routePoints
-        if (points.size < 2) return@launch
-
-        val isClosedLoop = haversineMeters(points.first(), points.last()) <= 5.0
-
-        val speedMs = getEffectiveSpeedMs()
-        if (speedMs <= 0.0) return@launch
-
-        val tickMs = 100L
-        var forward = true
-        var segmentIndex = 0
-        var progress = 0.0 // 当前段上已走过的距离（米）
-        // 与 Xposed 端 RouteEngine 用同一个"按时间算累计距离"的函数（含速度浮动），两边算出的位置一致
-        val realism = MotionRealism.session(
-            SpoofingState.startTimestamp,
-            SpoofingState.realismLevel.takeIf { it >= 0 } ?: settingsRepository.realismLevel,
-            SpoofingState.speedFluctuationPct.takeIf { it >= 0 } ?: settingsRepository.speedFluctuationPct
-        )
-        var lastTotalDist = 0.0
-
-        while (isActive) {
-            val fromIdx = if (forward) segmentIndex else segmentIndex + 1
-            val toIdx = if (forward) segmentIndex + 1 else segmentIndex
-            val from = points[fromIdx]
-            val to = points[toIdx]
-            val segLen = haversineMeters(from, to)
-
-            val elapsedSec = (System.currentTimeMillis() - SpoofingState.startTimestamp).coerceAtLeast(0L) / 1000.0
-            val totalDist = realism.distance(speedMs, elapsedSec)
-            progress += (totalDist - lastTotalDist).coerceAtLeast(0.0)
-            lastTotalDist = totalDist
-
-            if (progress >= segLen) {
-                // 到达当前段终点
-                progress -= segLen
-                if (forward) {
-                    segmentIndex++
-                    if (segmentIndex >= points.lastIndex) {
-                        if (_uiState.value.stopAtDestination) {
-                            // 到达终点后停下
-                            val lastPt = points.last()
-                            val prevPt =
-                                if (points.size >= 2) points[points.size - 2] else lastPt
-                            val lastBearing = bearingBetween(prevPt, lastPt).toFloat()
-                            updatePosition(lastPt.lat, lastPt.lng, lastBearing)
-                            return@launch
-                        } else if (isClosedLoop) {
-                            // 闭环路线（起点与终点小于5m）：到达终点后不折返，从起点继续往终点正向循环
-                            forward = true
-                            segmentIndex = 0
-                            progress = 0.0
-                        } else {
-                            // 开放路线：到达终点，反向折返
-                            forward = false
-                            segmentIndex = points.lastIndex - 1
-                            progress = 0.0
-                        }
-                    }
-                } else {
-                    segmentIndex--
-                    if (segmentIndex < 0) {
-                        // 回到起点，正向
-                        forward = true
-                        segmentIndex = 0
-                        progress = 0.0
-                    }
-                }
-                // 重新获取段信息并继续
-                val newFrom = if (forward) points[segmentIndex] else points[segmentIndex + 1]
-                val bearing = if (forward) {
-                    val nextIdx = (segmentIndex + 1).coerceAtMost(points.lastIndex)
-                    bearingBetween(newFrom, points[nextIdx]).toFloat()
-                } else {
-                    bearingBetween(newFrom, points[segmentIndex]).toFloat()
-                }
-                updatePosition(newFrom.lat, newFrom.lng, bearing)
-            } else {
-                // 在段中间插值
-                val ratio = if (segLen > 0) progress / segLen else 0.0
-                val lat = from.lat + (to.lat - from.lat) * ratio
-                val lng = from.lng + (to.lng - from.lng) * ratio
-                val bearing = bearingBetween(from, to).toFloat()
-                updatePosition(lat, lng, bearing)
+internal fun MainViewModel.observeMotionController() {
+    viewModelScope.launch {
+        motionController.state.collect { st ->
+            if (!st.active) return@collect
+            if (st.mode == MotionController.Mode.ROUTE || st.mode == MotionController.Mode.MANUAL) {
+                updatePosition(st.lat, st.lng, st.bearing)
             }
-
-            delay(tickMs)
+            val simMode = SimMode.entries.firstOrNull { it.name == st.preset.name }
+            if (simMode != null && simMode != _uiState.value.routeSimMode) {
+                _uiState.update { it.copy(routeSimMode = simMode) }
+            }
         }
     }
 }
@@ -679,10 +607,6 @@ private fun MainViewModel.updatePosition(lat: Double, lng: Double, bearing: Floa
     if (distance > 20.0) {
         lastDbQueryLat = lat
         lastDbQueryLng = lng
-        val isRouteRunning =
-            _uiState.value.routePlanStage == com.vincenthzr.locationspoofer.data.model.RoutePlanStage.RUNNING
-        val simModeToUse = if (isRouteRunning) _uiState.value.routeSimMode.name else "STILL"
-        val speedToUse = getEffectiveSpeedMs()
 
         viewModelScope.launch(Dispatchers.IO) {
             val records = environmentDao.getNearestLocations(lat, lng, 3)
@@ -704,66 +628,15 @@ private fun MainViewModel.updatePosition(lat: Double, lng: Double, bearing: Floa
                     val jsons = locationToJson(records, lat, lng)
                     SpoofingState.cellJson = jsons.second
                     // 保存配置文件，写入新的 cell_json、wifi_json 和 bluetoothJson
-                    locationRepository.updateConfig(
-                        lat = lat,
-                        lng = lng,
-                        simMode = simModeToUse,
-                        simBearing = bearing,
-                        startTime = SpoofingState.startTimestamp,
-                        routePoints = _uiState.value.routePoints,
-                        isRouteMode = isRouteRunning,
-                        appCoordinateSystems = settingsRepository.getAppCoordinateSystems(),
-                        wifiJson = jsons.first,
-                        cellJson = jsons.second,
-                        bluetoothJson = jsons.third,
-                        speedMs = speedToUse,
-                        stopAtDestination = _uiState.value.stopAtDestination,
-                        enableStepSimulation = _uiState.value.enableStepSimulation,
-                        stepCadenceSpm = _uiState.value.stepCadenceSpm,
-                        isAutoCadence = _uiState.value.isAutoCadence
-                    )
+                    locationRepository.updateEnvironment(jsons.first, jsons.second, jsons.third)
                 } else {
                     // 回退到随机基站生成
                     SpoofingState.cellJson = "[]"
-                    locationRepository.updateConfig(
-                        lat = lat,
-                        lng = lng,
-                        simMode = simModeToUse,
-                        simBearing = bearing,
-                        startTime = SpoofingState.startTimestamp,
-                        routePoints = _uiState.value.routePoints,
-                        isRouteMode = isRouteRunning,
-                        appCoordinateSystems = settingsRepository.getAppCoordinateSystems(),
-                        wifiJson = "[]",
-                        cellJson = "[]",
-                        bluetoothJson = "[]",
-                        speedMs = speedToUse,
-                        stopAtDestination = _uiState.value.stopAtDestination,
-                        enableStepSimulation = _uiState.value.enableStepSimulation,
-                        stepCadenceSpm = _uiState.value.stepCadenceSpm,
-                        isAutoCadence = _uiState.value.isAutoCadence
-                    )
+                    locationRepository.updateEnvironment("[]", "[]", "[]")
                 }
             } else {
                 SpoofingState.cellJson = "[]"
-                locationRepository.updateConfig(
-                    lat = lat,
-                    lng = lng,
-                    simMode = simModeToUse,
-                    simBearing = bearing,
-                    startTime = SpoofingState.startTimestamp,
-                    routePoints = _uiState.value.routePoints,
-                    isRouteMode = isRouteRunning,
-                    appCoordinateSystems = settingsRepository.getAppCoordinateSystems(),
-                    wifiJson = "[]",
-                    cellJson = "[]",
-                    bluetoothJson = "[]",
-                    speedMs = speedToUse,
-                    stopAtDestination = _uiState.value.stopAtDestination,
-                    enableStepSimulation = _uiState.value.enableStepSimulation,
-                    stepCadenceSpm = _uiState.value.stepCadenceSpm,
-                    isAutoCadence = _uiState.value.isAutoCadence
-                )
+                locationRepository.updateEnvironment("[]", "[]", "[]")
             }
         }
     }
