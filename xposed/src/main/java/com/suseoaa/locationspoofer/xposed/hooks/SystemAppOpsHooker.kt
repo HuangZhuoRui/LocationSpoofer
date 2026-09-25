@@ -16,6 +16,8 @@
 package com.suseoaa.locationspoofer.xposed.hooks
 
 import com.suseoaa.locationspoofer.xposed.LocationHooker
+import com.suseoaa.locationspoofer.xposed.hooks.vendor.SystemComponent
+import com.suseoaa.locationspoofer.xposed.hooks.vendor.VendorRegistry
 import com.suseoaa.locationspoofer.xposed.utils.XposedBridge
 import com.suseoaa.locationspoofer.xposed.utils.XposedHelpers
 import org.json.JSONObject
@@ -34,7 +36,9 @@ private fun sysLog(msg: String) = XposedBridge.log(msg)
  */
 
 internal fun LocationHooker.hookSystemAppOpsService(classLoader: ClassLoader) {
-    val appOpsServiceClass = XposedHelpers.findClassIfExists(
+    val appOpsServiceClass = VendorRegistry.resolveClass(
+        SystemComponent.APPOPS_SERVICE, classLoader
+    ) ?: XposedHelpers.findClassIfExists(
         "com.android.server.appop.AppOpsService", classLoader
     ) ?: XposedHelpers.findClassIfExists(
         "com.android.server.AppOpsService", classLoader

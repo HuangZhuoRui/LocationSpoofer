@@ -21,6 +21,8 @@ import android.os.IInterface
 import android.util.Log
 import com.suseoaa.locationspoofer.xposed.LocationHooker
 import com.suseoaa.locationspoofer.xposed.hooks.network.*
+import com.suseoaa.locationspoofer.xposed.hooks.vendor.SystemComponent
+import com.suseoaa.locationspoofer.xposed.hooks.vendor.VendorRegistry
 import com.suseoaa.locationspoofer.xposed.utils.*
 import org.json.JSONObject
 import java.lang.ref.WeakReference
@@ -64,7 +66,9 @@ internal var isBluetoothServiceHooked = false
 internal fun LocationHooker.hookSystemBluetoothService(classLoader: ClassLoader) {
     if (isBluetoothServiceHooked) return
 
-    var gattServiceClass = XposedHelpers.findClassIfExists(
+    var gattServiceClass = VendorRegistry.resolveClass(
+        SystemComponent.BLUETOOTH_GATT_SERVICE, classLoader
+    ) ?: XposedHelpers.findClassIfExists(
         "com.android.bluetooth.gatt.GattService", classLoader
     ) ?: XposedHelpers.findClassIfExists(
         "com.android.bluetooth.btservice.AdapterService", classLoader

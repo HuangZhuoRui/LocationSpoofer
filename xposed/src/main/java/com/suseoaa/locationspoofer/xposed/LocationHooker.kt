@@ -19,6 +19,7 @@ package com.suseoaa.locationspoofer.xposed
 import com.suseoaa.locationspoofer.xposed.utils.*
 import com.suseoaa.locationspoofer.xposed.hooks.*
 import com.suseoaa.locationspoofer.xposed.hooks.network.*
+import com.suseoaa.locationspoofer.xposed.hooks.vendor.VendorRegistry
 
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
@@ -224,6 +225,13 @@ class LocationHooker : XposedModule() {
             systemHooksInstalled = true
             XposedBridge.log("[SysHook] Deploying system framework hooks in $processName...")
 
+            // 厂商适配方案的手动覆盖（VendorRegistry.applyManualOverride）必须在下面任何一个
+            // hookSystemXxxService 之前生效——它们会调用 VendorRegistry.resolveClass，从而触发
+            // VendorRegistry.active 这个 by lazy 属性首次求值，晚了就再也覆盖不了。这里提前读一次
+            // 配置：readConfig() 可重复调用，后续调用只返回内存里已缓存的 lastConfig，不会重复走磁盘 IO。
+            val earlyCfg = readConfig()
+            VendorRegistry.applyManualOverride(earlyCfg?.optString("vendor_override", "auto"))
+
             if (isSystemServer) {
                 try { dumpSystemServiceInternals(classLoader) } catch (t: Throwable) { XposedBridge.log("[SysHook] dump failed: $t") }
                 try { hookSystemLocationService(classLoader) } catch (t: Throwable) { XposedBridge.log("[SysHook] hookSystemLocationService error: $t") }
@@ -240,6 +248,13 @@ class LocationHooker : XposedModule() {
             if (isBluetoothProcess) {
                 try { hookSystemBluetoothService(classLoader) } catch (t: Throwable) { XposedBridge.log("[SysHook] hookSystemBluetoothService error: $t") }
             }
+
+            // 机型/系统适配层：先打印一次命中的适配器画像，再执行该机型专属的额外 Hook（默认空实现，
+            // 各厂商在 vendor/profiles/ 下按需覆写）。基线 Hook 已在上面装完，这里是纯追加，不影响任何机型。
+            VendorRegistry.logSelectionOnce()
+            try {
+                VendorRegistry.installExtraHooks(this, classLoader)
+            } catch (t: Throwable) { XposedBridge.log("[Vendor] installExtraHooks error: $t") }
 
             val cfg = readConfig()
             android.util.Log.e(

@@ -73,6 +73,11 @@ class SettingsManager(context: Context) {
         get() = prefs.getString("root_solution", "AUTO") ?: "AUTO"
         set(value) = prefs.edit().putString("root_solution", value).apply()
 
+    /** 用户在"厂商适配方案"设置页手动选中的 [com.suseoaa.locationspoofer.data.model.VendorScheme.id]；"auto" 表示走自动识别。 */
+    var vendorOverride: String
+        get() = prefs.getString("vendor_override", "auto") ?: "auto"
+        set(value) = prefs.edit().putString("vendor_override", value).apply()
+
     var ignoredVersion: String
         get() = prefs.getString("ignored_version", "") ?: ""
         set(value) = prefs.edit().putString("ignored_version", value).apply()

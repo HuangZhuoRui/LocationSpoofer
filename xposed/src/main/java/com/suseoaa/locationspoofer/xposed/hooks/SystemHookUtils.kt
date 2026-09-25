@@ -1,8 +1,7 @@
 package com.suseoaa.locationspoofer.xposed.hooks
 
+import android.annotation.SuppressLint
 import android.os.Binder
-import android.util.Log
-import com.suseoaa.locationspoofer.xposed.LocationHooker
 import com.suseoaa.locationspoofer.xposed.utils.SpoofedMotion
 import com.suseoaa.locationspoofer.xposed.utils.XposedBridge
 import com.suseoaa.locationspoofer.xposed.utils.XposedHelpers
@@ -10,13 +9,27 @@ import org.json.JSONObject
 
 /**
  * 系统服务（system_server）调用方识别与权限判定工具
+ *
+ * `@SuppressLint("StaticFieldLeak")`：Lint 把 [cachedSystemContext] 报成"静态字段持有 Context 会
+ * 内存泄漏"，但那是针对普通 App 进程里 Activity/Fragment 这类短生命周期 Context 设计的检查——
+ * 这里缓存的是 system_server 自己的系统级 Context（`ActivityThread.getSystemContext()`），
+ * 和 system_server 进程本身同生共死，没有 Activity/View 引用链，不会造成真实泄漏，可以放心 Suppress
+ * （Lint 把这个警告挂在了 object 声明本身，而不是字段声明上，所以注解也要加在这里才生效）。
  */
+@SuppressLint("StaticFieldLeak")
 object SystemHookUtils {
 
-    private const val TAG = "LocationSpoofer"
-
-    /** 系统豁免包名：绝对不进行模拟，保证系统基础运行与自身数据采集不受污染 */
-    val EXEMPT_PACKAGES = setOf(
+    /**
+     * 跨机型通用的基础豁免包名：本项目自身、系统核心进程、GMS、Qualcomm 定位 HAL 服务等——
+     * 在任何 Android 设备上都存在、都不该被模拟的包。
+     *
+     * 厂商自有的定位融合 / 场景感知 / 省电策略服务（例如小米的 MetokNLP）不再堆在这里，
+     * 改为在对应的 `hooks/vendor/profiles/XxxVendor.kt` 里通过
+     * [com.suseoaa.locationspoofer.xposed.hooks.vendor.SystemHookVendor.additionalExemptPackages]
+     * 声明——同一个厂商专属的豁免名单不该出现在所有机型都会用到的通用名单里，否则每加一个新机型
+     * 的专属豁免又会回到"全堆在一起"的老路。
+     */
+    private val BASE_EXEMPT_PACKAGES = setOf(
         "com.suseoaa.locationspoofer",
         "android",
         "system_server",
@@ -24,22 +37,33 @@ object SystemHookUtils {
         "com.android.systemui",
         "com.android.phone",
         "com.android.server.telecom",
-        "com.xiaomi.metoknlp",
         "com.google.android.gms",
         "com.qualcomm.location",
         "com.qualcomm.atfwd",
         "com.android.ons",
-        "com.xiaomi.location.fused",
         "com.android.location.fused",
-        "com.xiaomi.aicr",
-        "com.xiaomi.hypercomm",
-        "com.miui.powerinsight",
-        "com.miui.powerkeeper"
     )
 
+    /**
+     * 系统豁免包名：绝对不进行模拟，保证系统基础运行与自身数据采集不受污染。
+     * = 通用基线 [BASE_EXEMPT_PACKAGES] ∪ 当前机型通过 vendor 适配层追加的专属豁免包名
+     * （[com.suseoaa.locationspoofer.xposed.hooks.vendor.VendorRegistry.additionalExemptPackages]）。
+     * 首次访问时求值并缓存，之后每次调用零额外开销。
+     */
+    val EXEMPT_PACKAGES: Set<String> by lazy {
+        BASE_EXEMPT_PACKAGES + com.suseoaa.locationspoofer.xposed.hooks.vendor.VendorRegistry.additionalExemptPackages
+    }
+
+    /** 缓存的 system_server 系统级 Context，见类注释里 `@SuppressLint("StaticFieldLeak")` 的说明。 */
     @Volatile
     private var cachedSystemContext: android.content.Context? = null
 
+    // Lint 的 PrivateApi 检查是在提醒"反射调用的隐藏 API 在不同系统版本上可能改名/消失"——这个提醒
+    // 本身是对的，但规避不了：本项目的定位就是在 system_server 里 Hook 系统内部实现，必然要通过
+    // 反射拿到 ActivityThread 这类 @hide 类。真正的应对方式不是不用反射，而是本函数已经做到的：
+    // 全程 try/catch 兜底、拿不到就返回 null，调用方（resolveCallingPackages）已经有降级路径
+    // （退回 serviceInstance 的 mContext 字段），不会因为某个系统版本上这条反射链路失效而崩溃。
+    @SuppressLint("PrivateApi")
     fun getSystemContext(): android.content.Context? {
         cachedSystemContext?.let { return it }
         return try {

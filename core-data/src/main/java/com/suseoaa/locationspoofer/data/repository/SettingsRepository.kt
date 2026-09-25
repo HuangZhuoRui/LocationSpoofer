@@ -80,6 +80,12 @@ class SettingsRepository(private val settingsManager: SettingsManager) {
         settingsManager.rootSolution = value
     }
 
+    fun getVendorOverride(): String = settingsManager.vendorOverride
+
+    fun setVendorOverride(value: String) {
+        settingsManager.vendorOverride = value
+    }
+
     fun getIgnoredVersion(): String = settingsManager.ignoredVersion
 
     fun setIgnoredVersion(value: String) {

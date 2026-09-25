@@ -9,6 +9,7 @@ import com.suseoaa.locationspoofer.data.model.RoutePlanStage
 import com.suseoaa.locationspoofer.data.model.AppMapType
 import com.suseoaa.locationspoofer.data.model.MapEngine
 import com.suseoaa.locationspoofer.data.model.RootSolution
+import com.suseoaa.locationspoofer.data.model.VendorScheme
 import com.suseoaa.locationspoofer.data.model.SearchMode
 import com.suseoaa.locationspoofer.data.state.SpoofingState
 import com.suseoaa.locationspoofer.ui.screen.AppPoiItem
@@ -143,6 +144,16 @@ internal fun MainViewModel.setMapEngine(engine: MapEngine) {
 internal fun MainViewModel.setRootSolution(solution: RootSolution) {
     settingsRepository.setRootSolution(solution.name)
     _uiState.update { it.copy(rootSolution = solution) }
+}
+
+/**
+ * 设置手动选择的厂商适配方案。system_server 里的 [com.suseoaa.locationspoofer.xposed.hooks.vendor.VendorRegistry]
+ * 只在进程启动、Hook 安装的那一刻读取这个值（见 `VendorRegistry.applyManualOverride`），
+ * 所以切换方案后需要重启设备才能真正生效，UI 侧应提示用户这一点。
+ */
+internal fun MainViewModel.setVendorScheme(scheme: VendorScheme) {
+    settingsRepository.setVendorOverride(scheme.id)
+    _uiState.update { it.copy(vendorScheme = scheme) }
 }
 
 internal fun MainViewModel.testRootSetup() {

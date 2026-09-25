@@ -20,6 +20,8 @@ import android.os.IBinder
 import android.os.IInterface
 import android.util.Log
 import com.suseoaa.locationspoofer.xposed.LocationHooker
+import com.suseoaa.locationspoofer.xposed.hooks.vendor.SystemComponent
+import com.suseoaa.locationspoofer.xposed.hooks.vendor.VendorRegistry
 import com.suseoaa.locationspoofer.xposed.utils.*
 import io.github.libxposed.api.*
 import org.json.JSONObject
@@ -481,7 +483,9 @@ private fun createDummyCancellationSignal(): Any {
 }
 
 internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) {
-    val serviceClazz = XposedHelpers.findClassIfExists(
+    val serviceClazz = VendorRegistry.resolveClass(
+        SystemComponent.LOCATION_MANAGER_SERVICE, classLoader
+    ) ?: XposedHelpers.findClassIfExists(
         "com.android.server.location.LocationManagerService", classLoader
     ) ?: XposedHelpers.findClassIfExists(
         "com.android.server.LocationManagerService", classLoader
@@ -943,7 +947,9 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
     // 直接在 providerManager 层拦截 getLastLocation 与 getCurrentLocation，
     // 全面覆盖所有原生与定制 provider ("gps", "network", "fused", "passive")
     // =========================================================================
-    val providerManagerClazz = XposedHelpers.findClassIfExists(
+    val providerManagerClazz = VendorRegistry.resolveClass(
+        SystemComponent.LOCATION_PROVIDER_MANAGER, classLoader
+    ) ?: XposedHelpers.findClassIfExists(
         "com.android.server.location.provider.LocationProviderManager", classLoader
     )
     if (providerManagerClazz != null && hookedCallbackClasses.putIfAbsent(providerManagerClazz, true) == null) {

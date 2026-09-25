@@ -151,6 +151,9 @@ class ConfigManager(private val context: Context, private val rootManager: RootM
             settingsManager.getSystemHookPackages().forEach { systemHookPackagesArr.put(it) }
             put("system_hook_packages", systemHookPackagesArr)
             put("system_hook_global_mode", settingsManager.isSystemHookGlobalMode)
+            // 厂商适配方案同样是常驻设置项（在"厂商适配方案"页配置），不随每次模拟会话变化，
+            // 这里和 system_hook_packages 一样直接读取最新值，不需要调用方逐层透传。
+            put("vendor_override", settingsManager.vendorOverride)
         }
         val cellCount = json.optJSONArray("cell_json")?.length() ?: 0
 

@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BatteryChargingFull
+import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Map
@@ -63,6 +64,7 @@ fun InfoTab(
     onNavigateToMapEngine: () -> Unit = {},
     onNavigateToSignatureAuth: () -> Unit = {},
     onNavigateToRootDiagnostics: () -> Unit = {},
+    onNavigateToVendorScheme: () -> Unit = {},
     onNavigateToBackgroundKeepAlive: () -> Unit = {},
     onNavigateToEnvTokens: () -> Unit = {}
 ) {
@@ -83,6 +85,24 @@ fun InfoTab(
     val savedLangCode = viewModel.getSavedLanguage()
     val currentLangName = remember(savedLangCode, defaultLangText) {
         LANGUAGES.firstOrNull { it.code == savedLangCode }?.nativeName ?: defaultLangText
+    }
+
+    // 获取当前厂商适配方案名称
+    val vendorAutoText = stringResource(R.string.vendor_scheme_auto)
+    val vendorHyperOsText = stringResource(R.string.vendor_scheme_hyperos)
+    val vendorColorOsText = stringResource(R.string.vendor_scheme_coloros)
+    val vendorOneUiText = stringResource(R.string.vendor_scheme_oneui)
+    val vendorAospText = stringResource(R.string.vendor_scheme_aosp)
+    val currentVendorSchemeName = remember(
+        uiState.vendorScheme, vendorAutoText, vendorHyperOsText, vendorColorOsText, vendorOneUiText, vendorAospText
+    ) {
+        when (uiState.vendorScheme) {
+            com.suseoaa.locationspoofer.data.model.VendorScheme.AUTO -> vendorAutoText
+            com.suseoaa.locationspoofer.data.model.VendorScheme.HYPEROS -> vendorHyperOsText
+            com.suseoaa.locationspoofer.data.model.VendorScheme.COLOROS -> vendorColorOsText
+            com.suseoaa.locationspoofer.data.model.VendorScheme.ONEUI -> vendorOneUiText
+            com.suseoaa.locationspoofer.data.model.VendorScheme.AOSP -> vendorAospText
+        }
     }
 
     // 获取当前地图引擎名称
@@ -219,6 +239,14 @@ fun InfoTab(
                             tint = AccentBlue,
                             title = stringResource(R.string.root_solution_title),
                             onClick = onNavigateToRootDiagnostics
+                        )
+                        SettingsEntryDivider()
+                        SettingsEntryRow(
+                            icon = Icons.Rounded.Devices,
+                            tint = AccentGreen,
+                            title = stringResource(R.string.vendor_scheme_title),
+                            previewChip = currentVendorSchemeName,
+                            onClick = onNavigateToVendorScheme
                         )
                         SettingsEntryDivider()
                         SettingsEntryRow(

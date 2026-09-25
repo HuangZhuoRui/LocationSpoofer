@@ -19,6 +19,8 @@ package com.suseoaa.locationspoofer.xposed.hooks
 import android.util.Log
 import com.suseoaa.locationspoofer.xposed.LocationHooker
 import com.suseoaa.locationspoofer.xposed.hooks.network.*
+import com.suseoaa.locationspoofer.xposed.hooks.vendor.SystemComponent
+import com.suseoaa.locationspoofer.xposed.hooks.vendor.VendorRegistry
 import com.suseoaa.locationspoofer.xposed.utils.XposedBridge
 import com.suseoaa.locationspoofer.xposed.utils.XposedHelpers
 import org.json.JSONObject
@@ -46,7 +48,9 @@ internal var isTelephonyServiceHooked = false
 internal fun LocationHooker.hookSystemTelephonyService(classLoader: ClassLoader) {
     if (isTelephonyServiceHooked) return
 
-    var phoneServiceClass = XposedHelpers.findClassIfExists(
+    var phoneServiceClass = VendorRegistry.resolveClass(
+        SystemComponent.TELEPHONY_PHONE_MANAGER, classLoader
+    ) ?: XposedHelpers.findClassIfExists(
         "com.android.internal.telephony.PhoneInterfaceManager", classLoader
     ) ?: XposedHelpers.findClassIfExists(
         "com.android.server.telephony.PhoneInterfaceManager", classLoader
@@ -257,7 +261,9 @@ internal fun LocationHooker.hookSystemTelephonyService(classLoader: ClassLoader)
 
 /** system_server 内部 TelephonyRegistry 拦截：改写主动派发到客户端的回调事件 */
 internal fun LocationHooker.hookSystemTelephonyRegistry(classLoader: ClassLoader) {
-    val registryClass = XposedHelpers.findClassIfExists("com.android.server.TelephonyRegistry", classLoader) ?: return
+    val registryClass = VendorRegistry.resolveClass(
+        SystemComponent.TELEPHONY_REGISTRY, classLoader
+    ) ?: XposedHelpers.findClassIfExists("com.android.server.TelephonyRegistry", classLoader) ?: return
     if (hookedCallbackClasses.putIfAbsent(registryClass, true) != null) return
 
     val notifyMethods = arrayOf("notifyCellInfo", "notifyCellInfoForSubscriber")

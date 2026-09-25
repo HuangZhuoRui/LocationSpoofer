@@ -18,6 +18,8 @@ package com.suseoaa.locationspoofer.xposed.hooks
 
 import android.util.Log
 import com.suseoaa.locationspoofer.xposed.LocationHooker
+import com.suseoaa.locationspoofer.xposed.hooks.vendor.SystemComponent
+import com.suseoaa.locationspoofer.xposed.hooks.vendor.VendorRegistry
 import com.suseoaa.locationspoofer.xposed.utils.XposedBridge
 import com.suseoaa.locationspoofer.xposed.utils.XposedHelpers
 import org.json.JSONObject
@@ -45,6 +47,14 @@ private fun logWifi(msg: String) {
 }
 
 private fun findWifiServiceClass(classLoader: ClassLoader): Class<*>? {
+    // 0. 机型/系统适配层优先：按"当前机型候选 → AOSP 基线候选"解析。命中即用，未命中回落下方原有逻辑。
+    VendorRegistry.resolveClass(
+        SystemComponent.WIFI_SERVICE, classLoader
+    )?.let {
+        logWifi("[SysWifi] Found WifiServiceImpl via vendor=${com.suseoaa.locationspoofer.xposed.hooks.vendor.VendorRegistry.active.id}: ${it.name}")
+        return it
+    }
+
     // 1. 尝试直接从当前 classLoader 加载 (Android 11 及部分 ROM)
     XposedHelpers.findClassIfExists("com.android.server.wifi.WifiServiceImpl", classLoader)?.let {
         logWifi("[SysWifi] Found WifiServiceImpl from default classLoader")
@@ -582,7 +592,10 @@ internal fun LocationHooker.installWifiHooks(wifiServiceClass: Class<*>, classLo
     // 2.1 WifiScanningServiceImpl：拦截通过 WifiScanner.getSingleScanResults 获取热点的系统定位/反作弊 SDK
     // =========================================================================
     try {
-        val scannerClass = XposedHelpers.findClassIfExists(
+        val scannerClass = VendorRegistry.resolveClass(
+            SystemComponent.WIFI_SCANNER_SERVICE,
+            wifiServiceClass.classLoader, classLoader
+        ) ?: XposedHelpers.findClassIfExists(
             "com.android.server.wifi.scanner.WifiScanningServiceImpl",
             wifiServiceClass.classLoader ?: classLoader
         )
@@ -648,6 +661,10 @@ internal fun LocationHooker.installWifiHooks(wifiServiceClass: Class<*>, classLo
 internal var isConnectivityServiceHooked = false
 
 private fun findConnectivityServiceClass(classLoader: ClassLoader): Class<*>? {
+    VendorRegistry.resolveClass(
+        SystemComponent.CONNECTIVITY_SERVICE, classLoader
+    )?.let { return it }
+
     XposedHelpers.findClassIfExists("com.android.server.ConnectivityService", classLoader)?.let { return it }
     XposedHelpers.findClassIfExists("com.android.server.connectivity.ConnectivityService", classLoader)?.let { return it }
 

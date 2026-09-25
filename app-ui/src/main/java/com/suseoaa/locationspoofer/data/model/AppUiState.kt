@@ -57,6 +57,7 @@ data class AppState(
     val currentLanguage: String = "",
     val hasRootAccess: Boolean = false,
     val rootSolution: RootSolution = RootSolution.AUTO,
+    val vendorScheme: VendorScheme = VendorScheme.AUTO,
     val isTestingRootSetup: Boolean = false,
     val rootSetupTestResult: RootSetupTestResult? = null,
     val isRestartingHookedApps: Boolean = false,
