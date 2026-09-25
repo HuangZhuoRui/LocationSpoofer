@@ -241,14 +241,17 @@ fun InfoTab(
                             onClick = onNavigateToRootDiagnostics
                         )
                         SettingsEntryDivider()
-                        SettingsEntryRow(
-                            icon = Icons.Rounded.Devices,
-                            tint = AccentGreen,
-                            title = stringResource(R.string.vendor_scheme_title),
-                            previewChip = currentVendorSchemeName,
-                            onClick = onNavigateToVendorScheme
-                        )
-                        SettingsEntryDivider()
+                        // 厂商适配只作用于系统级 Hook，仅全局方案显示
+                        if (BuildConfig.GLOBAL_SCHEME) {
+                            SettingsEntryRow(
+                                icon = Icons.Rounded.Devices,
+                                tint = AccentGreen,
+                                title = stringResource(R.string.vendor_scheme_title),
+                                previewChip = currentVendorSchemeName,
+                                onClick = onNavigateToVendorScheme
+                            )
+                            SettingsEntryDivider()
+                        }
                         SettingsEntryRow(
                             icon = Icons.Rounded.BatteryChargingFull,
                             tint = AccentOrange,

@@ -1,5 +1,6 @@
 package com.suseoaa.locationspoofer.viewmodel
 
+import com.suseoaa.locationspoofer.ui.BuildConfig
 import androidx.lifecycle.viewModelScope
 import com.suseoaa.locationspoofer.ui.R
 import com.suseoaa.locationspoofer.data.db.LocationRecord
@@ -61,9 +62,9 @@ internal fun MainViewModel.startSpoofing() {
             updatedState.collectedWifiJson,
             updatedState.collectedCellJson,
             updatedState.collectedBluetoothJson,
-            updatedState.mockWifi,
+            updatedState.mockWifi && (BuildConfig.GLOBAL_SCHEME || updatedState.canMockWifi),
             updatedState.mockCell,
-            updatedState.mockBluetooth,
+            updatedState.mockBluetooth && (BuildConfig.GLOBAL_SCHEME || updatedState.canMockBluetooth),
             updatedState.enableJitter
         )
 
@@ -87,6 +88,15 @@ internal fun MainViewModel.startSpoofing() {
  */
 
 private suspend fun MainViewModel.restartHookedAppsSilently() {
+    if (!BuildConfig.GLOBAL_SCHEME) {
+        // 非全局方案：重启 LSPosed 作用域里勾选的全部 App（包括承担融合定位的 GMS）
+        val apps = lsposedManager.getHookedApps(context)
+        if (apps.isNotEmpty()) {
+            locationRepository.checkRootAccess() // 重新下发 sepolicy 规则，确保重启后读到的是最新的
+            locationRepository.forceStopApps(apps.map { it.packageName })
+        }
+        return
+    }
     val targetPackages = mutableSetOf<String>()
     // 1. LSPosed 传统作用域勾选的应用
     targetPackages.addAll(lsposedManager.getHookedApps(context).map { it.packageName })

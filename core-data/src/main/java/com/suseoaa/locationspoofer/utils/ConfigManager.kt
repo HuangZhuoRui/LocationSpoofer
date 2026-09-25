@@ -2,6 +2,7 @@ package com.suseoaa.locationspoofer.utils
 
 import android.content.Context
 import android.location.Geocoder
+import com.suseoaa.locationspoofer.data.BuildConfig
 import com.suseoaa.locationspoofer.data.model.RoutePoint
 import com.suseoaa.locationspoofer.utils.CoordinateUtils
 import kotlinx.coroutines.Dispatchers
@@ -157,13 +158,50 @@ class ConfigManager(private val context: Context, private val rootManager: RootM
         }
         val cellCount = json.optJSONArray("cell_json")?.length() ?: 0
 
-        // 使用 stdin 写入，避免命令行过长 (ARG_MAX) 导致 su 执行失败，实现实时更新
-        // 权限模型：DAC 只开到 644（owner=root 读写，其余只读，不再世界可写），
-        // 真正决定"谁能读"的是 SELinux 专属 type + 域授权（见 RootManager.ensureSepolicyRules），
-        // 不再依赖 shell_data_file/system_data_file 这类通用类型，也不再落一份到 /sdcard/Download 外部存储。
-        val selinuxType = RootManager.CONFIG_SELINUX_TYPE
+        // 使用 stdin 写入，避免命令行过长 (ARG_MAX) 导致 su 执行失败，实现实时更新。
+        // 权限模型：DAC 只开到 644（owner=root 读写，其余只读，不再世界可写），不再落一份到 /sdcard/Download 外部存储。
+        // 两种模拟方案的"谁来读配置"不同，SELinux 标签策略也不同，见下面两个 xxxWriteCommand。
         val jsonText = json.toString()
-        val command = """
+        val command = if (BuildConfig.GLOBAL_SCHEME) globalWriteCommand() else scopedWriteCommand()
+        val result = rootManager.executeCommandWithInput(command, jsonText)
+    }
+
+    /**
+     * 非全局方案：配置由各目标 App 进程自己读取，统一打项目专属 SELinux type，
+     * 再由 RootManager.ensureSepolicyRules 给 untrusted_app 等域授权读取。
+     */
+    private fun scopedWriteCommand(): String {
+        val selinuxType = RootManager.CONFIG_SELINUX_TYPE
+        return """
+            chmod 755 /data/local/tmp 2>/dev/null || true
+            chmod 755 /data/local 2>/dev/null || true
+            mkdir -p /data/data/com.suseoaa.locationspoofer/files 2>/dev/null || true
+            chmod 755 /data/data/com.suseoaa.locationspoofer 2>/dev/null || true
+            chmod 755 /data/data/com.suseoaa.locationspoofer/files 2>/dev/null || true
+            cat > /data/local/tmp/locationspoofer_config_tmp.json
+            chmod 644 /data/local/tmp/locationspoofer_config_tmp.json
+            chcon u:object_r:$selinuxType:s0 /data/local/tmp/locationspoofer_config_tmp.json 2>/dev/null || true
+            cp /data/local/tmp/locationspoofer_config_tmp.json /data/system/locationspoofer_config_tmp.json
+            chown system:system /data/system/locationspoofer_config_tmp.json 2>/dev/null || true
+            chmod 644 /data/system/locationspoofer_config_tmp.json
+            chcon u:object_r:$selinuxType:s0 /data/system/locationspoofer_config_tmp.json 2>/dev/null || true
+            cp /data/local/tmp/locationspoofer_config_tmp.json /data/data/com.suseoaa.locationspoofer/files/locationspoofer_config.json
+            chmod 644 /data/data/com.suseoaa.locationspoofer/files/locationspoofer_config.json 2>/dev/null || true
+            chcon u:object_r:$selinuxType:s0 /data/data/com.suseoaa.locationspoofer/files/locationspoofer_config.json 2>/dev/null || true
+            mv /data/local/tmp/locationspoofer_config_tmp.json /data/local/tmp/locationspoofer_config.json
+            mv /data/system/locationspoofer_config_tmp.json /data/system/locationspoofer_config.json
+            chmod 644 /data/local/tmp/locationspoofer_config.json 2>/dev/null || true
+            chmod 644 /data/system/locationspoofer_config.json 2>/dev/null || true
+            chcon u:object_r:$selinuxType:s0 /data/local/tmp/locationspoofer_config.json 2>/dev/null || true
+            chcon u:object_r:$selinuxType:s0 /data/system/locationspoofer_config.json 2>/dev/null || true
+        """.trimIndent()
+    }
+
+    /**
+     * 全局方案：配置由 system_server / com.android.phone / com.android.bluetooth 三个系统进程读取，
+     * 各自落一份到本域可读的数据目录，并使用该域原生的 SELinux 标签与 uid 所有权。
+     */
+    private fun globalWriteCommand(): String = """
             chmod 755 /data/local/tmp 2>/dev/null || true
             chmod 755 /data/local 2>/dev/null || true
             mkdir -p /data/data/com.suseoaa.locationspoofer/files 2>/dev/null || true
@@ -202,10 +240,8 @@ class ConfigManager(private val context: Context, private val rootManager: RootM
             chmod 644 /data/local/tmp/locationspoofer_config.json 2>/dev/null || true
         """.trimIndent()
 
-        val result = rootManager.executeCommandWithInput(command, jsonText)
-    }
-
     fun syncDomainConfigs() {
+        if (!BuildConfig.GLOBAL_SCHEME) return
         val command = """
             if [ -f /data/system/locationspoofer_config.json ]; then
                 mkdir -p /data/user_de/0/com.android.phone/files 2>/dev/null || true

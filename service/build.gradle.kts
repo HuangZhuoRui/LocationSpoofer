@@ -12,6 +12,9 @@ android {
 
     defaultConfig {
         minSdk = 26
+        // service 本身不区分模拟方案，只是依赖了带 scheme 维度的 :core-data；
+        // 最终打进 APK 的 core-data 变体由 :app 的 flavor 决定，这里只影响编译期解析
+        missingDimensionStrategy("scheme", "scoped")
     }
 
     compileOptions {

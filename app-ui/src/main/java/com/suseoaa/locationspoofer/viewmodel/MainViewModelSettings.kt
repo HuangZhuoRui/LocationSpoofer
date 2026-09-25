@@ -1,5 +1,6 @@
 package com.suseoaa.locationspoofer.viewmodel
 
+import com.suseoaa.locationspoofer.ui.BuildConfig
 import android.content.Context
 import java.util.Locale
 import androidx.lifecycle.viewModelScope
@@ -171,6 +172,10 @@ internal fun MainViewModel.dismissRootSetupTestResult() {
 /** 从 LSPosed 作用域与系统级 Hook 目标应用拉取当前生效的目标 App 列表，触发"确认重启应用"弹窗 */
 
 internal fun MainViewModel.requestRestartHookedApps() {
+    if (!BuildConfig.GLOBAL_SCHEME) {
+        _uiState.update { it.copy(hookedAppsToRestart = lsposedManager.getHookedApps(context)) }
+        return
+    }
     val targetPackages = mutableSetOf<String>()
     targetPackages.addAll(lsposedManager.getHookedApps(context).map { it.packageName })
     targetPackages.addAll(settingsRepository.getSystemHookPackages())

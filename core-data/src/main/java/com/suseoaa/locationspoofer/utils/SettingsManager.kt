@@ -2,6 +2,7 @@ package com.suseoaa.locationspoofer.utils
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.suseoaa.locationspoofer.data.BuildConfig
 import com.suseoaa.locationspoofer.data.model.RoutePoint
 import com.suseoaa.locationspoofer.data.model.SavedLocation
 import com.suseoaa.locationspoofer.data.model.SavedRoute
@@ -18,7 +19,8 @@ class SettingsManager(context: Context) {
         // 在系统级 Hook 架构下，Wi-Fi、基站与蓝牙均由系统服务自动实时合成高拟真环境数据，
         // 必须默认保持开启以彻底杜绝高德/阿里/抖音等通过物理 Wi-Fi BSSID 与基站反查真实位置。
         // 同时确保系统级全局模拟模式（is_system_hook_global_mode）默认开启。
-        if (!prefs.getBoolean("mock_switches_migrated_v3", false)) {
+        // 仅全局方案执行：非全局方案不改动用户已有的开关设置。
+        if (BuildConfig.GLOBAL_SCHEME && !prefs.getBoolean("mock_switches_migrated_v3", false)) {
             prefs.edit()
                 .putBoolean("mock_wifi", true)
                 .putBoolean("mock_cell", true)

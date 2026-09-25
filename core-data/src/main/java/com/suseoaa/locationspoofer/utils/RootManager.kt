@@ -1,5 +1,6 @@
 package com.suseoaa.locationspoofer.utils
 
+import com.suseoaa.locationspoofer.data.BuildConfig
 import com.suseoaa.locationspoofer.data.model.RootSetupTestResult
 import com.suseoaa.locationspoofer.data.model.RootSolution
 import kotlinx.coroutines.Dispatchers
@@ -35,17 +36,15 @@ class RootManager {
          * （包括未来新增的 API level），比手动枚举 _25/_27/_29 更可靠——
          * 实测枚举法漏掉了 untrusted_app_34（见 avc denied 日志），改用属性后天然向前兼容。
          * gmscore_app 是 Google Play 服务的专属域，不属于 untrusted_app 家族，需要单独授权。
+         * 全局方案额外需要 system_server / radio / bluetooth 三个系统进程域。
          */
         private val SEPOLICY_READ_DOMAINS = listOf(
             "untrusted_app_all",
             "untrusted_app",
             "gmscore_app",
             "platform_app",
-            "system_app",
-            "system_server",
-            "radio",
-            "bluetooth"
-        )
+            "system_app"
+        ) + if (BuildConfig.GLOBAL_SCHEME) listOf("system_server", "radio", "bluetooth") else emptyList()
 
         private val CONFIG_FILE_PATHS = listOf(
             "/data/local/tmp/locationspoofer_config.json",

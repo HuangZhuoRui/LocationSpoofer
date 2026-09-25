@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.suseoaa.locationspoofer.ui.BuildConfig
 import com.suseoaa.locationspoofer.ui.R
 import com.suseoaa.locationspoofer.data.model.AppState
 import com.suseoaa.locationspoofer.ui.screen.AppCoordinateConfigCard
@@ -205,13 +206,15 @@ fun FeaturesTab(
                     )
                 }
 
-                // 4. 系统级模拟（全局 / 指定应用）
-                item {
-                    SystemHookAppsConfigCard(
-                        uiState = uiState,
-                        isDark = isDark,
-                        onClick = onNavigateToSystemHookApps
-                    )
+                // 4. 系统级模拟（全局 / 指定应用），仅全局方案
+                if (BuildConfig.GLOBAL_SCHEME) {
+                    item {
+                        SystemHookAppsConfigCard(
+                            uiState = uiState,
+                            isDark = isDark,
+                            onClick = onNavigateToSystemHookApps
+                        )
+                    }
                 }
 
                 // 5. 导入与导出数据
