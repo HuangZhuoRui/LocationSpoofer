@@ -139,7 +139,7 @@ Built on modern **MVVM + Clean Architecture**, split into 6 Gradle modules by re
 | `service` | Android Library | The foreground service `SpoofingService`, the floating joystick `FloatingJoystickService`, boot-completed receivers, and other background/service-layer code |
 | `xposed` | Android Library | The LSPosed/Xposed injection module itself: the `LocationHooker` entry point plus the hook implementations under `hooks/` and `hooks/network/` |
 | `core-data` | Android Library | The data/domain layer shared by `app`, `app-ui`, and `service`: the Room database, repositories, and core utilities such as `ConfigManager`, `RootManager`, `EnvironmentScanner` |
-| `core-geo` | Pure Kotlin/JVM | The only module in the project with no Android dependency: WGS-84 / GCJ-02 / BD-09 coordinate conversion |
+| `core-geo` | Pure Kotlin/JVM | The only module in the project with no Android dependency: coordinate conversion, route geometry and the motion realism engine, plus the system detection rules shared by the hooks and the app (`vendor/`) |
 
 Using root shell privileges to bypass package visibility restrictions and SELinux isolation on Android 11+:
 
@@ -184,6 +184,14 @@ Using root shell privileges to bypass package visibility restrictions and SELinu
 > Sandboxed app processes cannot query a custom `ContentProvider` on Android 11+ due to package visibility rules and SELinux isolation.
 > The `core-data` module's `ConfigManager` uses root privileges to write the config as JSON to **three paths at once** (`/data/local/tmp/`, `/data/system/`, and the app's private `files/` directory, with a fourth read-only fallback at `/sdcard/Download/`), with permissions tightened to `644` (owner-writable only). `RootManager` dynamically injects a dedicated SELinux type, `locationspoofer_config_file` (not the generic `shell_data_file`), granting only `read/open/getattr` to the specific domains that need it (`untrusted_app`, `platform_app`, etc.) instead of a blanket world-readable/writable hack.
 > The `xposed` module's `LocationHooker` runs a background daemon thread that picks its read-path priority based on the caller's UID, polling every 1000ms by default into an in-memory cache; on read failure it backs off to 10s (general failures) or 60s (when `com.android.phone` hits a permission denial), avoiding pointless high-frequency retries in a broken state. Hook methods on the main thread only ever read the in-memory cache, achieving 0-IO latency and preventing target-app frame drops.
+
+### System Adaptation (global scheme)
+
+The global scheme hooks system services directly, and their internals differ between vendors and system versions, so each system needs to be adapted:
+
+* [ADAPTATION_PROGRESS.md](ADAPTATION_PROGRESS.md): real-device verification status for each system and device under both schemes (the in-app "System Adaptation → Full adaptation progress" page shows this file);
+* [vendor/README.md](xposed/src/main/java/com/vincenthzr/locationspoofer/xposed/hooks/vendor/README.md): the adaptation framework and the **complete checklist for adding a new system**;
+* [xposed/ADAPTATION_GUIDE.md](xposed/ADAPTATION_GUIDE.md): how to locate internal system classes and methods on a real device, and how to troubleshoot with the in-app "Hook Status" page.
 
 ---
 

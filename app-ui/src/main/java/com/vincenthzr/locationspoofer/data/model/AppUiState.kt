@@ -4,6 +4,7 @@ import androidx.annotation.StringRes
 import com.vincenthzr.locationspoofer.ui.R
 import com.vincenthzr.locationspoofer.utils.GaitTemplate
 import com.vincenthzr.locationspoofer.utils.AltitudeModel
+import com.vincenthzr.locationspoofer.vendor.VendorScheme
 import com.vincenthzr.locationspoofer.utils.MotionRealism
 
 enum class WifiLoadStatus { IDLE, LOADING, DONE }
@@ -69,6 +70,7 @@ data class AppState(
     val hasRootAccess: Boolean = false,
     val rootSolution: RootSolution = RootSolution.AUTO,
     val vendorScheme: VendorScheme = VendorScheme.AUTO,
+    val debugDumpSystemServices: Boolean = false,
     val realismLevel: Int = MotionRealism.DEFAULT_LEVEL_ID,
     val speedFluctuationPct: Int = MotionRealism.DEFAULT_SPEED_FLUCTUATION_PCT,
     /** 已录制步态模板的步频（步/分钟），null 表示尚未录制 */

@@ -21,7 +21,7 @@ import android.os.IInterface
 import android.util.Log
 import com.vincenthzr.locationspoofer.xposed.LocationHooker
 import com.vincenthzr.locationspoofer.xposed.hooks.vendor.SystemComponent
-import com.vincenthzr.locationspoofer.xposed.hooks.vendor.VendorRegistry
+import com.vincenthzr.locationspoofer.xposed.hooks.vendor.SystemClassLocator
 import com.vincenthzr.locationspoofer.xposed.utils.*
 import io.github.libxposed.api.*
 import org.json.JSONObject
@@ -483,13 +483,7 @@ private fun createDummyCancellationSignal(): Any {
 }
 
 internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) {
-    val serviceClazz = VendorRegistry.resolveClass(
-        SystemComponent.LOCATION_MANAGER_SERVICE, classLoader
-    ) ?: XposedHelpers.findClassIfExists(
-        "com.android.server.location.LocationManagerService", classLoader
-    ) ?: XposedHelpers.findClassIfExists(
-        "com.android.server.LocationManagerService", classLoader
-    )
+    val serviceClazz = SystemClassLocator.locate(SystemComponent.LOCATION_MANAGER_SERVICE, classLoader)
 
     if (serviceClazz == null) {
         logLoc("[SysHook] LocationManagerService not found, skip system-level location hook")
@@ -947,11 +941,7 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
     // 直接在 providerManager 层拦截 getLastLocation 与 getCurrentLocation，
     // 全面覆盖所有原生与定制 provider ("gps", "network", "fused", "passive")
     // =========================================================================
-    val providerManagerClazz = VendorRegistry.resolveClass(
-        SystemComponent.LOCATION_PROVIDER_MANAGER, classLoader
-    ) ?: XposedHelpers.findClassIfExists(
-        "com.android.server.location.provider.LocationProviderManager", classLoader
-    )
+    val providerManagerClazz = SystemClassLocator.locate(SystemComponent.LOCATION_PROVIDER_MANAGER, classLoader)
     if (providerManagerClazz != null && hookedCallbackClasses.putIfAbsent(providerManagerClazz, true) == null) {
         try {
             val getLastLocationMethods = arrayOf("getLastLocation", "getLastLocationUnsafe")

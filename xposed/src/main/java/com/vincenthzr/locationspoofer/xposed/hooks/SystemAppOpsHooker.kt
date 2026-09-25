@@ -17,7 +17,7 @@ package com.vincenthzr.locationspoofer.xposed.hooks
 
 import com.vincenthzr.locationspoofer.xposed.LocationHooker
 import com.vincenthzr.locationspoofer.xposed.hooks.vendor.SystemComponent
-import com.vincenthzr.locationspoofer.xposed.hooks.vendor.VendorRegistry
+import com.vincenthzr.locationspoofer.xposed.hooks.vendor.SystemClassLocator
 import com.vincenthzr.locationspoofer.xposed.utils.XposedBridge
 import com.vincenthzr.locationspoofer.xposed.utils.XposedHelpers
 import org.json.JSONObject
@@ -36,13 +36,7 @@ private fun sysLog(msg: String) = XposedBridge.log(msg)
  */
 
 internal fun LocationHooker.hookSystemAppOpsService(classLoader: ClassLoader) {
-    val appOpsServiceClass = VendorRegistry.resolveClass(
-        SystemComponent.APPOPS_SERVICE, classLoader
-    ) ?: XposedHelpers.findClassIfExists(
-        "com.android.server.appop.AppOpsService", classLoader
-    ) ?: XposedHelpers.findClassIfExists(
-        "com.android.server.AppOpsService", classLoader
-    )
+    val appOpsServiceClass = SystemClassLocator.locate(SystemComponent.APPOPS_SERVICE, classLoader)
 
     if (appOpsServiceClass != null && hookedCallbackClasses.putIfAbsent(appOpsServiceClass, true) == null) {
         val opMethods = arrayOf("checkOperation", "noteOperation", "checkAudioOperation")

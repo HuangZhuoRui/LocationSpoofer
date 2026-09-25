@@ -11,10 +11,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,14 +27,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.vincenthzr.locationspoofer.data.model.HookStatusReport
+import com.vincenthzr.locationspoofer.data.repository.HookStatusRepository
+import com.vincenthzr.locationspoofer.progress.AdaptationProgressSource
+import com.vincenthzr.locationspoofer.ui.theme.AccentGreen
+import com.vincenthzr.locationspoofer.ui.theme.AccentOrange
+import com.vincenthzr.locationspoofer.viewmodel.setDebugDumpSystemServices
+import org.koin.compose.koinInject
+import com.vincenthzr.locationspoofer.ui.BuildConfig
 import com.vincenthzr.locationspoofer.ui.R
 import com.vincenthzr.locationspoofer.data.model.AppState
-import com.vincenthzr.locationspoofer.data.model.VendorScheme
+import com.vincenthzr.locationspoofer.vendor.VendorScheme
 import com.vincenthzr.locationspoofer.ui.theme.AccentBlue
 import com.vincenthzr.locationspoofer.ui.theme.AppColors
 import com.vincenthzr.locationspoofer.ui.theme.noRippleClickable
 import com.vincenthzr.locationspoofer.viewmodel.MainViewModel
 import com.vincenthzr.locationspoofer.viewmodel.setVendorScheme
+import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 
 @Composable
@@ -42,6 +53,65 @@ fun VendorSchemeScreen(
     isDark: Boolean = isSystemInDarkTheme(),
     onClose: () -> Unit
 ) {
+    val context = LocalContext.current
+    val source = remember { AdaptationProgressSource(context) }
+    var document by remember { mutableStateOf(source.local()) }
+    var loading by remember { mutableStateOf(false) }
+    var showFullProgress by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    // 全局方案：各系统进程写出的 Hook 运行状态报告
+    val hookStatusRepository = koinInject<HookStatusRepository>()
+    var hookReports by remember { mutableStateOf<Map<String, HookStatusReport?>>(emptyMap()) }
+    var hookLoading by remember { mutableStateOf(false) }
+    var showHookStatus by remember { mutableStateOf(false) }
+
+    fun refreshHookStatus() {
+        if (!BuildConfig.GLOBAL_SCHEME || hookLoading) return
+        hookLoading = true
+        scope.launch {
+            hookReports = hookStatusRepository.readAll()
+            hookLoading = false
+        }
+    }
+
+    fun refresh() {
+        if (loading) return
+        loading = true
+        scope.launch {
+            source.fetchRemote()?.let { document = it }
+            loading = false
+        }
+    }
+    LaunchedEffect(Unit) {
+        refresh()
+        refreshHookStatus()
+    }
+
+    if (showHookStatus) {
+        HookStatusScreen(
+            reports = hookReports,
+            loading = hookLoading,
+            onRefresh = { refreshHookStatus() },
+            debugDump = uiState.debugDumpSystemServices,
+            onDebugDumpChange = { viewModel.setDebugDumpSystemServices(it) },
+            isDark = isDark,
+            onClose = { showHookStatus = false }
+        )
+        return
+    }
+
+    if (showFullProgress) {
+        AdaptationProgressScreen(
+            document = document,
+            loading = loading,
+            onRefresh = { refresh() },
+            isDark = isDark,
+            onClose = { showFullProgress = false }
+        )
+        return
+    }
+
     BackHandler(onBack = onClose)
 
     Box(
@@ -54,52 +124,12 @@ fun VendorSchemeScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .shadow(elevation = 6.dp, shape = CircleShape, clip = false)
-                        .clip(CircleShape)
-                        .background(if (isDark) Color(0xFF22272E) else Color.White)
-                        .border(
-                            width = 1.dp,
-                            color = if (isDark) Color.White.copy(alpha = 0.14f) else Color(
-                                0xFFE5E8EC
-                            ),
-                            shape = CircleShape
-                        )
-                        .noRippleClickable(onClick = onClose),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                        contentDescription = stringResource(R.string.back),
-                        tint = if (isDark) Color.White else Color(0xFF1A1D20),
-                        modifier = Modifier.size(21.dp)
-                    )
-                }
-
-                Spacer(Modifier.width(14.dp))
-
-                Column {
-                    Text(
-                        text = stringResource(R.string.vendor_scheme_title),
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        text = stringResource(R.string.vendor_scheme_desc),
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                    )
-                }
-            }
+            SettingsPageHeader(
+                title = stringResource(R.string.system_adaptation_title),
+                subtitle = null,
+                isDark = isDark,
+                onBack = onClose
+            )
 
             Column(
                 modifier = Modifier
@@ -109,7 +139,10 @@ fun VendorSchemeScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                MiuixCard(
+                DeviceAdaptationCard(document.markdown)
+
+                // 厂商适配只作用于系统级 Hook，仅全局方案可选
+                if (BuildConfig.GLOBAL_SCHEME) MiuixCard(
                     modifier = Modifier.fillMaxWidth(),
                     cornerRadius = 18.dp,
                     insideMargin = PaddingValues(16.dp)
@@ -220,8 +253,126 @@ fun VendorSchemeScreen(
                     }
                 }
 
+                if (BuildConfig.GLOBAL_SCHEME) {
+                    val summary = hookStatusSummary(hookReports)
+                    NavigationRowCard(
+                        title = stringResource(R.string.hook_status_title),
+                        chip = when {
+                            hookLoading && hookReports.isEmpty() -> null
+                            summary == null -> stringResource(R.string.hook_status_summary_none)
+                            else -> stringResource(R.string.hook_status_summary, summary.first, summary.second)
+                        },
+                        chipColor = when {
+                            summary == null -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                            summary.first == summary.second -> AccentGreen
+                            else -> AccentOrange
+                        },
+                        onClick = { showHookStatus = true }
+                    )
+                }
+
+                NavigationRowCard(
+                    title = stringResource(R.string.adaptation_progress_full),
+                    onClick = { showFullProgress = true }
+                )
+
                 Spacer(Modifier.height(16.dp))
             }
         }
+    }
+}
+
+/** 一行可点击的卡片：标题 + 可选的右侧状态文字 + 箭头，点进二级页面 */
+@Composable
+private fun NavigationRowCard(
+    title: String,
+    chip: String? = null,
+    chipColor: Color = Color.Unspecified,
+    onClick: () -> Unit
+) {
+    MiuixCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .noRippleClickable(onClick = onClick),
+        cornerRadius = 18.dp,
+        insideMargin = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = title,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            if (chip != null) {
+                Text(chip, fontSize = 12.5.sp, fontWeight = FontWeight.Medium, color = chipColor)
+                Spacer(Modifier.width(4.dp))
+            }
+            Icon(
+                Icons.Rounded.ChevronRight,
+                null,
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+/** 设置子页面顶部：圆形返回按钮 + 标题（+ 副标题），右侧可放操作按钮 */
+@Composable
+internal fun SettingsPageHeader(
+    title: String,
+    subtitle: String?,
+    isDark: Boolean,
+    onBack: () -> Unit,
+    actions: @Composable RowScope.() -> Unit = {}
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .shadow(elevation = 6.dp, shape = CircleShape, clip = false)
+                .clip(CircleShape)
+                .background(if (isDark) Color(0xFF22272E) else Color.White)
+                .border(
+                    width = 1.dp,
+                    color = if (isDark) Color.White.copy(alpha = 0.14f) else Color(0xFFE5E8EC),
+                    shape = CircleShape
+                )
+                .noRippleClickable(onClick = onBack),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                contentDescription = stringResource(R.string.back),
+                tint = if (isDark) Color.White else Color(0xFF1A1D20),
+                modifier = Modifier.size(21.dp)
+            )
+        }
+
+        Spacer(Modifier.width(14.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                )
+            }
+        }
+        actions()
     }
 }

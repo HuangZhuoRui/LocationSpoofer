@@ -144,7 +144,7 @@
 | `service` | Android Library | 前台保活服务 `SpoofingService`、悬浮摇杆 `FloatingJoystickService`、开机自启广播等后台/服务层 |
 | `xposed` | Android Library | LSPosed / Xposed 注入模块本体：`LocationHooker` 入口 + `hooks/`、`hooks/network/` 下的各类 Hook 实现 |
 | `core-data` | Android Library | `app` / `app-ui` / `service` 三端共用的数据与业务层：Room 数据库、各类 Repository，以及 `ConfigManager`、`RootManager`、`EnvironmentScanner` 等核心工具类 |
-| `core-geo` | 纯 Kotlin/JVM | 全项目唯一不依赖 Android 的模块：WGS-84 / GCJ-02 / BD-09 坐标系换算 |
+| `core-geo` | 纯 Kotlin/JVM | 全项目唯一不依赖 Android 的模块：坐标系换算、路线几何与运动真实度引擎，以及 Hook 端与 App 共用的系统识别规则（`vendor/`） |
 
 利用 Root 权限与系统共享内存通道规避了 Android 11+ 的沙盒可见性隔离，实现零权限跨进程配置传递：
 
@@ -189,6 +189,14 @@
 > 目标 App 进程在沙盒内运行时，由于 Android 11+ 包可见性及 SELinux 策略，使用 `ContentProvider` 会导致主线程卡顿并产生 `Failed to find provider info` 错误。
 > `core-data` 模块的 `ConfigManager` 借助 Root 权限，把配置以 JSON 格式**同时写入三份路径**（`/data/local/tmp/`、`/data/system/`、应用私有目录 `files/`，读取时再兜底一份 `/sdcard/Download/` 备份），权限收紧为 `644`（仅 owner 可写），并由 `RootManager` 动态注入一个专属 SELinux 类型 `locationspoofer_config_file`（而非笼统的 `shell_data_file`），只对目标应用所在的域（`untrusted_app`、`platform_app` 等）授予 `read / open / getattr`，而非简单粗暴的全局可读可写。
 > `xposed` 模块的 `LocationHooker` 内置后台守护线程，按调用方 UID 决定优先读取顺序，默认每 1000ms 轮询一次并写入内存缓存；读取失败时自动退避到 10s（一般失败）或 60s（`com.android.phone` 权限被拒绝的场景），避免异常状态下无意义的高频重试。主线程的 Hook 方法只读内存缓存，实现 0-IO 延迟，避免导致目标 App 丢帧与卡顿。
+
+### 系统适配（全局方案）
+
+全局方案直接 Hook 系统服务，不同厂商 / 系统版本的内部实现不一样，需要逐个适配：
+
+* [ADAPTATION_PROGRESS.md](ADAPTATION_PROGRESS.md)：各系统、机型在两个方案下的实机验证进度（App 内"系统适配 → 完整适配进度"显示的就是这份文件）；
+* [vendor/README.md](xposed/src/main/java/com/vincenthzr/locationspoofer/xposed/hooks/vendor/README.md)：适配框架说明与**新增一个系统的完整检查清单**；
+* [xposed/ADAPTATION_GUIDE.md](xposed/ADAPTATION_GUIDE.md)：如何在真机上定位系统内部类与方法、如何根据 App 内"Hook 运行状态"页排查适配问题。
 
 ---
 

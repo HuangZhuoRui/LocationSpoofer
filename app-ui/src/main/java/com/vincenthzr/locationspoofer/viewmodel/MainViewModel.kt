@@ -8,7 +8,7 @@ import com.vincenthzr.locationspoofer.data.model.AppState
 import com.vincenthzr.locationspoofer.data.model.AppMapType
 import com.vincenthzr.locationspoofer.data.model.MapEngine
 import com.vincenthzr.locationspoofer.data.model.RootSolution
-import com.vincenthzr.locationspoofer.data.model.VendorScheme
+import com.vincenthzr.locationspoofer.vendor.VendorScheme
 import com.vincenthzr.locationspoofer.utils.GaitTemplate
 import com.vincenthzr.locationspoofer.data.motion.MotionController
 import com.vincenthzr.locationspoofer.data.repository.LocationRepository
@@ -63,6 +63,7 @@ class MainViewModel(
                 RootSolution.AUTO
             },
             vendorScheme = VendorScheme.fromId(settingsRepository.getVendorOverride()),
+            debugDumpSystemServices = settingsRepository.debugDumpSystemServices,
             realismLevel = settingsRepository.realismLevel,
             speedFluctuationPct = settingsRepository.speedFluctuationPct,
             gaitTemplateCadence = GaitTemplate.decode(settingsRepository.gaitTemplate)?.cadenceSpm,

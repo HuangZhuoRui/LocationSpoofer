@@ -51,6 +51,31 @@ android {
     }
 }
 
+/** 把仓库根目录的适配进度文档复制进 assets，App 联网取不到最新版时显示这份 */
+abstract class BundleAdaptationProgress : DefaultTask() {
+    @get:InputFile
+    abstract val source: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun copy() {
+        val src = source.get().asFile
+        src.copyTo(outputDir.get().asFile.resolve(src.name), overwrite = true)
+    }
+}
+
+val bundleAdaptationProgress = tasks.register<BundleAdaptationProgress>("bundleAdaptationProgress") {
+    source.set(rootProject.layout.projectDirectory.file("ADAPTATION_PROGRESS.md"))
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(bundleAdaptationProgress, BundleAdaptationProgress::outputDir)
+    }
+}
+
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)

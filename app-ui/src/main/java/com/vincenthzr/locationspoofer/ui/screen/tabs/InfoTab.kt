@@ -40,6 +40,9 @@ import com.vincenthzr.locationspoofer.ui.BuildConfig
 import com.vincenthzr.locationspoofer.ui.R
 import com.vincenthzr.locationspoofer.data.model.AppState
 import com.vincenthzr.locationspoofer.data.model.MapEngine
+import com.vincenthzr.locationspoofer.progress.AdaptationProgress
+import com.vincenthzr.locationspoofer.progress.AdaptationProgressSource
+import com.vincenthzr.locationspoofer.vendor.VendorProfile
 import com.vincenthzr.locationspoofer.ui.screen.FooterLinks
 import com.vincenthzr.locationspoofer.ui.screen.LANGUAGES
 import com.vincenthzr.locationspoofer.ui.screen.UpdateCheckCard
@@ -89,21 +92,21 @@ fun InfoTab(
         LANGUAGES.firstOrNull { it.code == savedLangCode }?.nativeName ?: defaultLangText
     }
 
-    // 获取当前厂商适配方案名称
-    val vendorAutoText = stringResource(R.string.vendor_scheme_auto)
-    val vendorHyperOsText = stringResource(R.string.vendor_scheme_hyperos)
-    val vendorColorOsText = stringResource(R.string.vendor_scheme_coloros)
-    val vendorOneUiText = stringResource(R.string.vendor_scheme_oneui)
-    val vendorAospText = stringResource(R.string.vendor_scheme_aosp)
-    val currentVendorSchemeName = remember(
-        uiState.vendorScheme, vendorAutoText, vendorHyperOsText, vendorColorOsText, vendorOneUiText, vendorAospText
-    ) {
-        when (uiState.vendorScheme) {
-            com.vincenthzr.locationspoofer.data.model.VendorScheme.AUTO -> vendorAutoText
-            com.vincenthzr.locationspoofer.data.model.VendorScheme.HYPEROS -> vendorHyperOsText
-            com.vincenthzr.locationspoofer.data.model.VendorScheme.COLOROS -> vendorColorOsText
-            com.vincenthzr.locationspoofer.data.model.VendorScheme.ONEUI -> vendorOneUiText
-            com.vincenthzr.locationspoofer.data.model.VendorScheme.AOSP -> vendorAospText
+    // 本机在适配进度表里的状态（只读本地缓存 / 内置文档，不联网），非全局方案不依赖系统适配，不显示
+    val progressContext = LocalContext.current
+    val statusVerified = stringResource(R.string.progress_status_verified)
+    val statusPartial = stringResource(R.string.progress_status_partial)
+    val statusBroken = stringResource(R.string.progress_status_broken)
+    val statusUnverified = stringResource(R.string.progress_status_unverified)
+    val adaptationStatusChip = remember {
+        if (!BuildConfig.GLOBAL_SCHEME) return@remember null
+        val markdown = AdaptationProgressSource(progressContext).local().markdown
+        val family = VendorProfile.current.family
+        when (AdaptationProgress.findGlobalSystem(markdown, family.progressKeywords)?.status) {
+            AdaptationProgress.Status.VERIFIED -> statusVerified
+            AdaptationProgress.Status.PARTIAL -> statusPartial
+            AdaptationProgress.Status.BROKEN -> statusBroken
+            else -> statusUnverified
         }
     }
 
@@ -259,17 +262,15 @@ fun InfoTab(
                             onClick = onNavigateToRootDiagnostics
                         )
                         SettingsEntryDivider()
-                        // 厂商适配只作用于系统级 Hook，仅全局方案显示
-                        if (BuildConfig.GLOBAL_SCHEME) {
-                            SettingsEntryRow(
-                                icon = Icons.Rounded.Devices,
-                                tint = AccentGreen,
-                                title = stringResource(R.string.vendor_scheme_title),
-                                previewChip = currentVendorSchemeName,
-                                onClick = onNavigateToVendorScheme
-                            )
-                            SettingsEntryDivider()
-                        }
+                        // 本机适配状态 + 厂商适配方案（仅全局方案可选），完整进度在它的二级页面
+                        SettingsEntryRow(
+                            icon = Icons.Rounded.Devices,
+                            tint = AccentGreen,
+                            title = stringResource(R.string.system_adaptation_title),
+                            previewChip = adaptationStatusChip,
+                            onClick = onNavigateToVendorScheme
+                        )
+                        SettingsEntryDivider()
                         SettingsEntryRow(
                             icon = Icons.Rounded.BatteryChargingFull,
                             tint = AccentOrange,

@@ -2,10 +2,11 @@
 
 package com.vincenthzr.locationspoofer.xposed.hooks.vendor.profiles
 
-import com.vincenthzr.locationspoofer.xposed.hooks.vendor.RomFamily
 import com.vincenthzr.locationspoofer.xposed.hooks.vendor.SystemComponent
 import com.vincenthzr.locationspoofer.xposed.hooks.vendor.SystemHookVendor
-import com.vincenthzr.locationspoofer.xposed.hooks.vendor.VendorProfile
+import com.vincenthzr.locationspoofer.vendor.RomFamily
+import com.vincenthzr.locationspoofer.vendor.VendorProfile
+import com.vincenthzr.locationspoofer.vendor.VendorScheme
 
 /**
  * AOSP 基线适配器：所有机型的兜底，[matches] 恒为 `true`、[priority] 恒为最低。
@@ -19,7 +20,7 @@ import com.vincenthzr.locationspoofer.xposed.hooks.vendor.VendorProfile
  * 只有当某个类名是某家 OEM 独有的定制时，才放到对应的 OEM 适配器里。
  */
 object AospVendor : SystemHookVendor {
-    override val id = "aosp"
+    override val id = VendorScheme.AOSP.id
     override val family = RomFamily.AOSP
     override val priority = Int.MIN_VALUE
     override fun matches(profile: VendorProfile) = true
@@ -55,7 +56,8 @@ object AospVendor : SystemHookVendor {
             "com.android.server.appop.AppOpsService",
             "com.android.server.AppOpsService",
         )
-        SystemComponent.BLUETOOTH_GATT_SERVICE -> listOf(
+        SystemComponent.BLUETOOTH_SCAN_SERVICE -> listOf(
+            "com.android.bluetooth.le_scan.ScanBinder",
             "com.android.bluetooth.gatt.GattService",
             "com.android.bluetooth.btservice.AdapterService",
         )

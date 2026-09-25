@@ -32,7 +32,6 @@ import com.vincenthzr.locationspoofer.ui.R
 import com.vincenthzr.locationspoofer.data.model.GithubRelease
 import com.vincenthzr.locationspoofer.ui.theme.AccentBlue
 import com.vincenthzr.locationspoofer.ui.theme.AccentGreen
-import com.vincenthzr.locationspoofer.ui.theme.AccentOrange
 import com.vincenthzr.locationspoofer.ui.theme.AppColors
 import com.vincenthzr.locationspoofer.ui.theme.noRippleClickable
 import com.vincenthzr.locationspoofer.viewmodel.MainViewModel
@@ -323,22 +322,7 @@ private fun CurrentVersionHeroCard(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     // 当前安装的是哪个模拟方案变体，更新时只会拉取同一变体的安装包
-                    val schemeColor = if (BuildConfig.GLOBAL_SCHEME) AccentOrange else AccentBlue
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(schemeColor.copy(alpha = 0.15f))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = stringResource(
-                                if (BuildConfig.GLOBAL_SCHEME) R.string.scheme_global else R.string.scheme_scoped
-                            ),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = schemeColor
-                        )
-                    }
+                    com.vincenthzr.locationspoofer.ui.screen.settings.SchemeBadge()
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))

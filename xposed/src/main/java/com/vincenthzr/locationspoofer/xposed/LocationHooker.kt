@@ -20,6 +20,9 @@ import com.vincenthzr.locationspoofer.xposed.utils.*
 import com.vincenthzr.locationspoofer.xposed.hooks.*
 import com.vincenthzr.locationspoofer.xposed.hooks.network.*
 import com.vincenthzr.locationspoofer.xposed.hooks.vendor.VendorRegistry
+import com.vincenthzr.locationspoofer.xposed.hooks.vendor.SystemComponent
+import com.vincenthzr.locationspoofer.xposed.hooks.vendor.SystemProcess
+import com.vincenthzr.locationspoofer.xposed.diagnostics.HookStatus
 
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
@@ -344,35 +347,53 @@ class LocationHooker : XposedModule() {
         XposedBridge.log("[SysHook] Deploying system framework hooks in $processName...")
 
         // 厂商适配方案的手动覆盖（VendorRegistry.applyManualOverride）必须在下面任何一个
-        // hookSystemXxxService 之前生效——它们会调用 VendorRegistry.resolveClass，从而触发
+        // hookSystemXxxService 之前生效——它们会通过 SystemClassLocator 查询 VendorRegistry，从而触发
         // VendorRegistry.active 这个 by lazy 属性首次求值，晚了就再也覆盖不了。这里提前读一次
         // 配置：readConfig() 可重复调用，后续调用只返回内存里已缓存的 lastConfig，不会重复走磁盘 IO。
         val earlyCfg = readConfig()
         VendorRegistry.applyManualOverride(earlyCfg?.optString("vendor_override", "auto"))
 
+        // Hook 运行状态报告（App 的"系统适配 → Hook 运行状态"页读取），每个系统进程各写一份
+        HookStatus.begin(
+            when {
+                isSystemServer -> SystemProcess.SYSTEM_SERVER
+                isPhoneProcess -> SystemProcess.PHONE
+                else -> SystemProcess.BLUETOOTH
+            }
+        )
+        fun deploy(name: String, block: () -> Unit) {
+            try {
+                block()
+            } catch (t: Throwable) {
+                XposedBridge.log("[SysHook] $name error: $t")
+                HookStatus.error(name, t)
+            }
+        }
+
         if (isSystemServer) {
-            try { dumpSystemServiceInternals(classLoader) } catch (t: Throwable) { XposedBridge.log("[SysHook] dump failed: $t") }
-            try { hookSystemLocationService(classLoader) } catch (t: Throwable) { XposedBridge.log("[SysHook] hookSystemLocationService error: $t") }
-            try { hookSystemWifiService(classLoader) } catch (t: Throwable) { XposedBridge.log("[SysHook] hookSystemWifiService error: $t") }
-            try { hookSystemConnectivityService(classLoader) } catch (t: Throwable) { XposedBridge.log("[SysHook] hookSystemConnectivityService error: $t") }
-            try { hookSystemTelephonyRegistry(classLoader) } catch (t: Throwable) { XposedBridge.log("[SysHook] hookSystemTelephonyRegistry error: $t") }
-            try { hookSystemAppOpsService(classLoader) } catch (t: Throwable) { XposedBridge.log("[SysHook] hookSystemAppOpsService error: $t") }
+            // 只读侦察：把各组件候选类的方法 / 字段列表打进日志，适配新系统时才需要，由配置里的调试开关控制
+            if (earlyCfg?.optBoolean("debug_dump_system_services", false) == true) {
+                deploy("dumpSystemServiceInternals") { dumpSystemServiceInternals(classLoader) }
+            }
+            deploy("hookSystemLocationService") { hookSystemLocationService(classLoader) }
+            deploy("hookSystemWifiService") { hookSystemWifiService(classLoader) }
+            deploy("hookSystemConnectivityService") { hookSystemConnectivityService(classLoader) }
+            deploy("hookSystemTelephonyRegistry") { hookSystemTelephonyRegistry(classLoader) }
+            deploy("hookSystemAppOpsService") { hookSystemAppOpsService(classLoader) }
         }
 
         if (isPhoneProcess) {
-            try { hookSystemTelephonyService(classLoader) } catch (t: Throwable) { XposedBridge.log("[SysHook] hookSystemTelephonyService error: $t") }
+            deploy("hookSystemTelephonyService") { hookSystemTelephonyService(classLoader) }
         }
 
         if (isBluetoothProcess) {
-            try { hookSystemBluetoothService(classLoader) } catch (t: Throwable) { XposedBridge.log("[SysHook] hookSystemBluetoothService error: $t") }
+            deploy("hookSystemBluetoothService") { hookSystemBluetoothService(classLoader) }
         }
 
         // 机型/系统适配层：先打印一次命中的适配器画像，再执行该机型专属的额外 Hook（默认空实现，
         // 各厂商在 vendor/profiles/ 下按需覆写）。基线 Hook 已在上面装完，这里是纯追加，不影响任何机型。
         VendorRegistry.logSelectionOnce()
-        try {
-            VendorRegistry.installExtraHooks(this, classLoader)
-        } catch (t: Throwable) { XposedBridge.log("[Vendor] installExtraHooks error: $t") }
+        deploy("installExtraHooks") { VendorRegistry.installExtraHooks(this, classLoader) }
 
         val cfg = readConfig()
         android.util.Log.e(
@@ -392,16 +413,12 @@ class LocationHooker : XposedModule() {
      * 单个类枚举失败也只是记一条日志，不会影响 system_server 本身的运行。
      */
     internal fun dumpSystemServiceInternals(classLoader: ClassLoader) {
-        val candidateClassNames = listOf(
-            "com.android.server.location.LocationManagerService",
-            "com.android.server.LocationManagerService",
-            "com.android.server.location.provider.LocationProviderManager",
+        // 各组件的候选类名（含当前适配器给出的定制候选），再加上两个只用于排查的 GNSS 内部类
+        val candidateClassNames = SystemComponent.entries
+            .filter { it.process == SystemProcess.SYSTEM_SERVER }
+            .flatMap { VendorRegistry.classCandidates(it) } + listOf(
             "com.android.server.location.gnss.GnssLocationProvider",
             "com.android.server.location.gnss.GnssManagerService",
-            "com.android.server.wifi.WifiServiceImpl",
-            "com.android.server.wifi.scanner.WifiScanningServiceImpl",
-            "com.android.server.TelephonyRegistry",
-            "com.android.internal.telephony.PhoneInterfaceManager"
         )
         for (className in candidateClassNames) {
             try {
@@ -500,11 +517,14 @@ class LocationHooker : XposedModule() {
             }
         }
         val uid = android.os.Process.myUid()
+        // 电话 / 蓝牙进程的专属副本由 App 用 root 写进它们自己的数据目录，但部分 root 方案的 su 域没有
+        // radio_data_file / bluetooth_data_file 的写权限，副本会一直停在旧内容（HyperOS 4 + KernelSU 实测）。
+        // 所以同时列出 RootManager 已授权这两个域读取的 /data/local/tmp 副本，由 loadConfigFromDisk 取最新的一份。
         if (isPhoneProcessInstance || uid == 1001) {
-            return arrayOf(phoneConfigPath)
+            return arrayOf(phoneConfigPath, localConfigPath)
         }
         if (isBluetoothProcessInstance || uid == 1002) {
-            return arrayOf(bluetoothConfigPath)
+            return arrayOf(bluetoothConfigPath, localConfigPath)
         }
         return if (uid == 1000) {
             arrayOf(systemConfigPath)
@@ -536,9 +556,39 @@ class LocationHooker : XposedModule() {
 
     private val lastConfigModifiedMap = ConcurrentHashMap<String, Long>()
 
+    /**
+     * 电话 / 蓝牙进程读到比自己专属副本更新的配置时，由进程自己把它写回专属副本（自己的数据目录可写）。
+     * 重启后 App 重新下发 SELinux 规则之前，这两个进程只能读到专属副本，这样至少是最近一次的配置而不是很久以前的。
+     */
+    private fun refreshOwnConfigCopy(readPath: String, text: String) {
+        if (!BuildConfig.GLOBAL_SCHEME) return
+        val own = when {
+            isPhoneProcessInstance -> phoneConfigPath
+            isBluetoothProcessInstance -> bluetoothConfigPath
+            else -> return
+        }
+        if (readPath == own) return
+        try {
+            val target = File(own)
+            val tmp = File(target.parentFile, "${target.name}.tmp")
+            tmp.writeText(text)
+            tmp.setReadable(true, false)
+            tmp.setWritable(false, false)
+            tmp.setWritable(true, true) // 644：只有本进程可写
+            if (tmp.renameTo(target)) lastConfigModifiedMap[own] = target.lastModified()
+        } catch (t: Throwable) {
+            XposedBridge.log("[SysHook] refresh own config copy failed: $t")
+        }
+    }
+
     internal fun loadConfigFromDisk(source: String): JSONObject? {
         val errors = ArrayList<String>()
-        for (path in configReadPaths()) {
+        // 全局方案的多份副本内容相同、只是写入是否成功不同：按修改时间从新到旧尝试，避免读到某份写入失败而停留在旧内容的副本
+        // （无权访问的文件 lastModified 为 0，自然排在最后）
+        val paths = configReadPaths().let { candidates ->
+            if (BuildConfig.GLOBAL_SCHEME) candidates.sortedByDescending { File(it).lastModified() } else candidates.toList()
+        }
+        for (path in paths) {
             try {
                 val file = File(path)
                 if (!file.exists()) {
@@ -548,12 +598,15 @@ class LocationHooker : XposedModule() {
                 val lastModified = file.lastModified()
                 val cachedMod = lastConfigModifiedMap[path]
                 if (lastConfig != null && cachedMod != null && cachedMod == lastModified) {
+                    HookStatus.configLoaded(path, lastModified)
                     return lastConfig
                 }
                 val text = file.readText()
                 val config = normalizeConfig(JSONObject(text))
                 lastConfig = config
                 lastConfigModifiedMap[path] = lastModified
+                HookStatus.configLoaded(path, lastModified)
+                refreshOwnConfigCopy(path, text)
                 configPollIntervalMs = 1_000L
                 logOpenCellConfigLoaded("$source:$path", config)
                 return config

@@ -3,10 +3,11 @@
 package com.vincenthzr.locationspoofer.xposed.hooks.vendor.profiles
 
 import com.vincenthzr.locationspoofer.xposed.LocationHooker
-import com.vincenthzr.locationspoofer.xposed.hooks.vendor.RomFamily
 import com.vincenthzr.locationspoofer.xposed.hooks.vendor.SystemComponent
 import com.vincenthzr.locationspoofer.xposed.hooks.vendor.SystemHookVendor
-import com.vincenthzr.locationspoofer.xposed.hooks.vendor.VendorProfile
+import com.vincenthzr.locationspoofer.vendor.RomFamily
+import com.vincenthzr.locationspoofer.vendor.VendorProfile
+import com.vincenthzr.locationspoofer.vendor.VendorScheme
 
 /**
  * 小米 / 红米 / POCO：HyperOS 与旧版 MIUI 适配器。
@@ -27,19 +28,15 @@ import com.vincenthzr.locationspoofer.xposed.hooks.vendor.VendorProfile
  *    厂商（ColorOS/One UI/…）在通用名单里看到一堆读不懂由来的小米包名。
  */
 object HyperOsVendor : SystemHookVendor {
-    override val id = "hyperos"
+    override val id = VendorScheme.HYPEROS.id
     override val family = RomFamily.HYPEROS_MIUI
     override val priority = 100
 
-    override fun matches(profile: VendorProfile): Boolean {
-        // HyperOS 暴露 ro.mi.os.version.name，旧 MIUI 暴露 ro.miui.ui.version.name；
-        // 二者任一存在即判定为本家族。再用厂商名兜底，防止个别机型属性被裁剪。
-        if (profile.hasProp("ro.mi.os.version.name")) return true
-        if (profile.hasProp("ro.miui.ui.version.name")) return true
-        val m = profile.manufacturer.lowercase()
-        val b = profile.brand.lowercase()
-        return m == "xiaomi" || b == "xiaomi" || b == "redmi" || b == "poco"
-    }
+    /**
+     * 识别规则与 App 共用，见 core-geo 的 RomRules：HyperOS 暴露 ro.mi.os.version.name、旧 MIUI 暴露
+     * ro.miui.ui.version.name，任一存在即判定为本家族，属性被裁剪时再按 xiaomi / redmi / poco 品牌兜底。
+     */
+    override fun matches(profile: VendorProfile) = profile.family == family
 
     /**
      * 已在 HyperOS 4 实机上逐一验证：本项目 Hook 的全部系统服务

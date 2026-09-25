@@ -2,6 +2,8 @@
 
 package com.vincenthzr.locationspoofer.xposed.hooks.vendor
 
+import com.vincenthzr.locationspoofer.vendor.RomFamily
+import com.vincenthzr.locationspoofer.vendor.VendorProfile
 import com.vincenthzr.locationspoofer.xposed.LocationHooker
 
 /**
@@ -24,13 +26,16 @@ interface SystemHookVendor {
     /**
      * 适配器标识，例如 `"hyperos"`、`"aosp"`。
      *
-     * 除了写进日志，App 内"厂商适配方案"设置页也会把用户手动选择的方案持久化成这个字符串
-     * （见 [VendorRegistry.applyManualOverride]），所以一旦发布就应当视为稳定值——不要随意改名，
-     * 否则老用户已保存的手动选择会因为找不到匹配项而静默回退到自动识别。
+     * 厂商级适配器直接取 [com.vincenthzr.locationspoofer.vendor.VendorScheme] 里对应项的 id——App 内
+     * "厂商适配方案"设置页把用户的手动选择持久化成这个字符串（见 [VendorRegistry.applyManualOverride]），
+     * 两边引用同一个枚举，不会失去同步。系统版本级适配器用自己的 id（如 `"hyperos-4"`），不出现在设置页里。
      */
     val id: String
 
-    /** 该适配器归属的 ROM 家族，仅用于诊断展示，不参与选择逻辑。 */
+    /**
+     * 该适配器归属的 ROM 家族。家族由 core-geo 的 `RomRules` 统一识别（App 显示"本机系统"也用这套规则），
+     * 厂商级适配器的 [matches] 通常就是 `profile.family == family`。
+     */
     val family: RomFamily
 
     /**

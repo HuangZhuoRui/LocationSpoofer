@@ -7,6 +7,9 @@
 - 全局方案按系统走不同的适配器，架构说明见 [vendor/README.md](xposed/src/main/java/com/vincenthzr/locationspoofer/xposed/hooks/vendor/README.md)，
   如何定位系统接口见 [ADAPTATION_GUIDE.md](xposed/ADAPTATION_GUIDE.md)。
 
+- 全局方案实测时，App"系统适配 → Hook 运行状态"页会列出每个组件是否找到类、方法是否挂上，可作为登记依据。
+- "按系统"表格第一列的系统名会被 App 用来查找"本机状态"（关键字见 `core-geo` 的 `RomFamily.progressKeywords`），改名时注意保留。
+
 **状态说明**：✅ 实测通过 · ⚠️ 部分可用（见备注） · ❌ 实测不可用 · ❔ 未验证
 
 ---
@@ -32,7 +35,7 @@
 | 网络状态脱敏（NetworkCapabilities） | system_server | ✅ | |
 | AppOps 模拟定位检测规避 | system_server | ✅ | |
 | 基站信息 | com.android.phone | ✅ | |
-| 蓝牙扫描 | com.android.bluetooth | ❔ | 已实现，尚无实测记录 |
+| 蓝牙扫描 | com.android.bluetooth | ❔ | Android 17 的扫描入口已迁到 `le_scan.ScanBinder.registerAndStartScan`，已适配并确认挂载成功（Hook 运行状态页）；虚拟信标的实际派发尚未实测 |
 
 ### 实测设备
 

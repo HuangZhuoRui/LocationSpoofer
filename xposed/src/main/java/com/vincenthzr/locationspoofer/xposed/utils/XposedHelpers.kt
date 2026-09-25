@@ -240,6 +240,7 @@ object XposedHelpers {
         methodName: String,
         crossinline interceptor: (io.github.libxposed.api.XposedInterface.Chain, Executable) -> Any?
     ) {
+        var hooked = 0
         for (method in clazz.declaredMethods) {
             if (method.name == methodName) {
                 try {
@@ -249,11 +250,14 @@ object XposedHelpers {
                                 return interceptor(chain, method)
                             }
                         })
+                    hooked++
                 } catch (e: Throwable) {
                     // 忽略
                 }
             }
         }
+        // 记进 Hook 状态报告：0 表示这个系统版本上该类没有这个方法（方法被改名或挪走了）
+        com.vincenthzr.locationspoofer.xposed.diagnostics.HookStatus.methodHooked(clazz.name, methodName, hooked)
     }
 
     inline fun hookAllConstructors(

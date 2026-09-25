@@ -72,13 +72,14 @@ adb shell dumpsys package android      # 查看 framework 包的版本/签名信
 
 `dumpsys <service>` 的输出里经常直接带类的全限定名或者调用栈片段，比反编译更快。
 
-### 方法四：项目里已有的"多候选名 + ClassLoader 扫描 + addService 拦截"三重兜底
+### 方法四：项目里已有的"多层 ClassLoader 查找 + 服务注册拦截"兜底
 
-对于 APEX 模块化、或者初始化时机不确定的服务，本项目已经沉淀了一套通用兜底模式，新写 Hook 时应该直接复用这个模式，而不是自己发明新写法。以 [SystemWifiServiceHooker.kt](src/main/java/com/vincenthzr/locationspoofer/xposed/hooks/SystemWifiServiceHooker.kt) 里的 `findWifiServiceClass` / `findConnectivityServiceClass` 为例，思路分三层：
+对于 APEX 模块化、或者初始化时机不确定的服务，本项目已经沉淀了一套通用兜底，新写 Hook 时直接复用，不要自己发明新写法：
 
-1. **直接 `findClassIfExists`**：先假设是最常见的情况，用几个已知候选类名直接尝试加载；
-2. **扫描所有活跃线程的 `contextClassLoader`**：APEX 模块的类通常挂在专属 Handler 线程（比如 `WifiHandlerThread`）的 ClassLoader 上，遍历 `Thread.getAllStackTraces().keys`，按线程名关键字筛出可能相关的线程，从它们的 ClassLoader 里再找一次；也可以检查 `com.android.server.LocalServices` 的 `sLocalServiceObjects` 静态字段，里面登记了所有 "LocalService" 的运行时实例，直接从实例反查 `.javaClass.classLoader`；
-3. **Hook `ServiceManager.addService`**：如果以上两步都找不到（说明这个服务在当前 Hook 时机还没初始化完成），就 Hook 服务注册的入口方法，等它真正被注册的那一刻再拿到实例并挂载 Hook——这也是为什么 `LocationHooker` 内置了一个后台轮询线程，会反复重试挂载直到成功。
+1. **[`SystemClassLocator.locate`](src/main/java/com/vincenthzr/locationspoofer/xposed/hooks/vendor/SystemClassLocator.kt)**：按当前适配器给出的候选类名，依次在默认 ClassLoader、名字匹配的线程的 `contextClassLoader`（APEX 服务常挂在 `WifiHandlerThread` 这类专属线程上）、`ServiceManager.sCache` 里已注册实例的 ClassLoader、`LocalServices.sLocalServiceObjects`、`ApplicationLoaders` 与 APEX jar 里查找。用参数打开需要的层级，例如 Wi-Fi 服务：`locate(WIFI_SERVICE, cl, threadKeywords = listOf("Wifi", …), serviceNames = listOf("wifi"), deepScan = true)`；
+2. **拦截服务注册入口**：以上都找不到（服务在 Hook 时机还没初始化），就 Hook `SystemService.publishBinderService` / `ServiceManager.addService`，等服务真正注册时从实例拿到类再挂载——`LocationHooker` 的后台轮询线程也会反复重试直到成功。这类途径拿到类时调用 `HookStatus.classFound(...)` 记进运行状态报告。
+
+参考 [SystemWifiServiceHooker.kt](src/main/java/com/vincenthzr/locationspoofer/xposed/hooks/SystemWifiServiceHooker.kt) 的 `hookSystemWifiService`。
 
 ### 方法五：动态插桩验证（无 Root 精确定位调用栈时用）
 
@@ -93,7 +94,7 @@ adb shell dumpsys package android      # 查看 framework 包的版本/签名信
 * **用 `hookAllMethods` 按方法名匹配，而不是按精确签名匹配**：不同 API 级别里同名方法的参数列表经常不一样（比如老版本 `getCellLocation()` 没有参数，新版本可能多了一个 `callingPackage` 参数），按名字匹配 + 在回调里用 `chain.args` 动态适配参数个数，比在编译期写死某个精确重载更抗版本差异。
 * **返回值类型用反射动态判断，分支兼容**：参考 `getScanResults` 的写法——先看 `executable.returnType` 是不是 `ParceledListSlice`，不是的话再看真实返回值的运行时类型，两者都不匹配时再退回构造裸 `List`。永远不要假设"这个方法在所有版本上返回类型都一样"。
 * **字段读写用"方法优先、反射字段兜底"双保险**：既尝试调用 `setLatitude()` 这类公开 setter，也用 `XposedHelpers.setDoubleField(obj, "mLatitude", ...)` 直接改字段，两者都包一层 `try/catch` 各自独立失败不影响另一条路径——因为不同版本/不同 OEM 对同一个字段可能只留了其中一种访问方式。
-* **多候选类名逐个尝试，不要在拿不到类时直接崩**：`findClassIfExists(name1, cl) ?: findClassIfExists(name2, cl) ?: ...`，找不到就 `return` 跳过这个 Hook 点而不是抛异常——保证一个 Hook 点适配失败不会拖垮整个模块在这台设备上的所有其他 Hook。
+* **类名只写在适配器里，拿不到类时跳过而不是崩**：系统服务的候选类名写在 `AospVendor` / 各厂商适配器的 `classCandidates` 里，共享代码用 `SystemClassLocator.locate(...)` 查找，返回 `null` 就 `return` 跳过这个 Hook 点——保证一个 Hook 点适配失败不会拖垮整个模块在这台设备上的所有其他 Hook。
 * **每个关键分支都要打日志**：本项目所有 Hook 都遵循 `[SysXxx] 描述性文本` 的日志前缀约定（`XposedBridge.log(...)`），包括"找到了类""挂载成功""挂载失败原因""这次调用命中/未命中目标应用"。真机上出问题时通常没法挂调试器，**日志是唯一的排障手段**，新 Hook 如果不打日志，出问题了基本没法远程排查用户反馈的日志。
 
 ---
@@ -104,9 +105,9 @@ adb shell dumpsys package android      # 查看 framework 包的版本/签名信
 
 适配粒度只分两层：**厂商**（是不是小米/HyperOS、OPPO/ColorOS……）和**系统大版本**（同一厂商内跨大版本更新，比如 HyperOS 3 升到 HyperOS 4）。不按具体机型（市场型号）分——同厂商子品牌/旗舰机型通常共用同一套系统，差异很小，没必要为每个机型单开文件。
 
-核心用法一句话：共享 Hook 代码在查找系统服务类时先问 `VendorRegistry.resolveClass(组件, classLoader)`，未命中再回落自己原有逻辑；各厂商的类名候选/定制逻辑写在 `vendor/profiles/` 下各自的 `object` 里，某厂商内需要跨版本区分时再在 `vendor/profiles/versions/` 下加一个继承 `SystemVersionVendor` 的适配器覆盖差异部分。新增一个厂商或版本只需加一个文件 + 在 `VendorRegistry.ALL` 注册，**不用动任何共享 Hook 代码**。
+核心用法一句话：共享 Hook 代码通过 `SystemClassLocator.locate(组件, classLoader, …)` 查找系统服务类；各厂商的类名候选 / 定制逻辑写在 `vendor/profiles/` 下各自的 `object` 里，某厂商内需要跨版本区分时再在 `vendor/profiles/versions/` 下加一个继承 `SystemVersionVendor` 的适配器覆盖差异部分。系统识别规则（设备画像 → 系统家族）在 `core-geo` 的 `RomRules` 里，Hook 端和 App 端共用。**新增系统不用动任何共享 Hook 代码。**
 
-详细的架构说明、三个扩展点（`classCandidates` / `additionalExemptPackages` / `installExtraHooks`）的取舍、以及"如何新增厂商适配器 / 系统版本适配器"的完整步骤，见该包内的 [`README.md`](src/main/java/com/vincenthzr/locationspoofer/xposed/hooks/vendor/README.md)。所以本文方法一~五定位到的差异，最终都应该落到对应的 vendor 适配器里，而不是散落在各个 `SystemXxxHooker` 中。
+新增一个系统要改哪些文件的完整检查清单、三个扩展点（`classCandidates` / `additionalExemptPackages` / `installExtraHooks`）的取舍，见该包内的 [`README.md`](src/main/java/com/vincenthzr/locationspoofer/xposed/hooks/vendor/README.md)。本文方法一~五定位到的差异，最终都应该落到对应的 vendor 适配器里，而不是散落在各个 `SystemXxxHooker` 中。
 
 ---
 
@@ -122,8 +123,13 @@ adb shell dumpsys package android      # 查看 framework 包的版本/签名信
 
 收到"某功能在新系统/新机型上失效"的反馈后，按顺序走一遍：
 
-1. 让反馈者提供 **Android 版本、`ro.build.version.sdk`、机型/ROM 名称与版本号**，以及开启 Hook 后的完整 `adb logcat | grep LocationSpoofer` 日志。
-2. 看日志里对应的 `[SysXxx]` 诊断输出，判断卡在哪一步：类都没找到？找到了类但方法没挂上？方法挂上了但没触发（说明目标类找错了）？触发了但改写没生效（说明字段/返回类型判断分支没走对）？
+1. 让反馈者截图 App 的 **"系统适配"页**（系统名与版本、命中的适配器）和 **"系统适配 → Hook 运行状态"页**。状态页直接给出每个组件的结论：
+   * **未找到类**：当前系统上实现类名变了 → 按方法一~三找到真实类名，加进对应适配器的 `classCandidates`；
+   * **未挂上方法 / 部分方法缺失**（方法后面是 `×0`）：类找对了，但方法被改名或挪走了 → 反编译确认后用 `installExtraHooks` 或版本级适配器补；
+   * **等待服务启动**：服务还没注册，通常稍后刷新即可；一直如此说明注册拦截也没捕获到；
+   * **报告来自上一次开机 / 没有读取到报告**：模块没在该进程生效，先检查 LSPosed 作用域和是否重启；
+   * 全部"已挂载"但目标应用仍拿到真实数据：方法挂上了但没触发（目标类找错了）或改写没生效（字段 / 返回类型分支没走对），这时再要完整的 `adb logcat | grep LocationSpoofer` 日志看 `[SysXxx]` 输出。
+2. 需要看某个类在该系统上到底有哪些方法 / 字段时，让反馈者打开状态页底部的"开机时转储系统服务结构"并重启，日志里会有每个候选类的完整方法和字段列表。
 3. 按[方法一](#方法一aosp-源码比对最快优先用)~[方法五](#方法五动态插桩验证无-root-精确定位调用栈时用)依次排查，确认新版本上目标类的真实包名、方法签名、返回类型/字段名。
 4. 按[防御性套路](#写-hook-时的防御性套路本项目的约定)落地代码：优先在现有的多候选名列表里追加新候选，而不是删掉旧的重写——保证老版本设备不受影响。
 5. 补齐诊断日志，本地至少在一台可复现问题的设备/模拟环境上验证 Hook 确实挂载成功且生效。

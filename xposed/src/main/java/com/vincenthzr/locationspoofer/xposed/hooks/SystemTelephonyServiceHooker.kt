@@ -20,7 +20,8 @@ import android.util.Log
 import com.vincenthzr.locationspoofer.xposed.LocationHooker
 import com.vincenthzr.locationspoofer.xposed.hooks.network.*
 import com.vincenthzr.locationspoofer.xposed.hooks.vendor.SystemComponent
-import com.vincenthzr.locationspoofer.xposed.hooks.vendor.VendorRegistry
+import com.vincenthzr.locationspoofer.xposed.diagnostics.HookStatus
+import com.vincenthzr.locationspoofer.xposed.hooks.vendor.SystemClassLocator
 import com.vincenthzr.locationspoofer.xposed.utils.XposedBridge
 import com.vincenthzr.locationspoofer.xposed.utils.XposedHelpers
 import org.json.JSONObject
@@ -48,13 +49,7 @@ internal var isTelephonyServiceHooked = false
 internal fun LocationHooker.hookSystemTelephonyService(classLoader: ClassLoader) {
     if (isTelephonyServiceHooked) return
 
-    var phoneServiceClass = VendorRegistry.resolveClass(
-        SystemComponent.TELEPHONY_PHONE_MANAGER, classLoader
-    ) ?: XposedHelpers.findClassIfExists(
-        "com.android.internal.telephony.PhoneInterfaceManager", classLoader
-    ) ?: XposedHelpers.findClassIfExists(
-        "com.android.server.telephony.PhoneInterfaceManager", classLoader
-    )
+    var phoneServiceClass = SystemClassLocator.locate(SystemComponent.TELEPHONY_PHONE_MANAGER, classLoader)
 
     if (phoneServiceClass == null) {
         try {
@@ -64,6 +59,7 @@ internal fun LocationHooker.hookSystemTelephonyService(classLoader: ClassLoader)
             } else null
             if (binder != null) {
                 phoneServiceClass = binder.javaClass
+                HookStatus.classFound(SystemComponent.TELEPHONY_PHONE_MANAGER, binder.javaClass, "ServiceManager.getService")
                 sysLog("[SysCell] Captured PhoneInterfaceManager from ServiceManager.getService(\"phone\"): ${binder.javaClass}")
             }
         } catch (_: Throwable) {}
@@ -261,9 +257,7 @@ internal fun LocationHooker.hookSystemTelephonyService(classLoader: ClassLoader)
 
 /** system_server 内部 TelephonyRegistry 拦截：改写主动派发到客户端的回调事件 */
 internal fun LocationHooker.hookSystemTelephonyRegistry(classLoader: ClassLoader) {
-    val registryClass = VendorRegistry.resolveClass(
-        SystemComponent.TELEPHONY_REGISTRY, classLoader
-    ) ?: XposedHelpers.findClassIfExists("com.android.server.TelephonyRegistry", classLoader) ?: return
+    val registryClass = SystemClassLocator.locate(SystemComponent.TELEPHONY_REGISTRY, classLoader) ?: return
     if (hookedCallbackClasses.putIfAbsent(registryClass, true) != null) return
 
     val notifyMethods = arrayOf("notifyCellInfo", "notifyCellInfoForSubscriber")

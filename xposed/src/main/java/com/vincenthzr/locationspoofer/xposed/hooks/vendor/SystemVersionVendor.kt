@@ -2,6 +2,8 @@
 
 package com.vincenthzr.locationspoofer.xposed.hooks.vendor
 
+import com.vincenthzr.locationspoofer.vendor.RomFamily
+import com.vincenthzr.locationspoofer.vendor.VendorProfile
 import com.vincenthzr.locationspoofer.xposed.LocationHooker
 
 /**

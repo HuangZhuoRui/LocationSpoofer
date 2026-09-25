@@ -104,7 +104,7 @@ LocationSpoofer is structured using **MVVM + Clean Architecture**, split into 6 
 | `service` | Android Library | The foreground service, floating joystick service, boot-completed receiver, etc. |
 | `xposed` | Android Library | The LSPosed/Xposed injection module itself, with hooks split across `hooks/` and `hooks/network/` |
 | `core-data` | Android Library | The data/domain layer shared by `app`/`app-ui`/`service`: Room database, repositories, and core utilities such as `ConfigManager`/`RootManager`/`EnvironmentScanner` |
-| `core-geo` | Pure Kotlin/JVM | The only module with no Android dependency; coordinate-system conversion |
+| `core-geo` | Pure Kotlin/JVM | The only module with no Android dependency: coordinate conversion, route geometry, motion realism, and the system detection rules shared by the hooks and the app |
 
 Before adding new code, decide which module it belongs in: pure business logic/persistence goes in `core-data`; anything Compose-UI-only goes in `app-ui`; hook implementations only go in `xposed` (and `xposed` may only depend on `core-geo` — never depend back on `app-ui`/`core-data`, or you'll drag Room/Compose and other heavyweight dependencies into the target app's process).
 
@@ -119,6 +119,7 @@ Before adding new code, decide which module it belongs in: pure business logic/p
   * Cross-process config delivery avoids `ContentProvider` (which stalls the main thread under Android 11+ package-visibility rules); instead `core-data`'s `ConfigManager` uses root to write the JSON config to `/data/local/tmp/`, `/data/system/`, and the app's private directory at once, permissions tightened to `644`, with `RootManager` dynamically injecting a dedicated SELinux type (not the generic `shell_data_file`) — don't fall back to `777` or a generic SELinux type for convenience.
   * MultiDex safety: Dynamic ClassLoader hooking locked to the host package via `/proc/self/cmdline`.
   * Maintain clean stack traces and avoid leaving observable inspection points.
+  * **System adaptation**: system service class names and vendor differences for the global scheme live only in the adapters under `hooks/vendor/`; shared hook code never hard-codes class names. Before adding or fixing support for a system, read [vendor/README.md](xposed/src/main/java/com/vincenthzr/locationspoofer/xposed/hooks/vendor/README.md) (includes the full checklist) and [ADAPTATION_GUIDE.md](xposed/ADAPTATION_GUIDE.md), and update [ADAPTATION_PROGRESS.md](ADAPTATION_PROGRESS.md) after verifying.
 
 ### Coding Conventions
 

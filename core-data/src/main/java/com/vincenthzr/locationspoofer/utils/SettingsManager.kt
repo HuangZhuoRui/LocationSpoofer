@@ -75,10 +75,15 @@ class SettingsManager(context: Context) {
         get() = prefs.getString("root_solution", "AUTO") ?: "AUTO"
         set(value) = prefs.edit().putString("root_solution", value).apply()
 
-    /** 用户在"厂商适配方案"设置页手动选中的 [com.vincenthzr.locationspoofer.data.model.VendorScheme.id]；"auto" 表示走自动识别。 */
+    /** 用户在"厂商适配方案"设置页手动选中的 [com.vincenthzr.locationspoofer.vendor.VendorScheme.id]；"auto" 表示走自动识别。 */
     var vendorOverride: String
         get() = prefs.getString("vendor_override", "auto") ?: "auto"
         set(value) = prefs.edit().putString("vendor_override", value).apply()
+
+    /** 适配新系统用：开机时把各系统服务候选类的方法 / 字段列表写进 Xposed 日志（全局方案，需重启生效） */
+    var debugDumpSystemServices: Boolean
+        get() = prefs.getBoolean("debug_dump_system_services", false)
+        set(value) = prefs.edit().putBoolean("debug_dump_system_services", value).apply()
 
     var ignoredVersion: String
         get() = prefs.getString("ignored_version", "") ?: ""

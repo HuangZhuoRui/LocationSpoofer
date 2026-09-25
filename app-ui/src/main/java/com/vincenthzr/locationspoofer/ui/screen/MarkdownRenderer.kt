@@ -27,7 +27,14 @@ sealed class MarkdownBlock {
     data class Paragraph(val text: String) : MarkdownBlock()
     data class Blockquote(val text: String) : MarkdownBlock()
     data class CodeBlock(val code: String, val language: String = "") : MarkdownBlock()
+    data class Table(val header: List<String>, val rows: List<List<String>>) : MarkdownBlock()
 }
+
+private fun splitTableRow(line: String): List<String> =
+    line.trim().removePrefix("|").removeSuffix("|").split("|").map { it.trim() }
+
+private val TABLE_SEPARATOR = Regex("""^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?$""")
+private val HORIZONTAL_RULE = Regex("""^([-*_])(\s*\1){2,}$""")
 
 fun parseMarkdownBlocks(rawText: String): List<MarkdownBlock> {
     if (rawText.isBlank()) return emptyList()
@@ -35,9 +42,23 @@ fun parseMarkdownBlocks(rawText: String): List<MarkdownBlock> {
     val lines = rawText.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     var inCodeBlock = false
     val codeLines = mutableListOf<String>()
+    val tableLines = mutableListOf<String>()
+
+    fun flushTable() {
+        if (tableLines.isEmpty()) return
+        val rows = tableLines.filterNot { TABLE_SEPARATOR.matches(it) }.map(::splitTableRow)
+        tableLines.clear()
+        if (rows.isNotEmpty()) blocks.add(MarkdownBlock.Table(rows.first(), rows.drop(1)))
+    }
 
     for (rawLine in lines) {
         val line = rawLine.trim()
+
+        if (!inCodeBlock && line.startsWith("|")) {
+            tableLines.add(line)
+            continue
+        }
+        flushTable()
 
         if (line.startsWith("```")) {
             if (inCodeBlock) {
@@ -55,7 +76,7 @@ fun parseMarkdownBlocks(rawText: String): List<MarkdownBlock> {
             continue
         }
 
-        if (line.isEmpty()) continue
+        if (line.isEmpty() || HORIZONTAL_RULE.matches(line)) continue
 
         val headerMatch = Regex("""^(#{1,6})\s+(.*)""").matchEntire(line)
         if (headerMatch != null) {
@@ -113,6 +134,7 @@ fun parseMarkdownBlocks(rawText: String): List<MarkdownBlock> {
         blocks.add(MarkdownBlock.Paragraph(line))
     }
 
+    flushTable()
     if (inCodeBlock && codeLines.isNotEmpty()) {
         blocks.add(MarkdownBlock.CodeBlock(codeLines.joinToString("\n")))
     }
@@ -204,6 +226,8 @@ fun RenderMarkdownContent(
                     }
                 }
 
+                is MarkdownBlock.Table -> MarkdownTable(block)
+
                 is MarkdownBlock.CodeBlock -> {
                     Surface(
                         shape = RoundedCornerShape(8.dp),
@@ -218,6 +242,56 @@ fun RenderMarkdownContent(
                             fontSize = 12.sp,
                             color = AccentBlue,
                             modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 手机屏幕放不下多列表格，每一行渲染成一张小卡片：第一列作标题，"状态"列放在标题右侧，
+ * 其余非空列按"列名：内容"逐行列出。
+ */
+@Composable
+private fun MarkdownTable(table: MarkdownBlock.Table) {
+    val statusIndex = table.header.indexOfFirst {
+        val h = it.lowercase()
+        h.contains("状态") || h.contains("status")
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 2.dp)) {
+        table.rows.forEach { row ->
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.Top) {
+                        Text(
+                            text = parseInlineMarkdownString(row.getOrElse(0) { "" }),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
+                        )
+                        row.getOrNull(statusIndex)?.takeIf { it.isNotBlank() }?.let {
+                            Spacer(Modifier.width(8.dp))
+                            Text(text = it, fontSize = 13.sp)
+                        }
+                    }
+                    row.forEachIndexed { index, cell ->
+                        if (index == 0 || index == statusIndex || cell.isBlank() || cell == "—" || cell == "-") return@forEachIndexed
+                        val label = table.header.getOrNull(index).orEmpty()
+                        Text(
+                            text = parseInlineMarkdownString(if (label.isBlank()) cell else "$label：$cell"),
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                         )
                     }
                 }

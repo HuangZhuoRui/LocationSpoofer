@@ -68,18 +68,22 @@ fun StartupUpdateDialog(
                         )
                     }
 
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(AccentBlue.copy(alpha = 0.12f))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = "v$cleanVersion",
-                            fontSize = 12.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = AccentBlue
-                        )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        // 更新只会下载与当前安装一致的方案变体
+                        com.vincenthzr.locationspoofer.ui.screen.settings.SchemeBadge()
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(AccentBlue.copy(alpha = 0.12f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "v$cleanVersion",
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = AccentBlue
+                            )
+                        }
                     }
                 }
 

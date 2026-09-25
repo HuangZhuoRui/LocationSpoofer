@@ -18,8 +18,9 @@ package com.vincenthzr.locationspoofer.xposed.hooks
 
 import android.util.Log
 import com.vincenthzr.locationspoofer.xposed.LocationHooker
+import com.vincenthzr.locationspoofer.xposed.diagnostics.HookStatus
+import com.vincenthzr.locationspoofer.xposed.hooks.vendor.SystemClassLocator
 import com.vincenthzr.locationspoofer.xposed.hooks.vendor.SystemComponent
-import com.vincenthzr.locationspoofer.xposed.hooks.vendor.VendorRegistry
 import com.vincenthzr.locationspoofer.xposed.utils.XposedBridge
 import com.vincenthzr.locationspoofer.xposed.utils.XposedHelpers
 import org.json.JSONObject
@@ -46,116 +47,14 @@ private fun logWifi(msg: String) {
     XposedBridge.log(msg)
 }
 
-private fun findWifiServiceClass(classLoader: ClassLoader): Class<*>? {
-    // 0. 机型/系统适配层优先：按"当前机型候选 → AOSP 基线候选"解析。命中即用，未命中回落下方原有逻辑。
-    VendorRegistry.resolveClass(
-        SystemComponent.WIFI_SERVICE, classLoader
-    )?.let {
-        logWifi("[SysWifi] Found WifiServiceImpl via vendor=${com.vincenthzr.locationspoofer.xposed.hooks.vendor.VendorRegistry.active.id}: ${it.name}")
-        return it
-    }
-
-    // 1. 尝试直接从当前 classLoader 加载 (Android 11 及部分 ROM)
-    XposedHelpers.findClassIfExists("com.android.server.wifi.WifiServiceImpl", classLoader)?.let {
-        logWifi("[SysWifi] Found WifiServiceImpl from default classLoader")
-        return it
-    }
-    XposedHelpers.findClassIfExists("com.android.server.WifiService", classLoader)?.let {
-        logWifi("[SysWifi] Found WifiService from default classLoader")
-        return it
-    }
-
-    // 2. 扫描 system_server 中所有活跃线程的 contextClassLoader (如 WifiHandlerThread, WifiScanningService)
-    try {
-        val threads = Thread.getAllStackTraces().keys
-        for (t in threads) {
-            val name = t.name
-            if (name.contains("Wifi", ignoreCase = true) || name.contains("Scan", ignoreCase = true) || name.contains("wlan", ignoreCase = true)) {
-                val cl = t.contextClassLoader ?: continue
-                XposedHelpers.findClassIfExists("com.android.server.wifi.WifiServiceImpl", cl)?.let {
-                    logWifi("[SysWifi] Found WifiServiceImpl from thread: $name")
-                    return it
-                }
-            }
-        }
-    } catch (t: Throwable) {
-        logWifi("[SysWifi] Scan threads error: $t")
-    }
-
-    // 3. 扫描 LocalServices.sLocalServiceObjects
-    try {
-        val localServicesClass = XposedHelpers.findClassIfExists("com.android.server.LocalServices", classLoader)
-        if (localServicesClass != null) {
-            val sLocalServiceObjects = XposedHelpers.getStaticObjectField(localServicesClass, "sLocalServiceObjects") as? Map<*, *>
-            if (sLocalServiceObjects != null) {
-                for (entry in sLocalServiceObjects.entries) {
-                    val keyClass = entry.key as? Class<*>
-                    if (keyClass != null) {
-                        XposedHelpers.findClassIfExists("com.android.server.wifi.WifiServiceImpl", keyClass.classLoader)?.let {
-                            logWifi("[SysWifi] Found WifiServiceImpl from LocalServices key: ${keyClass.name}")
-                            return it
-                        }
-                    }
-                    val service = entry.value ?: continue
-                    val cl = service.javaClass.classLoader ?: continue
-                    XposedHelpers.findClassIfExists("com.android.server.wifi.WifiServiceImpl", cl)?.let {
-                        logWifi("[SysWifi] Found WifiServiceImpl from LocalServices value: ${service.javaClass.name}")
-                        return it
-                    }
-                }
-            }
-        }
-    } catch (t: Throwable) {
-        logWifi("[SysWifi] LocalServices scan error: $t")
-    }
-
-    // 4. 扫描 ServiceManager.sCache
-    try {
-        val smClass = XposedHelpers.findClassIfExists("android.os.ServiceManager", classLoader)
-        if (smClass != null) {
-            val sCache = XposedHelpers.getStaticObjectField(smClass, "sCache") as? Map<*, *>
-            if (sCache != null) {
-                for ((k, v) in sCache) {
-                    if (k == "wifi" || k == "wifiscanner") {
-                        val cl = v?.javaClass?.classLoader
-                        if (cl != null) {
-                            XposedHelpers.findClassIfExists("com.android.server.wifi.WifiServiceImpl", cl)?.let {
-                                logWifi("[SysWifi] Found WifiServiceImpl from ServiceManager.sCache[$k]: ${v.javaClass.name}")
-                                return it
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    } catch (t: Throwable) {
-        logWifi("[SysWifi] ServiceManager.sCache scan error: $t")
-    }
-
-    // 5. 扫描 ApplicationLoaders.getDefault()
-    try {
-        val appLoadersClass = Class.forName("android.app.ApplicationLoaders")
-        val getDefaultMethod = appLoadersClass.getMethod("getDefault")
-        val instance = getDefaultMethod.invoke(null)
-        for (field in appLoadersClass.declaredFields) {
-            if (Map::class.java.isAssignableFrom(field.type)) {
-                field.isAccessible = true
-                val map = field.get(instance) as? Map<*, *> ?: continue
-                for (value in map.values) {
-                    val cl = value as? ClassLoader ?: continue
-                    XposedHelpers.findClassIfExists("com.android.server.wifi.WifiServiceImpl", cl)?.let {
-                        logWifi("[SysWifi] Found WifiServiceImpl from ApplicationLoaders.${field.name}")
-                        return it
-                    }
-                }
-            }
-        }
-    } catch (t: Throwable) {
-        logWifi("[SysWifi] ApplicationLoaders scan error: $t")
-    }
-
-    return null
-}
+private fun findWifiServiceClass(classLoader: ClassLoader): Class<*>? =
+    // Android 12+ 的 WifiServiceImpl 在 wifi APEX 里，默认 ClassLoader 找不到，靠后面几层兜底（见 SystemClassLocator）
+    SystemClassLocator.locate(
+        SystemComponent.WIFI_SERVICE, classLoader,
+        threadKeywords = listOf("Wifi", "Scan", "wlan"),
+        serviceNames = listOf("wifi", "wifiscanner"),
+        deepScan = true
+    )
 
 internal fun LocationHooker.tryHookPendingSystemServices(classLoader: ClassLoader) {
     if (!isWifiServiceHooked) {
@@ -166,6 +65,7 @@ internal fun LocationHooker.tryHookPendingSystemServices(classLoader: ClassLoade
                 val realClass = wifiBinder.javaClass
                 val realCl = realClass.classLoader ?: classLoader
                 logWifi("[SysWifi] Discovered REAL WifiServiceImpl via service poll: ${realClass.name}")
+                HookStatus.classFound(SystemComponent.WIFI_SERVICE, realClass, "ServiceManager.getService")
                 installWifiHooks(realClass, realCl)
                 isWifiServiceHooked = true
             }
@@ -179,12 +79,17 @@ internal fun LocationHooker.tryHookPendingSystemServices(classLoader: ClassLoade
                 val realClass = connBinder.javaClass
                 val realCl = realClass.classLoader ?: classLoader
                 logWifi("[SysWifi] Discovered REAL ConnectivityService via service poll: ${realClass.name}")
+                HookStatus.classFound(SystemComponent.CONNECTIVITY_SERVICE, realClass, "ServiceManager.getService")
                 installConnectivityHooks(realClass, realCl)
                 isConnectivityServiceHooked = true
             }
         } catch (_: Throwable) {}
     }
 }
+
+/** 服务注册入口（publishBinderService / addService）只需要拦截一次；后台轮询会反复调用 hookSystemWifiService */
+@Volatile
+private var wifiRegistrationHooksInstalled = false
 
 internal fun LocationHooker.hookSystemWifiService(classLoader: ClassLoader) {
     logWifi("[SysWifi] hookSystemWifiService invoked, searching for WifiServiceImpl...")
@@ -195,6 +100,9 @@ internal fun LocationHooker.hookSystemWifiService(classLoader: ClassLoader) {
         isWifiServiceHooked = true
         logWifi("[SysWifi] Successfully hooked WifiServiceImpl on ${wifiClass.name}")
     }
+
+    if (wifiRegistrationHooksInstalled) return
+    wifiRegistrationHooksInstalled = true
 
     try {
         val systemServiceClass = XposedHelpers.findClassIfExists("com.android.server.SystemService", classLoader)
@@ -207,12 +115,17 @@ internal fun LocationHooker.hookSystemWifiService(classLoader: ClassLoader) {
                         val realClass = service.javaClass
                         val realCl = realClass.classLoader ?: classLoader
                         logWifi("[SysWifi] Captured $name from publishBinderService: ${realClass.name}")
+                        HookStatus.classFound(
+                            if (name == "wifi") SystemComponent.WIFI_SERVICE else SystemComponent.WIFI_SCANNER_SERVICE,
+                            realClass, "publishBinderService"
+                        )
                         installWifiHooks(realClass, realCl)
                         isWifiServiceHooked = true
                     } else if (name == "connectivity") {
                         val realClass = service.javaClass
                         val realCl = realClass.classLoader ?: classLoader
                         logWifi("[SysWifi] Captured $name from publishBinderService: ${realClass.name}")
+                        HookStatus.classFound(SystemComponent.CONNECTIVITY_SERVICE, realClass, "publishBinderService")
                         installConnectivityHooks(realClass, realCl)
                         isConnectivityServiceHooked = true
                     }
@@ -232,6 +145,7 @@ internal fun LocationHooker.hookSystemWifiService(classLoader: ClassLoader) {
             try {
                 val service = XposedHelpers.callStaticMethod(smClass, "getService", "wifi")
                 if (service != null && !service.javaClass.name.contains("BinderProxy")) {
+                    HookStatus.classFound(SystemComponent.WIFI_SERVICE, service.javaClass, "ServiceManager.getService")
                     installWifiHooks(service.javaClass, service.javaClass.classLoader ?: classLoader)
                     isWifiServiceHooked = true
                     logWifi("[SysWifi] Hooked WifiServiceImpl directly from ServiceManager.getService(wifi): ${service.javaClass.name}")
@@ -245,6 +159,10 @@ internal fun LocationHooker.hookSystemWifiService(classLoader: ClassLoader) {
                     val service = chain.args[1]
                     if (service != null && !service.javaClass.name.contains("BinderProxy")) {
                         logWifi("[SysWifi] Captured $name from ServiceManager.addService: ${service.javaClass.name}")
+                        HookStatus.classFound(
+                            if (name == "wifi") SystemComponent.WIFI_SERVICE else SystemComponent.WIFI_SCANNER_SERVICE,
+                            service.javaClass, "ServiceManager.addService"
+                        )
                         installWifiHooks(service.javaClass, service.javaClass.classLoader ?: classLoader)
                         isWifiServiceHooked = true
                     }
@@ -592,12 +510,10 @@ internal fun LocationHooker.installWifiHooks(wifiServiceClass: Class<*>, classLo
     // 2.1 WifiScanningServiceImpl：拦截通过 WifiScanner.getSingleScanResults 获取热点的系统定位/反作弊 SDK
     // =========================================================================
     try {
-        val scannerClass = VendorRegistry.resolveClass(
-            SystemComponent.WIFI_SCANNER_SERVICE,
-            wifiServiceClass.classLoader, classLoader
-        ) ?: XposedHelpers.findClassIfExists(
-            "com.android.server.wifi.scanner.WifiScanningServiceImpl",
-            wifiServiceClass.classLoader ?: classLoader
+        // 扫描服务与 WifiServiceImpl 在同一个 APEX 里，优先用它的 ClassLoader
+        val scannerClass = SystemClassLocator.locate(
+            SystemComponent.WIFI_SCANNER_SERVICE, wifiServiceClass.classLoader ?: classLoader,
+            extraLoaders = listOf(classLoader)
         )
         if (scannerClass != null && hookedCallbackClasses.putIfAbsent(scannerClass, true) == null) {
             val singleScanMethods = arrayOf("getSingleScanResults")
@@ -660,43 +576,14 @@ internal fun LocationHooker.installWifiHooks(wifiServiceClass: Class<*>, classLo
 @Volatile
 internal var isConnectivityServiceHooked = false
 
-private fun findConnectivityServiceClass(classLoader: ClassLoader): Class<*>? {
-    VendorRegistry.resolveClass(
-        SystemComponent.CONNECTIVITY_SERVICE, classLoader
-    )?.let { return it }
-
-    XposedHelpers.findClassIfExists("com.android.server.ConnectivityService", classLoader)?.let { return it }
-    XposedHelpers.findClassIfExists("com.android.server.connectivity.ConnectivityService", classLoader)?.let { return it }
-
-    try {
-        val threads = Thread.getAllStackTraces().keys
-        for (t in threads) {
-            val name = t.name
-            if (name.contains("Connect", ignoreCase = true) || name.contains("Tether", ignoreCase = true) || name.contains("Net", ignoreCase = true)) {
-                val cl = t.contextClassLoader ?: continue
-                XposedHelpers.findClassIfExists("com.android.server.ConnectivityService", cl)?.let { return it }
-                XposedHelpers.findClassIfExists("com.android.server.connectivity.ConnectivityService", cl)?.let { return it }
-            }
-        }
-    } catch (_: Throwable) {}
-
-    try {
-        val localServicesClass = XposedHelpers.findClassIfExists("com.android.server.LocalServices", classLoader)
-        if (localServicesClass != null) {
-            val sLocalServiceObjects = XposedHelpers.getStaticObjectField(localServicesClass, "sLocalServiceObjects") as? Map<*, *>
-            if (sLocalServiceObjects != null) {
-                for (service in sLocalServiceObjects.values) {
-                    if (service == null) continue
-                    val cl = service.javaClass.classLoader ?: continue
-                    XposedHelpers.findClassIfExists("com.android.server.ConnectivityService", cl)?.let { return it }
-                    XposedHelpers.findClassIfExists("com.android.server.connectivity.ConnectivityService", cl)?.let { return it }
-                }
-            }
-        }
-    } catch (_: Throwable) {}
-
-    return null
-}
+private fun findConnectivityServiceClass(classLoader: ClassLoader): Class<*>? =
+    // Android 12+ 的 ConnectivityService 在 tethering APEX 里
+    SystemClassLocator.locate(
+        SystemComponent.CONNECTIVITY_SERVICE, classLoader,
+        threadKeywords = listOf("Connect", "Tether", "Net"),
+        serviceNames = listOf("connectivity"),
+        deepScan = true
+    )
 
 internal fun LocationHooker.hookSystemConnectivityService(classLoader: ClassLoader) {
     if (isConnectivityServiceHooked) return
@@ -716,6 +603,7 @@ internal fun LocationHooker.hookSystemConnectivityService(classLoader: ClassLoad
                 if (name == "connectivity" && chain.args.size > 1) {
                     val service = chain.args[1]
                     if (service != null && !service.javaClass.name.contains("BinderProxy")) {
+                        HookStatus.classFound(SystemComponent.CONNECTIVITY_SERVICE, service.javaClass, "ServiceManager.addService")
                         installConnectivityHooks(service.javaClass, service.javaClass.classLoader ?: classLoader)
                         isConnectivityServiceHooked = true
                         logWifi("[SysWifi] Captured $name from ServiceManager.addService: ${service.javaClass.name}")

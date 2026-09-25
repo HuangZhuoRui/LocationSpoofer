@@ -104,7 +104,7 @@ LocationSpoofer 基于 **MVVM + Clean Architecture** 构建，代码按职责拆
 | `service` | Android Library | 前台保活服务、悬浮摇杆服务、开机自启广播等 |
 | `xposed` | Android Library | LSPosed/Xposed 注入模块本体，`hooks/`、`hooks/network/` 下的各 Hook 实现 |
 | `core-data` | Android Library | `app`/`app-ui`/`service` 三端共用的数据与业务层：Room 数据库、Repository、`ConfigManager`/`RootManager`/`EnvironmentScanner` 等工具类 |
-| `core-geo` | 纯 Kotlin/JVM | 唯一不依赖 Android 的模块，坐标系换算 |
+| `core-geo` | 纯 Kotlin/JVM | 唯一不依赖 Android 的模块：坐标系换算、路线几何、运动真实度，以及 Hook 端与 App 共用的系统识别规则 |
 
 新增代码前请先想清楚该放进哪个模块：**纯业务逻辑/持久化**放 `core-data`；**只和 Compose UI 相关**放 `app-ui`；**Hook 实现**只放 `xposed`（且只能依赖 `core-geo`，不能反向依赖 `app-ui`/`core-data`，否则会把 Room/Compose 等重量级依赖一起打进目标 App 进程）。
 
@@ -119,6 +119,7 @@ LocationSpoofer 基于 **MVVM + Clean Architecture** 构建，代码按职责拆
   * 跨进程配置传递不使用 `ContentProvider`（Android 11+ 包可见性下会卡死主线程），而是由 `core-data` 的 `ConfigManager` 以 Root 权限把 JSON 配置同时写入 `/data/local/tmp/`、`/data/system/`、应用私有目录三份路径，权限收紧为 `644`，并由 `RootManager` 动态注入专属 SELinux 类型（而非笼统的 `shell_data_file`）按需授权，不要为了图省事退回到 `777` 或复用通用 SELinux 类型。
   * MultiDex 兼容安全性：通过动态 ClassLoader 拦截定位组件，并通过 `/proc/self/cmdline` 锁定宿主进程主包名，避免插件或内嵌 Webview 破坏全局上下文。
   * 保持调用栈深度清洗，避免暴露 Xposed 检查痕迹。
+  * **系统适配**：全局方案的系统服务类名、厂商差异一律写在 `hooks/vendor/` 的适配器里，共享 Hook 代码不写死类名。新增或修复某个系统的适配前，先读 [vendor/README.md](xposed/src/main/java/com/vincenthzr/locationspoofer/xposed/hooks/vendor/README.md)（含完整检查清单）与 [ADAPTATION_GUIDE.md](xposed/ADAPTATION_GUIDE.md)，验证后更新 [ADAPTATION_PROGRESS.md](ADAPTATION_PROGRESS.md)。
 
 ### 编码规范
 

@@ -11,7 +11,7 @@ import com.vincenthzr.locationspoofer.data.model.RoutePlanStage
 import com.vincenthzr.locationspoofer.data.model.AppMapType
 import com.vincenthzr.locationspoofer.data.model.MapEngine
 import com.vincenthzr.locationspoofer.data.model.RootSolution
-import com.vincenthzr.locationspoofer.data.model.VendorScheme
+import com.vincenthzr.locationspoofer.vendor.VendorScheme
 import com.vincenthzr.locationspoofer.data.model.SearchMode
 import com.vincenthzr.locationspoofer.data.state.SpoofingState
 import com.vincenthzr.locationspoofer.ui.screen.AppPoiItem
@@ -184,6 +184,14 @@ internal fun MainViewModel.setRootSolution(solution: RootSolution) {
 internal fun MainViewModel.setVendorScheme(scheme: VendorScheme) {
     settingsRepository.setVendorOverride(scheme.id)
     _uiState.update { it.copy(vendorScheme = scheme) }
+    // 常驻设置项在每次写配置时都会刷新；已经写过配置时立即同步一次，重启后系统进程就能读到
+    viewModelScope.launch { locationRepository.patchConfig { } }
+}
+
+internal fun MainViewModel.setDebugDumpSystemServices(enabled: Boolean) {
+    settingsRepository.debugDumpSystemServices = enabled
+    _uiState.update { it.copy(debugDumpSystemServices = enabled) }
+    viewModelScope.launch { locationRepository.patchConfig { } }
 }
 
 internal fun MainViewModel.testRootSetup() {

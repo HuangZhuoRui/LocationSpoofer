@@ -86,6 +86,12 @@ class SettingsRepository(private val settingsManager: SettingsManager) {
         settingsManager.vendorOverride = value
     }
 
+    var debugDumpSystemServices: Boolean
+        get() = settingsManager.debugDumpSystemServices
+        set(value) {
+            settingsManager.debugDumpSystemServices = value
+        }
+
     fun getIgnoredVersion(): String = settingsManager.ignoredVersion
 
     fun setIgnoredVersion(value: String) {

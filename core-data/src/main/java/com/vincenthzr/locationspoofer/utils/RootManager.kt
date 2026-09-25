@@ -46,6 +46,16 @@ class RootManager {
             "system_app"
         ) + if (BuildConfig.GLOBAL_SCHEME) listOf("system_server", "radio", "bluetooth") else emptyList()
 
+        /**
+         * 全局方案：电话 / 蓝牙进程的专属配置副本写在它们自己的数据目录里，但部分 root 方案的 su 域没有
+         * radio_data_file / bluetooth_data_file 的写权限，副本会一直停在旧内容（HyperOS 4 + KernelSU 实测）。
+         * 这两个进程因此也读 /data/local/tmp 下的副本，需要能穿过 shell_data_file 目录；只给 search，不给列目录。
+         */
+        private val SEPOLICY_EXTRA_RULES = if (BuildConfig.GLOBAL_SCHEME) listOf(
+            "allow radio shell_data_file dir search",
+            "allow bluetooth shell_data_file dir search"
+        ) else emptyList()
+
         private val CONFIG_FILE_PATHS = listOf(
             "/data/local/tmp/locationspoofer_config.json",
             "/data/system/locationspoofer_config.json",
@@ -225,6 +235,7 @@ class RootManager {
                 appendLine("$tool '$rule' >/dev/null 2>&1")
                 appendLine("echo ALLOW_${index}_EXIT:\$?")
             }
+            SEPOLICY_EXTRA_RULES.forEach { rule -> appendLine("$tool '$rule' >/dev/null 2>&1") }
             // 端到端验证：真的 chcon 一个探针文件再把标签读回来，确认这个 type 确实存在、
             // 且当前 root 域有权把它打上去。此前只看工具退出码，而 ksud 对错误语法同样返回 0，
             // 导致 Magisk 侧彻底失效却一直没有任何告警。
