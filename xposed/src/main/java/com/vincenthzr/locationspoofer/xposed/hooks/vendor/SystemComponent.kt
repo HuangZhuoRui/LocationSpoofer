@@ -7,6 +7,9 @@ package com.vincenthzr.locationspoofer.xposed.hooks.vendor
  * 如果某个 ROM 把定位等服务挪到了这三个之外的进程，除了这里加一项，还要同步修改
  * `xposed/src/global/resources/META-INF/xposed/scope.list`（LSPosed 作用域）与
  * `LocationHooker.handleSystemProcessGlobal` 里的进程判断。
+ *
+ * scope.list 里 system_server（LSPosed 界面上的"系统框架"）要写成虚拟包名 `system`，写 `android` 不算推荐系统框架
+ * （libxposed API 100+ 的约定，`android` 指的是 android 包的普通进程）。
  */
 enum class SystemProcess {
     SYSTEM_SERVER,
