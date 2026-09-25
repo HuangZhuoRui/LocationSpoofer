@@ -72,6 +72,8 @@
     <string name="root_solution_apatch">APatch</string>
     <string name="root_solution_sukisu_ultra">SukiSU Ultra</string>
     <string name="root_solution_resukisu_ultra">ReSukiSU Ultra</string>
+    <string name="scheme_global">全局方案</string>
+    <string name="scheme_scoped">非全局方案</string>
     <string name="vendor_scheme_title">厂商适配方案</string>
     <string name="vendor_scheme_desc">手动指定系统级 Hook 使用哪套厂商适配器，覆盖自动识别结果</string>
     <string name="vendor_scheme_auto">自动识别</string>

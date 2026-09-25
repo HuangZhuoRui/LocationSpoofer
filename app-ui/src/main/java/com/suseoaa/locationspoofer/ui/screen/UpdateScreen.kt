@@ -32,6 +32,7 @@ import com.suseoaa.locationspoofer.ui.R
 import com.suseoaa.locationspoofer.data.model.GithubRelease
 import com.suseoaa.locationspoofer.ui.theme.AccentBlue
 import com.suseoaa.locationspoofer.ui.theme.AccentGreen
+import com.suseoaa.locationspoofer.ui.theme.AccentOrange
 import com.suseoaa.locationspoofer.ui.theme.AppColors
 import com.suseoaa.locationspoofer.ui.theme.noRippleClickable
 import com.suseoaa.locationspoofer.viewmodel.MainViewModel
@@ -317,20 +318,42 @@ private fun CurrentVersionHeroCard(
                 }
 
                 val cleanCurrentVersion = currentVersion.trim().removePrefix("v").removePrefix("V")
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(
-                            if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.05f)
-                        )
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = "v$cleanCurrentVersion",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                    )
+                    // 当前安装的是哪个模拟方案变体，更新时只会拉取同一变体的安装包
+                    val schemeColor = if (BuildConfig.GLOBAL_SCHEME) AccentOrange else AccentBlue
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(schemeColor.copy(alpha = 0.15f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = stringResource(
+                                if (BuildConfig.GLOBAL_SCHEME) R.string.scheme_global else R.string.scheme_scoped
+                            ),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = schemeColor
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.05f)
+                            )
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "v$cleanCurrentVersion",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        )
+                    }
                 }
             }
 

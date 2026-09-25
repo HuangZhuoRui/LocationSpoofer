@@ -119,7 +119,16 @@ jobs:
           if [ -z "$FEATS" ] && [ -z "$FIXES" ]; then
             echo "常规更新与优化" >> changelog.txt
           fi
-          
+
+          cat >> changelog.txt <<'NOTES'
+
+          ## 安装包说明
+          - `LocationSpoofer-scoped-*`：非全局方案，在 LSPosed 作用域中勾选需要模拟的应用
+          - `LocationSpoofer-global-*`：全局方案，作用域勾选系统框架、电话、蓝牙，对全设备生效
+          - 两个方案二选一安装；绝大多数设备选择 `arm64-v8a`，32 位设备选择 `armeabi-v7a`
+          - 各系统的适配进度见 [ADAPTATION_PROGRESS.md](${{ github.server_url }}/${{ github.repository }}/blob/main/ADAPTATION_PROGRESS.md)
+          NOTES
+
           cat changelog.txt
           
       - name: Setup Java
@@ -171,6 +180,13 @@ jobs:
             done
           done
           ls -l "$DIST_DIR"
+
+          # 2 个方案 × 2 个 ABI，缺任何一个都不发版，避免发出只有单一方案的残缺 Release
+          APK_COUNT=$(find "$DIST_DIR" -name "LocationSpoofer-*.apk" | wc -l)
+          if [ "$APK_COUNT" -ne 4 ]; then
+            echo "错误：预期 4 个安装包（scoped/global × arm64-v8a/armeabi-v7a），实际 $APK_COUNT 个，终止发版。"
+            exit 1
+          fi
 
       - name: Publish GitHub Release
         if: steps.check_version.outputs.changed == 'true'

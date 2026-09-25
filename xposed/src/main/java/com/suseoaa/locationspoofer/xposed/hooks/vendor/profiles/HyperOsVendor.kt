@@ -13,8 +13,8 @@ import com.suseoaa.locationspoofer.xposed.hooks.vendor.VendorProfile
  *
  * 这是本项目当前唯一在实体机上完整验证过的 OEM 适配器——小米 17 Pro Max / HyperOS 4 上，
  * 定位（GPS/网络/被动 provider）、Wi-Fi 扫描结果与已连接信息、基站信息、AppOps 反检测、
- * `ConnectivityService` NetworkCapabilities 脱敏全部实测生效（针对高德、淘宝/闲鱼、百度地图、
- * 微信、TIM 等目标应用连续验证通过），也是给后续维护者照着写新 OEM 适配器的"标准范例"。
+ * `ConnectivityService` NetworkCapabilities 脱敏全部实测生效（各目标应用的兼容情况见仓库根目录
+ * ADAPTATION_PROGRESS.md），也是给后续维护者照着写新 OEM 适配器的"标准范例"。
  *
  * 现状分两部分，分别对应下面两个覆写点：
  * 1. [classCandidates] 返回空——HyperOS/MIUI 对本项目所 Hook 的这几个 **framework 系统服务**
