@@ -14,6 +14,7 @@ body = re.search(r'fun writeGlobal.*?"""(.*?)""".trimIndent', source, re.S).grou
 root = "/data/local/tmp/locationspoofer-write-test-" + uuid.uuid4().hex
 script = (functions + body).replace("${'$'}", "$")
 script = script.replace("${RootManager.CONFIG_SELINUX_TYPE}", "shell_data_file")
+script = script.replace("$PARTIAL_FAILURE_MARKER", "PARTIAL_WRITE_FAILED")
 script = script.replace("$LOCAL", root + "/data/local/tmp/locationspoofer_config.json").replace("$SYSTEM", root + "/data/system/locationspoofer_config.json").replace("$ROOT", root)
 
 def shell(command, data=None):
@@ -37,7 +38,10 @@ try:
         shim = "chown() { :; }; chcon() { case \"$*\" in " + match + ") return 1;; esac; return 0; };\n"
         payload = json.dumps({"test": failure})
         result = shell(shim + script, payload)
-        assert (result.returncode == 0) == (failure == "none"), (failure, result)
+        # 只有 system_server 副本（或公共副本发布）失败才是致命错误；电话 / 蓝牙副本失败只输出标记
+        fatal = failure in ["system", "fallback"]
+        assert (result.returncode == 0) == (not fatal), (failure, result)
+        if failure in ["phone", "bluetooth", "phone-missing-files"]: assert "PARTIAL_WRITE_FAILED" in result.stderr, (failure, result)
         def read(index): return shell("cat " + shlex.quote(root + "/" + copies[index] + "/locationspoofer_config.json")).stdout.strip()
         assert read(0) == ("old" if failure == "fallback" else payload), failure
         if failure in ["phone", "phone-missing-files", "system"]: assert read(4) == payload, failure

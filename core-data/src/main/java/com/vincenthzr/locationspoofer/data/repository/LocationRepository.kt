@@ -203,6 +203,9 @@ class LocationRepository(
     /** 只改配置里的部分字段，见 [ConfigManager.patchConfig] */
     suspend fun patchConfig(mutate: (JSONObject) -> Unit): Boolean = configManager.patchConfig(mutate)
 
+    /** 系统进程读取的配置写入失败事件，界面据此提示用户 */
+    val configWriteFailures get() = configManager.writeFailures
+
     /** 路线 / 摇杆移动过程中刷新周边 Wi-Fi、基站、蓝牙数据，不改动位置和运动状态 */
     suspend fun updateEnvironment(wifiJson: String, cellJson: String, bluetoothJson: String) {
         SpoofingState.wifiJson = wifiJson

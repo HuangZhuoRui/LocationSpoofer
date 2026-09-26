@@ -111,6 +111,7 @@
     <string name="system_adaptation_title">系统适配</string>
     <string name="adaptation_progress_full">完整适配进度</string>
     <string name="progress_scoped_simple">非全局方案只 Hook 目标 App，不依赖系统适配</string>
+    <string name="config_write_failed">模拟配置写入失败，系统进程读不到最新设置。请检查 Root 授权后重试</string>
     <string name="hook_status_title">Hook 运行状态</string>
     <string name="hook_status_summary">%1$d/%2$d 个组件已挂载</string>
     <string name="hook_status_summary_none">暂无报告</string>

@@ -7,6 +7,9 @@ import com.vincenthzr.locationspoofer.data.model.RoutePoint
 import com.vincenthzr.locationspoofer.data.state.SpoofingState
 import com.vincenthzr.locationspoofer.utils.CoordinateUtils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -54,7 +57,7 @@ class ConfigManager(private val context: Context, private val rootManager: RootM
         enableStepSimulation: Boolean = true,
         stepCadenceSpm: Int = 165,
         isAutoCadence: Boolean = true
-    ) = withContext(Dispatchers.IO) {
+    ): Boolean = withContext(Dispatchers.IO) {
         val routeArray = JSONArray()
         routePoints.forEach { p ->
             val obj = JSONObject()
@@ -95,11 +98,16 @@ class ConfigManager(private val context: Context, private val rootManager: RootM
         write(json)
     }
 
+    private val _writeFailures = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /** 系统进程读取的那份配置写入失败时发出，界面据此提示用户（core-data 没有字符串资源，不在这里直接弹提示） */
+    val writeFailures: SharedFlow<Unit> = _writeFailures
+
     /**
      * 在上一次写入的配置基础上只改动部分字段，其余字段原样保留；常驻设置项每次都刷新为最新值。
      * 暂停、摇杆、周边环境数据、开关设置等局部更新都走这里，避免某个调用方用自己手里过时的整份状态
      * 覆盖掉别人刚写入的字段（例如悬浮窗刚把路线暂停，界面的周边数据刷新又把路线模式写回去）。
-     * 还没有写过配置（未开始模拟）时返回 false。
+     * 还没有写过配置（未开始模拟）或写入失败时返回 false。
      */
     suspend fun patchConfig(mutate: (JSONObject) -> Unit): Boolean = withContext(Dispatchers.IO) {
         // 读取、修改、写入整体放在锁内：并发的局部更新若各自基于同一份旧配置修改，后写的会冲掉先写的改动
@@ -109,7 +117,6 @@ class ConfigManager(private val context: Context, private val rootManager: RootM
             mutate(json)
             putPersistentSettings(json)
             writeLocked(json)
-            true
         }
     }
 
@@ -209,15 +216,26 @@ class ConfigManager(private val context: Context, private val rootManager: RootM
      * 两种模拟方案的"谁来读配置"不同，SELinux 标签策略也不同，见下面两个 xxxWriteCommand。
      * 写入串行化：多个来源（界面、悬浮窗、周边数据刷新）并发写同一组文件时，保证最后落盘的是最后一次写入。
      */
-    private suspend fun write(json: JSONObject) = writeMutex.withLock { writeLocked(json) }
+    private suspend fun write(json: JSONObject): Boolean = writeMutex.withLock { writeLocked(json) }
 
-    private suspend fun writeLocked(json: JSONObject) {
-        check(context.filesDir.isDirectory) { "应用配置目录无法创建" }
+    /**
+     * 失败分两级：系统进程读取的那份写不进去才算失败（返回 false 并通知界面，[lastJson] 保持上一次成功的内容）；
+     * App 私有目录、电话、蓝牙副本写失败只记警告——这些进程另有读取 /data/local/tmp 公共副本的兜底。
+     * 不抛异常：调用方遍布界面、悬浮窗和后台协程，一次写失败不应该让 App 崩溃。
+     */
+    private suspend fun writeLocked(json: JSONObject): Boolean {
         val command = if (BuildConfig.GLOBAL_SCHEME) globalWriteCommand() else scopedWriteCommand()
-        check(rootManager.executeCommandWithInput(command, json.toString()) != "ERROR") {
-            "配置写入失败，请检查 Root 权限和系统目录访问权限"
+        val output = if (context.filesDir.isDirectory) rootManager.executeCommandWithInput(command, json.toString()) else "ERROR"
+        if (output == "ERROR") {
+            android.util.Log.e("LocationSpoofer", "配置写入失败，请检查 Root 权限和系统目录访问权限")
+            _writeFailures.tryEmit(Unit)
+            return false
+        }
+        if (output.contains(SystemFileCommands.PARTIAL_FAILURE_MARKER)) {
+            android.util.Log.w("LocationSpoofer", "部分配置副本写入失败：${output.take(1000)}")
         }
         lastJson = json
+        return true
     }
 
     /**

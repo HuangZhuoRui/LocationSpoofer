@@ -32,6 +32,16 @@ import com.vincenthzr.locationspoofer.viewmodel.MainViewModel.ClusterData
 // 初始化
 @OptIn(kotlinx.coroutines.FlowPreview::class)
 internal fun MainViewModel.initialize() {
+    // 配置写入失败（多为 Root 权限被收回或系统目录不可写）时提示一次，10 秒内不重复
+    viewModelScope.launch {
+        var lastShown = 0L
+        locationRepository.configWriteFailures.collect {
+            val now = System.currentTimeMillis()
+            if (now - lastShown < 10_000L) return@collect
+            lastShown = now
+            android.widget.Toast.makeText(context, R.string.config_write_failed, android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
     viewModelScope.launch(Dispatchers.IO) {
         mergeLegacyRecords()
         val root = locationRepository.recoverAfterBoot(context)

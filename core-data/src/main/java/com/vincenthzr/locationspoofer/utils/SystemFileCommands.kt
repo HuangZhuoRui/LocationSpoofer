@@ -2,6 +2,9 @@ package com.vincenthzr.locationspoofer.utils
 
 /** Cross-process files must use init's filesystem view, even when su inherits app isolation. */
 internal object SystemFileCommands {
+    /** 写入脚本在"非致命的副本写入失败"时输出的标记，ConfigManager 据此记录警告而不判定整体失败 */
+    const val PARTIAL_FAILURE_MARKER = "PARTIAL_WRITE_FAILED"
+
     private const val ROOT = "/proc/1/root"
     private const val LOCAL = "$ROOT/data/local/tmp/locationspoofer_config.json"
     private const val SYSTEM = "$ROOT/data/system/locationspoofer_config.json"
@@ -70,15 +73,17 @@ internal object SystemFileCommands {
         chmod 644 "${'$'}staging"
         chcon u:object_r:${RootManager.CONFIG_SELINUX_TYPE}:s0 "${'$'}staging" 2>/dev/null || chcon u:object_r:shell_data_file:s0 "${'$'}staging"
         mv -f "${'$'}staging" "$LOCAL"
-        write_failed=0
-        install_config "$LOCAL" "$SYSTEM" 1000:1000 system_data_file || write_failed=1
+        # 只有 system_server 读取的副本写不进去才以非 0 退出；其余副本失败只输出标记——
+        # 电话 / 蓝牙进程还能读上面这份 /data/local/tmp 公共副本。无论哪份失败，其余副本都照常写。
+        system_failed=0
+        install_config "$LOCAL" "$SYSTEM" 1000:1000 system_data_file || system_failed=1
         # Keep the app copy owned and labelled as app data; only its contents change.
         if cp "$LOCAL" $ROOT/data/data/com.vincenthzr.locationspoofer/files/locationspoofer_config.json &&
             chmod 644 $ROOT/data/data/com.vincenthzr.locationspoofer/files/locationspoofer_config.json; then :
-        else write_failed=1
+        else echo "$PARTIAL_FAILURE_MARKER: app copy" >&2
         fi
-        sync_domains "$LOCAL" || write_failed=1
-        exit "${'$'}write_failed"
+        sync_domains "$LOCAL" || echo "$PARTIAL_FAILURE_MARKER: phone/bluetooth copy" >&2
+        exit "${'$'}system_failed"
     """.trimIndent()
 
     fun syncGlobal(): String = copyFunctions + "\n" + """

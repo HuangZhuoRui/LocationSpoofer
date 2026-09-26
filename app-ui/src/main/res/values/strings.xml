@@ -105,6 +105,7 @@
     <string name="system_adaptation_title">System Adaptation</string>
     <string name="adaptation_progress_full">Full adaptation progress</string>
     <string name="progress_scoped_simple">The per-app scheme only hooks target apps and does not depend on system adaptation</string>
+    <string name="config_write_failed">Failed to write the spoofing config; system processes cannot see the latest settings. Check root access and try again</string>
     <string name="hook_status_title">Hook Status</string>
     <string name="hook_status_summary">%1$d/%2$d components hooked</string>
     <string name="hook_status_summary_none">No report</string>
