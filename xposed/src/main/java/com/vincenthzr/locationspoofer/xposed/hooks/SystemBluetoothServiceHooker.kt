@@ -66,6 +66,7 @@ internal var isBluetoothServiceHooked = false
 
 internal fun LocationHooker.hookSystemBluetoothService(classLoader: ClassLoader) {
     if (isBluetoothServiceHooked) return
+    if (com.vincenthzr.locationspoofer.xposed.hooks.vendor.VendorRegistry.active.usesFrameworkBleDelivery) return
 
     // 扫描入口类：Android 17 的 le_scan.ScanBinder，或更早版本的 GattService（可能在 bluetooth APEX 里）；
     // 都找不到时从 ServiceManager 里已注册的 GATT 服务实例拿真实类
@@ -233,7 +234,7 @@ private fun LocationHooker.ensureScannerCallbackHooked(callback: Any) {
                 val config = readConfig()
                 val isGlobal = config?.optBoolean("system_hook_global_mode", false) == true
                 val isTarget = (binder != null && activeBleScanners.containsKey(binder)) || isGlobal
-                if (isTarget && config != null && config.optBoolean("active", false) && config.optBoolean("mock_bluetooth", true)) {
+                if (syntheticBleDelivery.current != true && isTarget && config != null && config.optBoolean("active", false) && config.optBoolean("mock_bluetooth", true)) {
                     // 阻止真实物理硬件扫描到的外部蓝牙设备特征泄漏给目标应用
                     return@hookAllMethods null
                 }

@@ -21,7 +21,7 @@
 | 系统 | 适配器 | 状态 | 已验证的系统版本 | 备注 |
 |---|---|---|---|---|
 | 小米 HyperOS / MIUI | `HyperOsVendor` | ✅ | HyperOS 4 | 唯一完整实测过的系统；HyperOS 3 及更早版本未验证 |
-| OPPO ColorOS / 一加 OxygenOS | `ColorOsVendor` | ❔ | — | 仅能识别系统，完全走 AOSP 基线，待实机验证 |
+| OPPO ColorOS / 一加 OxygenOS | `ColorOs16Vendor`（API 36）/ `ColorOsVendor` | ⚠️ | ColorOS 16 / Android 16 | PJX110 部分实测；电话与蓝牙通过，持续定位及运动应用仍待复测；OxygenOS 未验证。见 [范围与截图](docs/ColorOS16.md) |
 | 三星 One UI | `OneUiVendor` | ❔ | — | 同上 |
 | vivo OriginOS、荣耀 MagicOS、魅族 Flyme 等 | 无（落到 `AospVendor`） | ❔ | — | 尚无专用适配器 |
 | 原生 AOSP / 类原生 | `AospVendor` | ❔ | — | 基线适配器，尚无实机验证记录 |
@@ -37,11 +37,26 @@
 | 基站信息 | com.android.phone | ✅ | |
 | 蓝牙扫描 | com.android.bluetooth | ❔ | Android 17 的扫描入口已迁到 `le_scan.ScanBinder.registerAndStartScan`，已适配并确认挂载成功（Hook 运行状态页）；虚拟信标的实际派发尚未实测 |
 
+### 按组件（ColorOS 16，PJX110）
+
+以下实机结果来自拆分前已安装的完整版本。移除原生传感器及修订配置兜底后的评审 APK 已构建，尚未做重启端到端复验。
+
+| 组件 | 状态 | 验证范围 |
+|---|---|---|
+| Hook 状态报告 | ✅ | system_server、电话、蓝牙三份报告可读取，挂载无报错 |
+| 配置同步 | ✅ | 拆分前版本五份配置一致；新增失败路径另有 6 项隔离测试 |
+| 定位 | ⚠️ | 早期缓存查询通过；持续定位、运动世界校园崩溃复测未完成 |
+| Wi-Fi | ⚠️ | 早期扫描与连接信息通过，最终版未复测 |
+| 基站 | ✅ | 缓存查询、异步请求、监听；目标与对照应用隔离 |
+| 蓝牙 | ✅ | 普通/PendingIntent、地址过滤、批量、主动刷新、发现/丢失、目标切换 |
+| 原生传感器 | ❔ | 本评审分支不包含；独立分支评审与验证 |
+
 ### 实测设备
 
 | 设备 | 系统版本 | 验证日期 | 备注 |
 |---|---|---|---|
 | 小米 17 Pro Max | HyperOS 4 | 2026-09 | 全局方案开发与验证机 |
+| PJX110 | ColorOS 16 / PJX110_16.0.1.301 / Android 16 | 2026-09 | LSPosed IT 2.1.1（7846），仅限上述部分验证 |
 
 ---
 

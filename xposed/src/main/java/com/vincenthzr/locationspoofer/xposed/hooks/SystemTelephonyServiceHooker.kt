@@ -39,7 +39,7 @@ private fun sysLog(msg: String) = XposedBridge.log(msg)
  *
  * 本模块双管齐下：
  * - 在 com.android.phone 中挂载 PhoneInterfaceManager，拦截 getAllCellInfo / getCellLocation；
- * - 在 system_server 中挂载 TelephonyRegistry，改写全局基站状态推送；
+ * - 在 system_server 中挂载 TelephonyRegistry，按目标应用改写基站回调；
  * 派发与目标模拟坐标一致的 GSM/LTE/5G NR 基站小区数据，彻底消除基站与 GPS 的位置冲突。
  */
 
@@ -255,65 +255,11 @@ internal fun LocationHooker.hookSystemTelephonyService(classLoader: ClassLoader)
     isTelephonyServiceHooked = true
 }
 
-/** system_server 内部 TelephonyRegistry 拦截：改写主动派发到客户端的回调事件 */
+/** Preserve the registry cache; transform only permission-checked recipient callbacks. */
 internal fun LocationHooker.hookSystemTelephonyRegistry(classLoader: ClassLoader) {
     val registryClass = SystemClassLocator.locate(SystemComponent.TELEPHONY_REGISTRY, classLoader) ?: return
     if (hookedCallbackClasses.putIfAbsent(registryClass, true) != null) return
-
-    val notifyMethods = arrayOf("notifyCellInfo", "notifyCellInfoForSubscriber")
-    for (mName in notifyMethods) {
-        try {
-            XposedHelpers.hookAllMethods(registryClass, mName) { chain, _ ->
-                val config = readConfig()
-                if (config != null && config.optBoolean("active", false) && config.optBoolean("mock_cell", true)) {
-                    val lat = config.optDouble("lat", 0.0)
-                    val lng = config.optDouble("lng", 0.0)
-                    try {
-                        val fakeList = buildFakeCellInfoList(classLoader, lat, lng, config)
-                        val args = chain.args.toMutableList()
-                        for (i in args.indices) {
-                            if (args[i] is List<*>) {
-                                args[i] = fakeList
-                                break
-                            }
-                        }
-                        return@hookAllMethods chain.proceed(args.toTypedArray())
-                    } catch (_: Throwable) {}
-                }
-                return@hookAllMethods chain.proceed(chain.args.toTypedArray())
-            }
-        } catch (_: Throwable) {}
-    }
-
-    val notifyLocationMethods = arrayOf("notifyCellLocation", "notifyCellLocationForSubscriber")
-    for (mName in notifyLocationMethods) {
-        try {
-            XposedHelpers.hookAllMethods(registryClass, mName) { chain, _ ->
-                val config = readConfig()
-                if (config != null && config.optBoolean("active", false) && config.optBoolean("mock_cell", true)) {
-                    val lat = config.optDouble("lat", 0.0)
-                    val lng = config.optDouble("lng", 0.0)
-                    val lac = ((lat * 100).toInt().coerceAtLeast(1000) % 65535)
-                    val cid = ((lng * 1000).toInt().coerceAtLeast(10000) % 268435455)
-                    val args = chain.args.toMutableList()
-                    for (i in args.indices) {
-                        val arg = args[i]
-                        if (arg is android.os.Bundle) {
-                            arg.putInt("lac", lac)
-                            arg.putInt("cid", cid)
-                            arg.putInt("psc", -1)
-                        } else if (arg != null && LocationHooker.hasTypeByName(arg.javaClass, "android.telephony.CellLocation")) {
-                            try {
-                                XposedHelpers.callMethod(arg, "setLacAndCid", lac, cid)
-                            } catch (_: Throwable) {}
-                        }
-                    }
-                    return@hookAllMethods chain.proceed(args.toTypedArray())
-                }
-                return@hookAllMethods chain.proceed(chain.args.toTypedArray())
-            }
-        } catch (_: Throwable) {}
-    }
-
-    sysLog("[SysCell] TelephonyRegistry cell & location notify hooked in system_server")
+    val delivery = TelephonyCallbackDelivery(this, classLoader)
+    vendorExtraHooks.add(delivery)
+    delivery.install(registryClass)
 }

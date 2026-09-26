@@ -9,6 +9,14 @@ package com.vincenthzr.locationspoofer.vendor
  * 并在 [VendorScheme.forFamily] 里指定它用哪个适配器。
  */
 object RomRules {
+    /** ColorOS 16 真机属性为 V16.0.0；同时限定 Android API，避免跨版本套用私有接口。 */
+    fun isColorOs16(profile: VendorProfile): Boolean {
+        val version = profile.prop("ro.build.version.oplusrom")
+            .ifBlank { profile.prop("ro.build.version.opporom") }
+        val major = version.dropWhile { !it.isDigit() }.takeWhile { it.isDigit() }.toIntOrNull()
+        return profile.family == RomFamily.COLOROS && profile.sdkInt == 36 && major == 16
+    }
+
 
     /** 采集设备画像时会尝试读取的系统属性——各 OEM 用来标识自身 ROM 与版本的关键属性都放这里。 */
     val PROBED_PROPS = listOf(

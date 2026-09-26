@@ -39,6 +39,7 @@ import com.vincenthzr.locationspoofer.viewmodel.MainViewModel
 import com.vincenthzr.locationspoofer.viewmodel.loadInstalledAppsForSystemHook
 import com.vincenthzr.locationspoofer.viewmodel.setSystemHookPackageEnabled
 import com.vincenthzr.locationspoofer.viewmodel.setSystemHookGlobalMode
+import com.vincenthzr.locationspoofer.viewmodel.setForceLocationEnabled
 import com.vincenthzr.locationspoofer.viewmodel.selectAllUserAppsForSystemHook
 import com.vincenthzr.locationspoofer.viewmodel.clearAllSystemHookApps
 import top.yukonga.miuix.kmp.basic.Card as MiuixCard
@@ -241,6 +242,22 @@ fun SystemHookAppsScreen(
                                 checked = uiState.isSystemHookGlobalMode,
                                 onCheckedChange = { viewModel.setSystemHookGlobalMode(it) }
                             )
+                        }
+
+                        if (com.vincenthzr.locationspoofer.ui.BuildConfig.GLOBAL_SCHEME &&
+                            com.vincenthzr.locationspoofer.vendor.RomRules.isColorOs16(
+                                com.vincenthzr.locationspoofer.vendor.VendorProfile.current)) {
+                            Spacer(Modifier.height(8.dp))
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(stringResource(R.string.coloros_virtual_location_title), fontSize = 14.sp)
+                                    Text(stringResource(R.string.coloros_virtual_location_desc), fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                }
+                                Switch(checked = uiState.forceLocationEnabled,
+                                    onCheckedChange = { viewModel.setForceLocationEnabled(it) })
+                            }
+
                         }
 
                         if (uiState.isSystemHookGlobalMode) {

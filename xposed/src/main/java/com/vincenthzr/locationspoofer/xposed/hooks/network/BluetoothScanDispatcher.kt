@@ -671,6 +671,8 @@ internal fun LocationHooker.dispatchBatchResultsToCallback(callback: Any, result
     }
 
 // BLE 扫描结果伪造的核心分发逻辑
+internal val syntheticBleDelivery = com.vincenthzr.locationspoofer.xposed.utils.CallScope<Boolean>()
+
 internal fun LocationHooker.deliverBleScanResults(config: JSONObject, callback: Any, cl: ClassLoader) {
         val mainHandler = Handler(Looper.getMainLooper())
         val scanRecordClass = XposedHelpers.findClassIfExists("android.bluetooth.le.ScanRecord", cl)
@@ -712,7 +714,7 @@ internal fun LocationHooker.deliverBleScanResults(config: JSONObject, callback: 
                     results.add(scanResultObj)
                     mainHandler.post {
                         try {
-                            dispatchScanResultToCallback(callback, scanResultObj)
+                            syntheticBleDelivery.withValue(true) { dispatchScanResultToCallback(callback, scanResultObj) }
                             XposedBridge.log("[LocationSpoofer] 成功派发 onScanResult 给 ${callback.javaClass.name} | MAC=$address RSSI=$rssi 广播包长=${rawBytes.size}")
                         } catch (e: Throwable) {
                             XposedBridge.log("[LocationSpoofer] 派发 onScanResult 异常: $e")
@@ -728,7 +730,7 @@ internal fun LocationHooker.deliverBleScanResults(config: JSONObject, callback: 
         if (results.isNotEmpty()) {
             mainHandler.post {
                 try {
-                    dispatchBatchResultsToCallback(callback, results)
+                    syntheticBleDelivery.withValue(true) { dispatchBatchResultsToCallback(callback, results) }
                 } catch (_: Throwable) {}
             }
         }

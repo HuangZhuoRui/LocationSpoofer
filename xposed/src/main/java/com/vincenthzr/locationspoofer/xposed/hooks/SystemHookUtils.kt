@@ -118,7 +118,7 @@ object SystemHookUtils {
         for (arg in args) {
             if (arg == null) continue
             val className = arg.javaClass.simpleName
-            if (className.contains("Identity") || className.contains("Request") || className.contains("Registration")) {
+            if (className.contains("Identity") || className.contains("Request") || className.contains("Registration") || className == "AttributionSource") {
                 try {
                     val uid = XposedHelpers.callMethod(arg, "getUid") as? Int
                     if (uid != null && uid > 1000) return uid
@@ -150,7 +150,7 @@ object SystemHookUtils {
             }
             // 支持 CallerIdentity / Identity 对象
             val className = arg.javaClass.simpleName
-            if (className.contains("Identity") || className.contains("Request") || className.contains("Registration")) {
+            if (className.contains("Identity") || className.contains("Request") || className.contains("Registration") || className == "AttributionSource") {
                 try {
                     val pkg = XposedHelpers.callMethod(arg, "getPackageName") as? String
                     if (!pkg.isNullOrEmpty() && pkg.contains(".") && !pkg.startsWith("android.")) {
@@ -270,7 +270,7 @@ object SystemHookUtils {
         if (targetPackages.isEmpty()) return false
 
         if (cleanPkg != null && targetPackages.contains(cleanPkg)) {
-            XposedBridge.log("[SysHook] Whitelist match: cleanPkg=$cleanPkg (explicitPkg=$explicitPackage, uid=$uid)")
+            logWhitelistMatch("clean:$uid:$cleanPkg", "[SysHook] Whitelist match: cleanPkg=$cleanPkg (explicitPkg=$explicitPackage, uid=$uid)")
             return true
         }
 

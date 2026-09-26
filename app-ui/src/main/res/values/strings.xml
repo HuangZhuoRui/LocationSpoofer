@@ -110,8 +110,8 @@
     <string name="hook_status_summary_none">No report</string>
     <string name="hook_status_adapter_auto">Adapter: %1$s (auto)</string>
     <string name="hook_status_adapter_manual">Adapter: %1$s (manual)</string>
-    <string name="hook_status_no_report">No report found: the module is not active in this process yet. Check the LSPosed scope and reboot</string>
-    <string name="hook_status_stale">This report is from a previous boot; the module is not active in this process since the last reboot</string>
+    <string name="hook_status_no_report">Report unavailable: it may not have been generated, or Root cannot access this process’s report directory. Check Root access, the LSPosed scope and status after reboot.</string>
+    <string name="hook_status_stale">This report is from a previous boot. A report for the current boot has not been read yet.</string>
     <string name="hook_status_updated_at">Updated at %1$s</string>
     <string name="hook_status_config">Config in use: %1$s (updated %2$s)</string>
     <string name="hook_status_config_none">No config file could be read</string>
@@ -605,4 +605,6 @@ Error details: %s</string>
     <string name="enable_slight_jitter_desc">Adds natural GPS drift so the track looks less mechanical</string>
     <string name="refresh_data">Refresh</string>
     <string name="collection_save_failed">Failed to save collected data, scanning stopped</string>
+    <string name="coloros_virtual_location_title">Virtual location availability</string>
+    <string name="coloros_virtual_location_desc">Allow selected apps to receive simulated locations while system location is off. ColorOS 16 only; disabled by default.</string>
 </resources>

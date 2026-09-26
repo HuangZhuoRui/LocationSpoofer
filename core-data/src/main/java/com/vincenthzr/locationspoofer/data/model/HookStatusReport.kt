@@ -52,7 +52,7 @@ data class HookStatusReport(
 
     val hookedCount: Int get() = components.count { it.state == State.HOOKED }
 
-    /** 报告写于本次开机之前：说明本次开机模块没有在该进程里生效（未勾选作用域、未重启或模块被停用） */
+    /** 报告写于本次开机之前；这只能说明尚未读到新报告，不能据此断定模块未生效 */
     fun isStale(bootTimeMs: Long): Boolean = updatedAt < bootTimeMs
 
     companion object {

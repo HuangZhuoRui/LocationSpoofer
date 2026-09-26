@@ -5,9 +5,7 @@ import com.vincenthzr.locationspoofer.data.model.RootSetupTestResult
 import com.vincenthzr.locationspoofer.data.model.RootSolution
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.BufferedReader
 import java.io.File
-import java.io.InputStreamReader
 
 class RootManager {
 
@@ -363,30 +361,34 @@ class RootManager {
         result != "ERROR"
     }
 
-    fun executeCommand(command: String): String {
-        return try {
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val output = reader.readText()
-            process.waitFor()
-            output.ifEmpty { "SUCCESS" }
-        } catch (e: Exception) {
-            "ERROR"
-        }
-    }
+    fun executeCommand(command: String): String = runCommand(command, null)
 
-    fun executeCommandWithInput(command: String, input: String): String {
+    fun executeCommandWithInput(command: String, input: String): String = runCommand(command, input)
+
+    private fun runCommand(command: String, input: String?): String {
         return try {
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
-            process.outputStream.bufferedWriter().use { writer ->
-                writer.write(input)
-                writer.flush()
+            val process = ProcessBuilder("su", "-c", command).redirectErrorStream(true).start()
+            // Drain output while feeding stdin, so neither pipe can fill and deadlock.
+            var output = ""
+            val reader = kotlin.concurrent.thread(name = "LocationSpoofer-root-output", isDaemon = true) {
+                output = process.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
             }
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val output = reader.readText()
-            process.waitFor()
-            output.ifEmpty { "SUCCESS" }
+            try {
+                process.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
+                    if (input != null) writer.write(input)
+                }
+                val exitCode = process.waitFor()
+                reader.join()
+                if (exitCode == 0) output.ifEmpty { "SUCCESS" }
+                else {
+                    android.util.Log.e(TAG, "Root command failed ($exitCode): ${output.take(2000)}")
+                    "ERROR"
+                }
+            } finally {
+                process.destroy()
+            }
         } catch (e: Exception) {
+            android.util.Log.e(TAG, "Root command failed", e)
             "ERROR"
         }
     }

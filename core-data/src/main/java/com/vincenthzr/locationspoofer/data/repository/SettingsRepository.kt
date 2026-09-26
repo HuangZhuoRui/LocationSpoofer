@@ -114,6 +114,10 @@ class SettingsRepository(private val settingsManager: SettingsManager) {
             settingsManager.isSystemHookGlobalMode = value
         }
 
+    var forceLocationEnabled: Boolean
+        get() = settingsManager.forceLocationEnabled
+        set(value) { settingsManager.forceLocationEnabled = value }
+
     var isSpoofingActive: Boolean
         get() = settingsManager.isSpoofingActive
         set(value) {
