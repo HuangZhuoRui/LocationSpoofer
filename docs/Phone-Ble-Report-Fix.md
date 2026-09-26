@@ -52,7 +52,7 @@
 - 测试结束后先恢复全部测试前配置，再将原有系统配置同步到此前陈旧的电话／蓝牙副本，五份配置最终一致，当前模拟保持原先的关闭状态；临时测试包与 13 个测试备份目录已清理。
 - 手机安装的 APK 散列与交付文件完全一致。11 个原生库（包括 `liblocation_accel.so`、`liblocation_steps.so`）与修复前安装包逐字节一致。
 
-机器判定结果：`report-fix/final-validation.json`，15 项检查全部通过。完整采集：`verify-final.log`、各探针结果文本及 `report-final-*.json`。
+机器判定结果：[历史验证汇总](evidence/coloros16/phone-ble-historical-validation.json)，15 项检查全部通过。完整采集：`verify-final.log`、各探针结果文本及 `report-final-*.json`。
 
 ## 验证边界
 

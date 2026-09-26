@@ -1,0 +1,26 @@
+{
+  "passed": true,
+  "checks": {
+    "target-callback-only": true,
+    "target-ordinary": true,
+    "ordinary-pending-intent": true,
+    "non-target-isolation": true,
+    "reject-unmatched-filter": true,
+    "batch-delay": true,
+    "pending-intent-batch-delay": true,
+    "found-and-lost": true,
+    "explicit-flush": true,
+    "target-removal": true,
+    "configuration-restored": true,
+    "report-system": true,
+    "report-phone": true,
+    "report-bluetooth": true,
+    "final-domain-synchronization": true
+  },
+  "batchFirstSeconds": 5.803999999996449,
+  "batchIntervalsSeconds": [
+    5.011,
+    5.852
+  ],
+  "explicitFlushSeconds": 0.053
+}
