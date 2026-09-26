@@ -1,3 +1,5 @@
+> 当前为独立原生传感器分支 `feat/coloros16-native-sensors-review`，基于无传感器评审分支。下文的“不含原生传感器”和 84 项测试描述基础评审版；此分支增加 NDK/CMake/ShadowHook、默认关闭的开关和 4 项传感器单元测试。详见 [原生实现与验证](NativeSensors-ColorOS16.md)。
+
 # ColorOS 16 适配说明
 
 本次修改基于 main 的 `736191c`，使用 `com.vincenthzr.locationspoofer` 包名。旧版独立定位、Wi-Fi、基站、蓝牙、GNSS 和地理编码 Hook 不再整体替换通用实现。

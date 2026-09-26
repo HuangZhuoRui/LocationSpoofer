@@ -39,6 +39,7 @@ import com.vincenthzr.locationspoofer.viewmodel.MainViewModel
 import com.vincenthzr.locationspoofer.viewmodel.loadInstalledAppsForSystemHook
 import com.vincenthzr.locationspoofer.viewmodel.setSystemHookPackageEnabled
 import com.vincenthzr.locationspoofer.viewmodel.setSystemHookGlobalMode
+import com.vincenthzr.locationspoofer.viewmodel.setNativeSensorEnabled
 import com.vincenthzr.locationspoofer.viewmodel.setForceLocationEnabled
 import com.vincenthzr.locationspoofer.viewmodel.selectAllUserAppsForSystemHook
 import com.vincenthzr.locationspoofer.viewmodel.clearAllSystemHookApps
@@ -256,6 +257,14 @@ fun SystemHookAppsScreen(
                                 }
                                 Switch(checked = uiState.forceLocationEnabled,
                                     onCheckedChange = { viewModel.setForceLocationEnabled(it) })
+                            }
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text("原生传感器模拟（实验性）", fontSize = 14.sp)
+                                    Text("独立测试版功能，默认关闭。用于步频、计步与加速度模拟。", fontSize = 11.sp)
+                                }
+                                Switch(checked = uiState.nativeSensorEnabled,
+                                    onCheckedChange = { viewModel.setNativeSensorEnabled(it) })
                             }
 
                         }

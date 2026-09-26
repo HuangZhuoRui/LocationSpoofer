@@ -40,6 +40,12 @@ object ColorOs16Vendor : SystemVersionVendor(ColorOsVendor) {
             val delivery = ColorOs16LocationDelivery(hooker, classLoader)
             hooker.vendorExtraHooks.add(delivery)
             delivery.install()
+            val sensors = com.vincenthzr.locationspoofer.xposed.hooks.SystemAccelHooker(hooker)
+            hooker.vendorExtraHooks.add(sensors)
+            sensors.install()
+            val steps = com.vincenthzr.locationspoofer.xposed.hooks.SystemStepHooker(hooker)
+            hooker.vendorExtraHooks.add(steps)
+            steps.install()
         }
     }
 }

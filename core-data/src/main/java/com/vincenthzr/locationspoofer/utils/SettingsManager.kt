@@ -336,6 +336,9 @@ class SettingsManager(context: Context) {
     var isSystemHookGlobalMode: Boolean
         get() = prefs.getBoolean("is_system_hook_global_mode", true)
         set(value) = prefs.edit().putBoolean("is_system_hook_global_mode", value).apply()
+    var nativeSensorEnabled: Boolean
+        get() = prefs.getBoolean("native_sensor_enabled", false)
+        set(value) = prefs.edit().putBoolean("native_sensor_enabled", value).apply()
     var forceLocationEnabled: Boolean
         get() = prefs.getBoolean("force_location_enabled", false)
         set(value) = prefs.edit().putBoolean("force_location_enabled", value).apply()

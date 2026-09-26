@@ -6,11 +6,14 @@ plugins {
 }
 
 android {
+    ndkVersion = "27.2.12479018"
+    externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
     namespace = "com.vincenthzr.locationspoofer.xposed"
     compileSdk = 37
 
     defaultConfig {
         minSdk = 26
+        ndk { abiFilters += setOf("arm64-v8a", "armeabi-v7a") }
     }
 
     // 与 app/build.gradle.kts 中的 scheme 维度保持一致。
@@ -33,6 +36,7 @@ android {
     }
     buildFeatures {
         buildConfig = true
+        prefab = true
     }
 }
 
@@ -43,6 +47,7 @@ kotlin {
 }
 
 dependencies {
+    implementation("com.bytedance.android:shadowhook:2.0.1")
     implementation(project(":core-geo"))
     compileOnly(libs.xposed.api)
 

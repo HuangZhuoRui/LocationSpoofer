@@ -114,6 +114,9 @@ class SettingsRepository(private val settingsManager: SettingsManager) {
             settingsManager.isSystemHookGlobalMode = value
         }
 
+    var nativeSensorEnabled: Boolean
+        get() = settingsManager.nativeSensorEnabled
+        set(value) { settingsManager.nativeSensorEnabled = value }
     var forceLocationEnabled: Boolean
         get() = settingsManager.forceLocationEnabled
         set(value) { settingsManager.forceLocationEnabled = value }

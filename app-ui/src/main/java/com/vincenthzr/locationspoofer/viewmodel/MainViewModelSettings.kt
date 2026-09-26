@@ -712,3 +712,9 @@ internal fun MainViewModel.handleSpoofingIntent(intent: SpoofingIntent) {
         is SpoofingIntent.RequestCurrentLocation -> {} // Typically requires Context, will pass to a callback instead
     }
 }
+
+internal fun MainViewModel.setNativeSensorEnabled(enabled: Boolean) {
+    settingsRepository.nativeSensorEnabled = enabled
+    _uiState.update { it.copy(nativeSensorEnabled = enabled) }
+    refreshSystemHookConfig()
+}
