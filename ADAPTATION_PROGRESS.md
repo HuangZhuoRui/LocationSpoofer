@@ -21,7 +21,7 @@
 | 系统 | 适配器 | 状态 | 已验证的系统版本 | 备注 |
 |---|---|---|---|---|
 | 小米 HyperOS / MIUI | `HyperOsVendor` | ✅ | HyperOS 4 | 唯一完整实测过的系统；HyperOS 3 及更早版本未验证 |
-| OPPO ColorOS / 一加 OxygenOS | `ColorOs16Vendor`（API 36）/ `ColorOsVendor` | ⚠️ | ColorOS 16 / Android 16 | PJX110 部分实测；电话与蓝牙通过，持续定位及运动应用仍待复测；OxygenOS 未验证。见 [范围与截图](docs/ColorOS16.md) |
+| OPPO ColorOS / 一加 OxygenOS | `ColorOs16Vendor`（API 36）/ `ColorOsVendor` | ⚠️ | ColorOS 16 / Android 16 | PJX110 部分实测；电话与蓝牙通过，持续定位及运动应用仍待复测；OxygenOS 未验证。见 [范围与截图](docs/adaptation/coloros16.md) |
 | 三星 One UI | `OneUiVendor` | ❔ | — | 同上 |
 | vivo OriginOS、荣耀 MagicOS、魅族 Flyme 等 | 无（落到 `AospVendor`） | ❔ | — | 尚无专用适配器 |
 | 原生 AOSP / 类原生 | `AospVendor` | ❔ | — | 基线适配器，尚无实机验证记录 |

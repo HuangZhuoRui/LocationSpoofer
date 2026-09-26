@@ -127,6 +127,15 @@ jobs:
           - `LocationSpoofer-global-*`：全局方案，作用域勾选系统框架、电话、蓝牙，对全设备生效
           - 两个方案二选一安装；绝大多数设备选择 `arm64-v8a`，32 位设备选择 `armeabi-v7a`
           - 各系统的适配进度见 [ADAPTATION_PROGRESS.md](${{ github.server_url }}/${{ github.repository }}/blob/main/ADAPTATION_PROGRESS.md)
+
+          ## 从 2.x 版本升级
+          3.0 起包名改为 `com.vincenthzr.locationspoofer`，签名也已更换，**不能覆盖安装旧版**（旧包名 `com.suseoaa.locationspoofer`）——直接安装会多出一个独立的新应用，旧版的数据也不会带过来。请按以下步骤迁移：
+          1. 在旧版的「导入与导出数据」中导出备份（收藏位置、路线、采集数据等）；
+          2. 在 LSPosed 中停用旧版模块，然后卸载旧版；
+          3. 按上面的说明选择方案安装新版，在 LSPosed 中启用新模块、勾选作用域，并重启设备；
+          4. 在新版的「导入与导出数据」中导入第 1 步的备份。
+
+          新旧两个模块同时启用会同时改写定位服务、互相干扰，请务必先停用旧模块。
           NOTES
 
           cat changelog.txt

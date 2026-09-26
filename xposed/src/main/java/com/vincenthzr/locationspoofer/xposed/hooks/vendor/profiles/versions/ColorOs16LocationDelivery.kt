@@ -23,7 +23,7 @@ import java.util.function.Function
 import java.util.function.Predicate
 
 /**
- * ColorOS 16 (Android 16) adapter. Validation scope is documented in docs/ColorOS16.md.
+ * ColorOS 16 (Android 16) adapter. Validation scope is documented in docs/adaptation/coloros16.md.
  * Only per-request copies enter the existing framework delivery path. Provider caches,
  * Binder permission checks, coarse-location filtering and cancellation remain Android's job.
  */

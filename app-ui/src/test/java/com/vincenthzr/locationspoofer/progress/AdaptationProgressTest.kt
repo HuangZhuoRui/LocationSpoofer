@@ -30,8 +30,12 @@ class AdaptationProgressTest {
         assertEquals("HyperOS 4", hyperOs.verifiedVersions)
 
         val colorOs = AdaptationProgress.findGlobalSystem(doc, RomFamily.COLOROS.progressKeywords)!!
-        assertEquals(AdaptationProgress.Status.UNVERIFIED, colorOs.status)
-        assertEquals("", colorOs.verifiedVersions)
+        assertEquals(AdaptationProgress.Status.PARTIAL, colorOs.status)
+        assertEquals("ColorOS 16 / Android 16", colorOs.verifiedVersions)
+
+        val oneUi = AdaptationProgress.findGlobalSystem(doc, RomFamily.ONEUI.progressKeywords)!!
+        assertEquals(AdaptationProgress.Status.UNVERIFIED, oneUi.status)
+        assertEquals("", oneUi.verifiedVersions)
 
         for (family in RomFamily.entries) {
             val entry = AdaptationProgress.findGlobalSystem(doc, family.progressKeywords)
