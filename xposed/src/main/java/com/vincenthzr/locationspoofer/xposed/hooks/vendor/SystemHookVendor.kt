@@ -22,6 +22,15 @@ import com.vincenthzr.locationspoofer.xposed.LocationHooker
  * 实现要求：**无状态、可安全并发调用**。适配器实例是单例（`object`），不要在其中持有可变状态。
  */
 interface SystemHookVendor {
+    /** 该版本需要用户显式开启虚拟定位可用功能；其他适配器保持原有行为。 */
+    /** 使用框架注册对象派发位置；仍复用通用 GNSS、NMEA 和地理编码。 */
+    /** Vendor owns BLE delivery using permission-checked framework scan queues. */
+    val usesFrameworkBleDelivery: Boolean get() = false
+
+    val usesFrameworkLocationDelivery: Boolean get() = false
+
+    val requiresVirtualLocationOptIn: Boolean get() = false
+
 
     /**
      * 适配器标识，例如 `"hyperos"`、`"aosp"`。

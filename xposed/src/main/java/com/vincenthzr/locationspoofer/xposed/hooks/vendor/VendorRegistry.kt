@@ -51,6 +51,7 @@ object VendorRegistry {
      */
     internal val ALL: List<SystemHookVendor> = listOf(
         SystemVersionVendorTemplate, // 默认不生效的系统版本级适配器模板，见其类注释
+        com.vincenthzr.locationspoofer.xposed.hooks.vendor.profiles.versions.ColorOs16Vendor,
         HyperOsVendor,
         ColorOsVendor,
         OneUiVendor,
@@ -85,7 +86,7 @@ object VendorRegistry {
 
     /** 当前命中的适配器是否来自用户手动指定 */
     val isManualOverride: Boolean
-        get() = !manualOverrideId.isNullOrBlank() && manualOverrideId != VendorScheme.AUTO.id && active.id == manualOverrideId
+        get() = !manualOverrideId.isNullOrBlank() && manualOverrideId != VendorScheme.AUTO.id && ALL.any { it.id == manualOverrideId && it.family == active.family }
 
     private var logged = false
 
@@ -95,7 +96,10 @@ object VendorRegistry {
             val manual = ALL.find { it.id == overrideId }
             if (manual != null) {
                 XposedBridge.log("[Vendor] 命中手动覆盖：$overrideId")
-                return manual
+                // 手动选择厂商后仍允许命中该厂商的版本适配，避免界面显示 ColorOS 却绕过 16 适配。
+                return ALL.filterIsInstance<SystemVersionVendor>()
+                    .filter { it.family == manual.family && it.matches(profile) }
+                    .maxByOrNull { it.priority } ?: manual
             }
             XposedBridge.log("[Vendor] 手动覆盖 id '$overrideId' 未在 ALL 列表中找到匹配项，回退到自动识别")
         }

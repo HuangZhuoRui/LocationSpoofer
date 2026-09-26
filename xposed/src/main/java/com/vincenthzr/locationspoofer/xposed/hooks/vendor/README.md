@@ -137,8 +137,11 @@ App 通过 root 读取，显示在"系统适配 → Hook 运行状态"页：
 |---|---|---|
 | `AospVendor` | 基线 | ✅ 维护全部原生候选类名 |
 | `HyperOsVendor` | 厂商级 | ✅ HyperOS 4 实机完整验证；类名与 AOSP 相同无需覆盖，已填 6 个小米自有豁免包名 |
-| `ColorOsVendor` | 厂商级 | ⚠️ 仅能识别，完全走基线，待实机验证 |
+| `ColorOsVendor` | 厂商级 | 保留通用基线；ColorOS 16 由版本适配器补充差异 |
+| `ColorOs16Vendor` | 版本级 | API 36 + ColorOS 16；复用通用 Hook，补充蓝牙/网络类名与默认关闭的虚拟定位可用功能 |
 | `OneUiVendor` | 厂商级 | ⚠️ 仅能识别，完全走基线，待实机验证 |
 | `SystemVersionVendorTemplate` | 版本级 | 💤 不生效的模板（`matchesVersion` 恒为 `false`），复制改名后使用 |
 
 vivo OriginOS、荣耀 MagicOS、魅族 Flyme 已能被识别（App 会正确显示系统名），但还没有专用适配器，走 `AospVendor`。
+
+版本适配器需要卸载额外 Hook 时，可保存 `XposedHelpers.hookAllMethods` 返回的句柄，并将清理对象登记到 `LocationHooker.vendorExtraHooks`；热重载前统一关闭。手动选择厂商方案时，注册表仍优先选择该厂商下与当前设备匹配的版本适配器。

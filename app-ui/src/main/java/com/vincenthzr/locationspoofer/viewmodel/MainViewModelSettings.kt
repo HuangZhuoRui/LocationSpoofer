@@ -520,6 +520,16 @@ internal fun MainViewModel.setSystemHookGlobalMode(enabled: Boolean) {
     settingsRepository.isSystemHookGlobalMode = enabled
     _uiState.update { it.copy(isSystemHookGlobalMode = enabled) }
 
+    refreshSystemHookConfig()
+}
+
+internal fun MainViewModel.setForceLocationEnabled(enabled: Boolean) {
+    settingsRepository.forceLocationEnabled = enabled
+    _uiState.update { it.copy(forceLocationEnabled = enabled) }
+    refreshSystemHookConfig()
+}
+
+private fun MainViewModel.refreshSystemHookConfig() {
     if (_uiState.value.isSpoofingActive) {
         viewModelScope.launch {
             // 只刷新坐标系映射与常驻设置字段（系统级模拟目标等由 patchConfig 自动刷新），不动位置与路线状态

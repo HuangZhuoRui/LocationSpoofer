@@ -116,8 +116,8 @@
     <string name="hook_status_summary_none">暂无报告</string>
     <string name="hook_status_adapter_auto">适配器：%1$s（自动识别）</string>
     <string name="hook_status_adapter_manual">适配器：%1$s（手动指定）</string>
-    <string name="hook_status_no_report">没有读取到报告：模块尚未在这个进程里生效，确认 LSPosed 作用域已勾选并重启设备</string>
-    <string name="hook_status_stale">报告来自上一次开机，本次开机模块没有在这个进程里生效</string>
+    <string name="hook_status_no_report">未读取到报告：可能尚未生成，或 Root 无法访问该进程的报告目录。请检查 Root 权限、LSPosed 作用域及重启后的状态。</string>
+    <string name="hook_status_stale">这份报告来自上一次开机，尚未读取到本次开机的新报告。</string>
     <string name="hook_status_updated_at">更新于 %1$s</string>
     <string name="hook_status_config">读取的配置：%1$s（%2$s 更新）</string>
     <string name="hook_status_config_none">没有读到配置文件</string>
@@ -605,4 +605,6 @@
     <string name="enable_slight_jitter_desc">加入自然的 GPS 漂移，让轨迹不那么机械</string>
     <string name="refresh_data">刷新</string>
     <string name="collection_save_failed">本地数据保存失败，采集已自动停止</string>
+    <string name="coloros_virtual_location_title">虚拟定位可用</string>
+    <string name="coloros_virtual_location_desc">系统定位关闭时，允许选定应用接收模拟位置。仅用于 ColorOS 16，默认关闭。</string>
 </resources>

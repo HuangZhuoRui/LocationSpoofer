@@ -139,7 +139,11 @@ class LocationHooker : XposedModule() {
     }
 
     // LibXposed API 102: 热重载请求前置确认与资源清理
+    internal val vendorExtraHooks = mutableListOf<AutoCloseable>()
+
     override fun onHotReloading(param: XposedModuleInterface.HotReloadingParam): Boolean {
+        vendorExtraHooks.asReversed().forEach { runCatching { it.close() } }
+        vendorExtraHooks.clear()
         nmeaTimers.values.forEach { it.cancel() }
         nmeaTimers.clear()
         bleScanTimers.values.forEach { it.cancel() }
@@ -292,7 +296,7 @@ class LocationHooker : XposedModule() {
         }
 
         val isSystemServer =
-            (pkg == "android") || (processName == "android") || (processName == "system_server")
+            (processName == "system_server") || (processName == "system")
 
         // 核心系统进程：system_server, com.android.phone 等
         val isCoreSystemProcess = isSystemServer ||
@@ -322,7 +326,8 @@ class LocationHooker : XposedModule() {
         }
 
         val isSystemServer =
-            (pkg == "android") || (processName == "android") || (processName == "system_server")
+            (processName == "system_server") || (processName == "system")
+        if (!isSystemServer && (pkg == "android" || pkg == "system")) return true
         val isPhoneProcess =
             (pkg == "com.android.phone") || (processName == "com.android.phone")
         val isBluetoothProcess =

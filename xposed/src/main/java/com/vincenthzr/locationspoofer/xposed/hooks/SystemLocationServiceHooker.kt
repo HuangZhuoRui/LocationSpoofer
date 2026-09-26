@@ -16,6 +16,7 @@
 
 package com.vincenthzr.locationspoofer.xposed.hooks
 
+import com.vincenthzr.locationspoofer.xposed.hooks.vendor.VendorRegistry
 import android.os.IBinder
 import android.os.IInterface
 import android.util.Log
@@ -496,6 +497,7 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
 
     startSystemLocationHeartbeat(classLoader)
 
+    if (!VendorRegistry.active.usesFrameworkLocationDelivery) {
     // =========================================================================
     // 1. getLastLocation：同步返回，命中目标应用直接替换为伪造 Location
     // =========================================================================
@@ -734,6 +736,8 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
         logLoc("[SysLoc] hook getCurrentLocation failed: $e")
     }
 
+    }
+
     // =========================================================================
     // 5. isProviderEnabled & isProviderEnabledForUser：对目标应用强制汇报 GPS 可用
     // =========================================================================
@@ -742,7 +746,9 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
         try {
             XposedHelpers.hookAllMethods(serviceClazz, methodName) { chain, _ ->
                 val config = readConfig()
-                if (config != null && config.optBoolean("active", false)) {
+                if (config != null && config.optBoolean("active", false) &&
+                    (!com.vincenthzr.locationspoofer.xposed.hooks.vendor.VendorRegistry.active.requiresVirtualLocationOptIn ||
+                        config.optBoolean("force_location_enabled", false))) {
                     val providerArg = SystemHookUtils.extractProvider(chain.args)
                     if (providerArg == "gps" || providerArg == "network" || providerArg == "passive" || providerArg == "fused") {
                         val explicitPkg = SystemHookUtils.extractPackageName(chain.args)
@@ -936,6 +942,7 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
         } catch (_: Throwable) {}
     }
 
+    if (!VendorRegistry.active.usesFrameworkLocationDelivery) {
     // =========================================================================
     // 7. LocationProviderManager 底层引擎挂载 (Android 12+)
     // 直接在 providerManager 层拦截 getLastLocation 与 getCurrentLocation，
@@ -1264,6 +1271,8 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
         }
     }
 
+    }
+
     // =========================================================================
     // 8. 逆地理编码 Geocoder 拦截 (reverseGeocode / getFromLocation)
     // 防止系统 Geocoder（如小米 MetokGeocodeService / MetokNLP）返回真实住址
@@ -1348,7 +1357,7 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
         }
     }
 
-    hookPendingIntentDelivery(classLoader)
+    if (!VendorRegistry.active.usesFrameworkLocationDelivery) hookPendingIntentDelivery(classLoader)
 }
 
 /** 拦截 PendingIntent.send(...) 改写通过 PendingIntent 投递给目标应用的 Location 广播与服务 Intent */

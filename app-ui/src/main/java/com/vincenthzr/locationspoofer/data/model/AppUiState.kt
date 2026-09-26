@@ -138,6 +138,7 @@ data class AppState(
     val systemHookPackages: Set<String> = emptySet(),
     /** 是否开启全局模拟模式（除自身与系统核心组件外对全设备所有应用生效） */
     val isSystemHookGlobalMode: Boolean = false,
+    val forceLocationEnabled: Boolean = false,
     /** "系统级模拟应用"选择页展示的全量已安装 App 列表，进入该页时按需加载 */
     val installedAppsForSystemHook: List<AppInfoItem> = emptyList(),
     val isLoadingInstalledApps: Boolean = false,

@@ -51,6 +51,12 @@ abstract class SystemVersionVendor(
      */
     protected abstract fun matchesVersion(profile: VendorProfile): Boolean
 
+    override val usesFrameworkBleDelivery: Boolean get() = parent.usesFrameworkBleDelivery
+
+    override val usesFrameworkLocationDelivery: Boolean get() = parent.usesFrameworkLocationDelivery
+
+    override val requiresVirtualLocationOptIn: Boolean get() = parent.requiresVirtualLocationOptIn
+
     override val family: RomFamily get() = parent.family
 
     /** 默认比父适配器精确 10 个优先级，保证同厂商下"命中具体大版本"总是优先于"只命中厂商"。 */

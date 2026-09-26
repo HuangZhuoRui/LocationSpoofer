@@ -239,25 +239,28 @@ object XposedHelpers {
         clazz: Class<*>,
         methodName: String,
         crossinline interceptor: (io.github.libxposed.api.XposedInterface.Chain, Executable) -> Any?
-    ) {
+    ): List<io.github.libxposed.api.XposedInterface.HookHandle> {
+        val handles = mutableListOf<io.github.libxposed.api.XposedInterface.HookHandle>()
         var hooked = 0
         for (method in clazz.declaredMethods) {
-            if (method.name == methodName) {
+            if (method.name == methodName && !Modifier.isAbstract(method.modifiers)) {
                 try {
-                    module.hook(method)
+                    val handle = module.hook(method)
                         .intercept(object : io.github.libxposed.api.XposedInterface.Hooker {
                             override fun intercept(chain: io.github.libxposed.api.XposedInterface.Chain): Any? {
                                 return interceptor(chain, method)
                             }
                         })
+                    handles.add(handle)
                     hooked++
                 } catch (e: Throwable) {
-                    // 忽略
+                    com.vincenthzr.locationspoofer.xposed.diagnostics.HookStatus.error("${clazz.name}#$methodName", e)
                 }
             }
         }
         // 记进 Hook 状态报告：0 表示这个系统版本上该类没有这个方法（方法被改名或挪走了）
         com.vincenthzr.locationspoofer.xposed.diagnostics.HookStatus.methodHooked(clazz.name, methodName, hooked)
+        return handles
     }
 
     inline fun hookAllConstructors(
