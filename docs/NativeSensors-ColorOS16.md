@@ -34,4 +34,4 @@ NDK 回归程序位于 `xposed/src/test/cpp`。用 Android NDK 的 arm64 C++17 �
 
 本分支基于 `fix/coloros16-review-ready`，仅在基础适配之上增加原生实现、默认关闭开关、构建依赖与测试。基础分支无需 NDK/CMake/ShadowHook，传感器功能不再混入基础 PR。两分支均不包含本机绝对路径的 sensor-probe 构建引用。上文真机结果为拆分前同一传感器实现的历史结果；拆分后的 APK 尚未重启验证。
 
-本次分支整理后的验证：88 项 JVM 测试通过，global/scoped 两种方案、两个 ABI 的调试 APK 构建通过；原生源文件与拆分前备份逐字节一致。配置写入失败路径修复继承基础分支。
+本次分支整理后的验证：88 项 JVM 测试通过，global/scoped 两种方案、两个 ABI 的调试 APK 构建通过；原生 C++ 源文件与拆分前备份逐字节一致；Kotlin 传感器逻辑保留，仅清理一处行尾空格。配置写入失败路径修复继承基础分支。

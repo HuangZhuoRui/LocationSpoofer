@@ -109,7 +109,7 @@ internal class SystemStepHooker(private val module: LocationHooker) : AutoClosea
         if (!ready && !initialize()) return
 
         val elapsed = SystemClock.elapsedRealtime()
-        val policy = "${config.optBoolean("active")}|${config.optBoolean("system_hook_global_mode")}|${config.optJSONArray("system_hook_packages")}" 
+        val policy = "${config.optBoolean("active")}|${config.optBoolean("system_hook_global_mode")}|${config.optJSONArray("system_hook_packages")}"
         if (elapsed - lastTargets >= 500L || policy != lastPolicy) {
             allowed = SystemStepNative.uids()
                 .filter { uid -> SystemHookUtils.isTargetCaller(null, null, config, uid) }
