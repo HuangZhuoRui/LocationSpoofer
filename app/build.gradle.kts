@@ -117,6 +117,7 @@ android {
         buildConfig = true
     }
     packaging {
+        jniLibs.pickFirsts += "**/libshadowhook.so"
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }

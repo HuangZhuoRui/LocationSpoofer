@@ -77,6 +77,7 @@ class MainViewModel(
             appCoordinateSystems = settingsRepository.getAppCoordinateSystems(),
             systemHookPackages = settingsRepository.getSystemHookPackages(),
             isSystemHookGlobalMode = settingsRepository.isSystemHookGlobalMode,
+            nativeSensorEnabled = settingsRepository.nativeSensorEnabled,
             forceLocationEnabled = settingsRepository.forceLocationEnabled,
             mockWifi = settingsRepository.mockWifi,
             mockCell = settingsRepository.mockCell,
