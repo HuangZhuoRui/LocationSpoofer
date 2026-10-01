@@ -41,7 +41,6 @@ import com.vincenthzr.locationspoofer.ui.theme.AccentOrange
 import com.vincenthzr.locationspoofer.ui.theme.AppColors
 import com.vincenthzr.locationspoofer.viewmodel.MainViewModel
 import com.vincenthzr.locationspoofer.viewmodel.exportEnvironmentData
-import com.vincenthzr.locationspoofer.viewmodel.refreshRecordCount
 import com.vincenthzr.locationspoofer.viewmodel.toggleContinuousScanning
 import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 
@@ -67,10 +66,6 @@ fun DataCollectionAssistScreen(
     isDark: Boolean
 ) {
     val context = LocalContext.current
-
-    LaunchedEffect(Unit) {
-        viewModel.refreshRecordCount()
-    }
 
     var missingPermissions by remember {
         mutableStateOf(REQUIRED_PERMISSIONS.filter {

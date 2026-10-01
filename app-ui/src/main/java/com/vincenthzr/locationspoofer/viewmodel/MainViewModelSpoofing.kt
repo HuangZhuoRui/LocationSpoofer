@@ -281,10 +281,8 @@ internal fun MainViewModel.toggleContinuousScanning() {
                         }
 
                         if (!saveFailed) {
-                            val count = environmentDao.getRecordCount()
                             _uiState.update {
                                 it.copy(
-                                    environmentRecordCount = count,
                                     scannedWifiCount = it.scannedWifiCount + wCount,
                                     scannedCellCount = it.scannedCellCount + cCount,
                                     scannedBluetoothCount = it.scannedBluetoothCount + bCount
@@ -316,20 +314,4 @@ internal fun MainViewModel.toggleContinuousScanning() {
         continuousScanJob?.cancel()
         continuousScanJob = null
     }
-}
-
-internal fun MainViewModel.refreshRecordCount() {
-    viewModelScope.launch(Dispatchers.IO) {
-        val count = environmentDao.getRecordCount()
-        _uiState.update { it.copy(environmentRecordCount = count) }
-    }
-}
-
-internal suspend fun MainViewModel.getAllLocations(): List<com.vincenthzr.locationspoofer.data.db.LocationRecord> {
-    return environmentDao.getAllLocations()
-}
-
-internal fun MainViewModel.onManageDataChanged() {
-    refreshRecordCount()
-    evaluateMockCapabilities()
 }

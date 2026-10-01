@@ -1,6 +1,7 @@
 package com.vincenthzr.locationspoofer.data.db
 
 import androidx.room.*
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface EnvironmentDao {
@@ -72,6 +73,10 @@ interface EnvironmentDao {
     @Transaction
     @Query("SELECT * FROM location_records")
     suspend fun getAllCompleteLocations(): List<CompleteLocation>
+
+    @Transaction
+    @Query("SELECT * FROM location_records")
+    fun observeAllCompleteLocations(): Flow<List<CompleteLocation>>
 
     @Query("SELECT COUNT(*) FROM location_records")
     suspend fun getRecordCount(): Int

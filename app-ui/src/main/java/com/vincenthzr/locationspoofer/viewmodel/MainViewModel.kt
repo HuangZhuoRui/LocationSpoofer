@@ -2,6 +2,8 @@ package com.vincenthzr.locationspoofer.viewmodel
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.vincenthzr.locationspoofer.data.db.CompleteLocation
 import com.vincenthzr.locationspoofer.data.db.EnvironmentDao
 import com.vincenthzr.locationspoofer.data.db.LocationRecord
 import com.vincenthzr.locationspoofer.data.model.AppState
@@ -23,6 +25,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.stateIn
 
 sealed interface FavoriteToggleResult {
     data class Added(val name: String) : FavoriteToggleResult
@@ -44,6 +49,12 @@ class MainViewModel(
     internal var lastMapMoveTime = 0L
     internal var mapMoveJob: Job? = null
     internal var gaitRecordingJob: Job? = null
+    internal var mockCapabilitiesJob: Job? = null
+
+    val environmentLocations: StateFlow<List<CompleteLocation>> = environmentDao
+        .observeAllCompleteLocations()
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     internal val _uiState = MutableStateFlow(
         AppState(

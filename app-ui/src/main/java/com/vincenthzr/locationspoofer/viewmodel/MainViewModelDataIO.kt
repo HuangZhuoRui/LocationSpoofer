@@ -663,13 +663,11 @@ internal fun MainViewModel.applyImportPackage(
                 }
             }
 
-            val count = environmentDao.getRecordCount()
             val updatedSaved = settingsRepository.getSavedLocations()
             val updatedCoords = settingsRepository.getAppCoordinateSystems()
 
             _uiState.update {
                 it.copy(
-                    environmentRecordCount = count,
                     savedLocations = updatedSaved,
                     appCoordinateSystems = updatedCoords,
                     mockWifi = settingsRepository.mockWifi,

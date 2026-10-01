@@ -38,7 +38,6 @@ import com.vincenthzr.locationspoofer.ui.theme.noRippleClickable
 import com.vincenthzr.locationspoofer.ui.components.MapCoverageHelper
 import com.vincenthzr.locationspoofer.viewmodel.MainViewModel
 import com.vincenthzr.locationspoofer.viewmodel.fetchCurrentLocation
-import com.vincenthzr.locationspoofer.viewmodel.getAllLocations
 import com.vincenthzr.locationspoofer.viewmodel.isDomesticEnvironment
 import com.vincenthzr.locationspoofer.viewmodel.setMapEngine
 import com.vincenthzr.locationspoofer.viewmodel.setMapType
@@ -57,6 +56,8 @@ fun ScannerMapScreen(
     val context = LocalContext.current
     var mapController by remember { mutableStateOf<AppMapController?>(null) }
     var showMapTypeDialog by remember { mutableStateOf(false) }
+    val environmentLocations by viewModel.environmentLocations.collectAsState()
+    val locations = remember(environmentLocations) { environmentLocations.map { it.location } }
 
     // 进入页面时主动尝试刷新一次真实 GPS 定位
     LaunchedEffect(Unit) {
@@ -70,10 +71,9 @@ fun ScannerMapScreen(
         mapController?.setMapType(uiState.mapType)
     }
 
-    // 地图就绪或记录数量变化时，绘制覆盖范围圆圈并定位至当前位置
-    LaunchedEffect(mapController, uiState.environmentRecordCount) {
+    // 数据变化时刷新覆盖范围，包括数量不变的坐标编辑和重复采集。
+    LaunchedEffect(mapController, locations) {
         val controller = mapController ?: return@LaunchedEffect
-        val locations = viewModel.getAllLocations()
         val currentLat = uiState.latitudeInput.toDoubleOrNull() ?: 39.9042
         val currentLng = uiState.longitudeInput.toDoubleOrNull() ?: 116.4074
         controller.clear()

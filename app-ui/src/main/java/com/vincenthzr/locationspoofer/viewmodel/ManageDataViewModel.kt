@@ -5,26 +5,28 @@ import androidx.lifecycle.viewModelScope
 import com.vincenthzr.locationspoofer.data.db.EnvironmentDao
 import com.vincenthzr.locationspoofer.ui.screen.managedata.ManageDataUiState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class ManageDataViewModel(private val environmentDao: EnvironmentDao) : ViewModel() {
     private val _uiState = MutableStateFlow(ManageDataUiState())
     val uiState: StateFlow<ManageDataUiState> = _uiState.asStateFlow()
+    private var observationJob: Job? = null
 
     init {
         loadManageData()
     }
 
     fun loadManageData() {
+        observationJob?.cancel()
         _uiState.update { it.copy(isLoading = true) }
-        viewModelScope.launch(Dispatchers.IO) {
-            val list = environmentDao.getAllCompleteLocations()
-            withContext(Dispatchers.Main) {
+        observationJob = viewModelScope.launch {
+            environmentDao.observeAllCompleteLocations().distinctUntilChanged().collect { list ->
                 _uiState.update { it.copy(dataList = list, isLoading = false) }
             }
         }
@@ -33,14 +35,12 @@ class ManageDataViewModel(private val environmentDao: EnvironmentDao) : ViewMode
     fun deleteManageData(ids: List<Long>) {
         viewModelScope.launch(Dispatchers.IO) {
             environmentDao.deleteLocations(ids)
-            loadManageData()
         }
     }
 
     fun deleteManageDataSingle(id: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             environmentDao.deleteLocation(id)
-            loadManageData()
         }
     }
 
@@ -65,7 +65,6 @@ class ManageDataViewModel(private val environmentDao: EnvironmentDao) : ViewMode
                 selectedBluetoothAddress,
                 selectedCellKey
             )
-            loadManageData()
         }
     }
 
@@ -117,8 +116,6 @@ class ManageDataViewModel(private val environmentDao: EnvironmentDao) : ViewMode
             if (isDesignatedSimulation) {
                 environmentDao.updateSelectedWifi(locationId, bssid.uppercase().trim())
             }
-
-            loadManageData()
         }
     }
 
@@ -132,14 +129,12 @@ class ManageDataViewModel(private val environmentDao: EnvironmentDao) : ViewMode
             if (target?.location?.selectedWifiBssid.equals(bssid, ignoreCase = true)) {
                 environmentDao.updateSelectedWifi(locationId, null)
             }
-            loadManageData()
         }
     }
 
     fun updateSelectedWifiBssid(locationId: Long, selectedBssid: String?) {
         viewModelScope.launch(Dispatchers.IO) {
             environmentDao.updateSelectedWifi(locationId, selectedBssid)
-            loadManageData()
         }
     }
 
@@ -192,7 +187,6 @@ class ManageDataViewModel(private val environmentDao: EnvironmentDao) : ViewMode
             if (isDesignated) {
                 environmentDao.updateSelectedCell(locationId, cellKey.trim())
             }
-            loadManageData()
         }
     }
 
@@ -203,14 +197,12 @@ class ManageDataViewModel(private val environmentDao: EnvironmentDao) : ViewMode
             if (target?.location?.selectedCellKey.equals(cellKey, ignoreCase = true)) {
                 environmentDao.updateSelectedCell(locationId, null)
             }
-            loadManageData()
         }
     }
 
     fun updateSelectedCellKey(locationId: Long, selectedCellKey: String?) {
         viewModelScope.launch(Dispatchers.IO) {
             environmentDao.updateSelectedCell(locationId, selectedCellKey)
-            loadManageData()
         }
     }
 
@@ -239,7 +231,6 @@ class ManageDataViewModel(private val environmentDao: EnvironmentDao) : ViewMode
             if (isDesignated) {
                 environmentDao.updateSelectedBluetooth(locationId, address.uppercase().trim())
             }
-            loadManageData()
         }
     }
 
@@ -250,21 +241,18 @@ class ManageDataViewModel(private val environmentDao: EnvironmentDao) : ViewMode
             if (target?.location?.selectedBluetoothAddress.equals(address, ignoreCase = true)) {
                 environmentDao.updateSelectedBluetooth(locationId, null)
             }
-            loadManageData()
         }
     }
 
     fun updateSelectedBluetoothAddress(locationId: Long, selectedBluetoothAddress: String?) {
         viewModelScope.launch(Dispatchers.IO) {
             environmentDao.updateSelectedBluetooth(locationId, selectedBluetoothAddress)
-            loadManageData()
         }
     }
 
     fun clearAllManageData() {
         viewModelScope.launch(Dispatchers.IO) {
             environmentDao.clearAll()
-            loadManageData()
         }
     }
 }

@@ -291,6 +291,7 @@ private fun MainViewModel.isValidCoord(value: String): Boolean {
 }
 
 internal fun MainViewModel.evaluateMockCapabilities() {
+    mockCapabilitiesJob?.cancel()
     val state = _uiState.value
     val lat = state.latitudeInput.toDoubleOrNull()
     val lng = state.longitudeInput.toDoubleOrNull()
@@ -311,7 +312,7 @@ internal fun MainViewModel.evaluateMockCapabilities() {
         return
     }
 
-    viewModelScope.launch {
+    mockCapabilitiesJob = viewModelScope.launch {
         evaluateMockCapabilitiesSuspend(lat, lng)
     }
 }
@@ -431,6 +432,10 @@ internal suspend fun MainViewModel.evaluateMockCapabilitiesSuspend(lat: Double, 
     }
 
     withContext(Dispatchers.Main) {
+        val current = _uiState.value
+        if (current.latitudeInput.toDoubleOrNull() != lat || current.longitudeInput.toDoubleOrNull() != lng) {
+            return@withContext
+        }
         if (validRecords.isEmpty()) {
             _uiState.update {
                 it.copy(

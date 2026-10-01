@@ -42,7 +42,6 @@ import com.vincenthzr.locationspoofer.viewmodel.FavoriteToggleResult
 import com.vincenthzr.locationspoofer.viewmodel.MainViewModel
 import com.vincenthzr.locationspoofer.viewmodel.ManageDataViewModel
 import com.vincenthzr.locationspoofer.viewmodel.isDomesticEnvironment
-import com.vincenthzr.locationspoofer.viewmodel.onManageDataChanged
 import com.vincenthzr.locationspoofer.viewmodel.selectCollectedLocation
 import com.vincenthzr.locationspoofer.viewmodel.syncFavoriteCoordinateIfExists
 import com.vincenthzr.locationspoofer.viewmodel.toggleCollectedLocationFavorite
@@ -73,17 +72,6 @@ fun ManageDataScreen(
     val favoritedCoordsFallback = remember(uiState.savedLocations) {
         uiState.savedLocations.filter { it.sourceLocationId == null }
             .mapTo(HashSet()) { it.lat to it.lng }
-    }
-
-    LaunchedEffect(dataList) {
-        viewModel.onManageDataChanged()
-    }
-
-    // 之前进这个页面只在 ViewModel 初始化时加载过一次数据；如果是在"采集本地数据"页
-    // 后台采集完，再切回来看，看到的还是旧列表，得重启 App 才刷新（issue #60）。
-    // 打开页面时主动拉一次最新数据，解决大部分场景，另外仍保留手动刷新按钮兜底。
-    LaunchedEffect(Unit) {
-        manageDataViewModel.loadManageData()
     }
 
     BackHandler(onBack = onClose)

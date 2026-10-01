@@ -155,7 +155,6 @@ fun LocationTab(
     ) { uri ->
         uri?.let {
             viewModel.importEnvironmentData(it) {
-                manageDataViewModel.loadManageData()
                 Toast.makeText(context, context.getString(R.string.import_merge_success), Toast.LENGTH_SHORT).show()
             }
         }
@@ -298,7 +297,6 @@ fun LocationTab(
                     MapControlButton(
                         icon = Icons.Rounded.Storage,
                         onClick = {
-                            manageDataViewModel.loadManageData()
                             showLocalDataDialog = true
                         }
                     )
@@ -602,5 +600,4 @@ fun LocationTab(
         )
     }
 }
-
 

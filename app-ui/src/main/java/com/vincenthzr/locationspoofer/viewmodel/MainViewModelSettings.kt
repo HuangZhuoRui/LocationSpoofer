@@ -73,10 +73,18 @@ internal fun MainViewModel.initialize() {
         if (restoredPosition == null) {
             fetchCurrentLocation(context)
         }
-        refreshRecordCount()
+        withContext(Dispatchers.Main) { evaluateMockCapabilities() }
     }
 
     observeMotionController()
+
+    // 监听完整环境数据，同一坐标追加设备时记录数量不变，也必须刷新模拟能力。
+    viewModelScope.launch {
+        environmentLocations.collect { locations ->
+            _uiState.update { it.copy(environmentRecordCount = locations.size) }
+            evaluateMockCapabilities()
+        }
+    }
 
     // 持续记录当前选定的位置，供下次打开时恢复；路线模拟时位置每 100ms 变一次，按 2 秒采样落盘
     viewModelScope.launch {

@@ -13,9 +13,20 @@ import org.json.JSONObject
 
 /** Read-only device regression. Start a simulation before running this instrumentation. */
 class SystemFilesInstrumentation : Instrumentation() {
-    override fun onCreate(arguments: Bundle?) { super.onCreate(arguments); start() }
+    private var environmentRefresh = false
+
+    override fun onCreate(arguments: Bundle?) {
+        super.onCreate(arguments)
+        environmentRefresh = arguments?.getString("check") == "environment-refresh"
+        start()
+    }
 
     override fun onStart() {
+        if (environmentRefresh) {
+            val output = verifyEnvironmentRefresh()
+            finish(if (output.getString("result")?.startsWith("PASS") == true) -1 else 0, output)
+            return
+        }
         val output = Bundle()
         try {
             val service = runBlocking {
