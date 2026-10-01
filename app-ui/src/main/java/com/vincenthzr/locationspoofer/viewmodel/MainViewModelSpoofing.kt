@@ -62,9 +62,9 @@ internal fun MainViewModel.startSpoofing() {
             updatedState.collectedWifiJson,
             updatedState.collectedCellJson,
             updatedState.collectedBluetoothJson,
-            updatedState.mockWifi && (BuildConfig.GLOBAL_SCHEME || updatedState.canMockWifi),
+            updatedState.mockWifi && updatedState.canMockWifi,
             updatedState.mockCell,
-            updatedState.mockBluetooth && (BuildConfig.GLOBAL_SCHEME || updatedState.canMockBluetooth),
+            updatedState.mockBluetooth && updatedState.canMockBluetooth,
             updatedState.enableJitter
         )
         motionController.onStaticStarted(lat, lng)
@@ -202,9 +202,9 @@ private fun MainViewModel.syncMockSettings() {
     // 只改开关字段，不动位置与路线状态（整份重写会用界面里过时的状态覆盖掉悬浮窗 / 路线的运动状态）
     viewModelScope.launch {
         locationRepository.patchConfig { json ->
-            json.put("mock_wifi", state.mockWifi && (BuildConfig.GLOBAL_SCHEME || state.canMockWifi))
+            json.put("mock_wifi", state.mockWifi && state.canMockWifi)
             json.put("mock_cell", state.mockCell)
-            json.put("mock_bluetooth", state.mockBluetooth && (BuildConfig.GLOBAL_SCHEME || state.canMockBluetooth))
+            json.put("mock_bluetooth", state.mockBluetooth && state.canMockBluetooth)
             json.put("enable_jitter", state.enableJitter)
         }
     }

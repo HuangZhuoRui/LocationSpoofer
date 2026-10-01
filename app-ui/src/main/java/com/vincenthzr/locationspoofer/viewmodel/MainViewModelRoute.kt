@@ -1,7 +1,6 @@
 package com.vincenthzr.locationspoofer.viewmodel
 
 import com.vincenthzr.locationspoofer.data.motion.MotionController
-import com.vincenthzr.locationspoofer.ui.BuildConfig
 import java.util.Locale
 import androidx.lifecycle.viewModelScope
 import com.vincenthzr.locationspoofer.ui.R
@@ -150,9 +149,9 @@ internal fun MainViewModel.confirmMapPoint(lat: Double, lng: Double, isDragging:
                 wifiJson = updatedState.collectedWifiJson,
                 cellJson = updatedState.collectedCellJson,
                 bluetoothJson = updatedState.collectedBluetoothJson,
-                mockWifi = updatedState.mockWifi && (BuildConfig.GLOBAL_SCHEME || updatedState.canMockWifi),
+                mockWifi = updatedState.mockWifi && updatedState.canMockWifi,
                 mockCell = updatedState.mockCell,
-                mockBluetooth = updatedState.mockBluetooth && (BuildConfig.GLOBAL_SCHEME || updatedState.canMockBluetooth),
+                mockBluetooth = updatedState.mockBluetooth && updatedState.canMockBluetooth,
                 enableJitter = updatedState.enableJitter
             )
             motionController.onStaticStarted(lat, lng)

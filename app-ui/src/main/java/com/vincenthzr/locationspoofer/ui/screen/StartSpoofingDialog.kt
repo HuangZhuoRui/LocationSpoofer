@@ -15,7 +15,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vincenthzr.locationspoofer.data.model.AppState
-import com.vincenthzr.locationspoofer.ui.BuildConfig
 import com.vincenthzr.locationspoofer.ui.R
 import com.vincenthzr.locationspoofer.ui.theme.AccentBlue
 import com.vincenthzr.locationspoofer.ui.theme.AccentGreen
@@ -56,7 +55,6 @@ fun StartSpoofingDialog(
                     .padding(20.dp)
                     .fillMaxWidth()
                     .heightIn(max = 620.dp)
-                    .verticalScroll(rememberScrollState())
             ) {
                 Text(
                     text = stringResource(R.string.spoofing_options_title),
@@ -65,20 +63,97 @@ fun StartSpoofingDialog(
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.spoofing_options_desc),
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
-                )
-                Spacer(Modifier.height(16.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(
+                        text = stringResource(R.string.spoofing_options_desc),
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                    )
+                    Spacer(Modifier.height(16.dp))
 
-                // 全局方案由系统服务实时合成 Wi-Fi/基站/蓝牙数据，开关始终可用；
-                // 非全局方案只有采集到对应数据（或配置了在线数据源 Token）时才显示
-                val showWifiToggle = BuildConfig.GLOBAL_SCHEME || uiState.canMockWifi || uiState.wigleToken.isNotBlank()
-                val showCellToggle = BuildConfig.GLOBAL_SCHEME || uiState.canMockCell || uiState.opencellidToken.isNotBlank()
-                val showBluetoothToggle = BuildConfig.GLOBAL_SCHEME || uiState.canMockBluetooth
+                    // 两种方案都根据当前点位的数据能力显示选项；在线数据源可在开始模拟时补齐数据。
+                    val showWifiToggle = uiState.canMockWifi || uiState.wigleToken.isNotBlank()
+                    val showCellToggle = uiState.canMockCell || uiState.opencellidToken.isNotBlank()
+                    val showBluetoothToggle = uiState.canMockBluetooth
 
-                if (showWifiToggle) {
+                    if (showWifiToggle) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Outlined.Wifi,
+                                null,
+                                tint = AccentBlue,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                stringResource(R.string.mock_wifi_data),
+                                modifier = Modifier.weight(1f),
+                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            Switch(checked = uiState.mockWifi, onCheckedChange = { onToggleWifi() })
+                        }
+                    }
+
+                    if (showCellToggle) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Outlined.CellTower,
+                                null,
+                                tint = AccentOrange,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                stringResource(R.string.mock_cell_data),
+                                modifier = Modifier.weight(1f),
+                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            Switch(checked = uiState.mockCell, onCheckedChange = { onToggleCell() })
+                        }
+                    }
+
+                    if (showBluetoothToggle) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Outlined.Bluetooth,
+                                null,
+                                tint = AccentGreen,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                stringResource(R.string.mock_bluetooth_data),
+                                modifier = Modifier.weight(1f),
+                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            Switch(
+                                checked = uiState.mockBluetooth,
+                                onCheckedChange = { onToggleBluetooth() })
+                        }
+                    }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -86,23 +161,21 @@ fun StartSpoofingDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            Icons.Outlined.Wifi,
+                            Icons.Outlined.GraphicEq,
                             null,
                             tint = AccentBlue,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(Modifier.width(12.dp))
                         Text(
-                            stringResource(R.string.mock_wifi_data),
+                            stringResource(R.string.enable_slight_jitter),
                             modifier = Modifier.weight(1f),
                             fontSize = 15.sp,
                             color = MaterialTheme.colorScheme.onBackground
                         )
-                        Switch(checked = uiState.mockWifi, onCheckedChange = { onToggleWifi() })
+                        Switch(checked = uiState.enableJitter, onCheckedChange = { onToggleJitter() })
                     }
-                }
 
-                if (showCellToggle) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -110,117 +183,48 @@ fun StartSpoofingDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            Icons.Outlined.CellTower,
+                            Icons.Outlined.RestartAlt,
                             null,
-                            tint = AccentOrange,
+                            tint = AccentBlue,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(Modifier.width(12.dp))
                         Text(
-                            stringResource(R.string.mock_cell_data),
-                            modifier = Modifier.weight(1f),
-                            fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        Switch(checked = uiState.mockCell, onCheckedChange = { onToggleCell() })
-                    }
-                }
-
-                if (showBluetoothToggle) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Outlined.Bluetooth,
-                            null,
-                            tint = AccentGreen,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            stringResource(R.string.mock_bluetooth_data),
+                            stringResource(R.string.restart_apps_on_spoof),
                             modifier = Modifier.weight(1f),
                             fontSize = 15.sp,
                             color = MaterialTheme.colorScheme.onBackground
                         )
                         Switch(
-                            checked = uiState.mockBluetooth,
-                            onCheckedChange = { onToggleBluetooth() })
+                            checked = uiState.restartAppsOnSpoof,
+                            onCheckedChange = { onToggleRestartApps() })
                     }
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Outlined.GraphicEq,
-                        null,
-                        tint = AccentBlue,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        stringResource(R.string.enable_slight_jitter),
-                        modifier = Modifier.weight(1f),
-                        fontSize = 15.sp,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Switch(checked = uiState.enableJitter, onCheckedChange = { onToggleJitter() })
-                }
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Outlined.RestartAlt,
-                        null,
-                        tint = AccentBlue,
-                        modifier = Modifier.size(20.dp)
+                    Spacer(Modifier.height(8.dp))
+                    AltitudeSettingsCard(
+                        altitudeInput = uiState.altitudeInput,
+                        variationM = uiState.altitudeVariationM,
+                        onAltitudeChange = onAltitudeChange,
+                        onVariationChange = onAltitudeVariationChange
                     )
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        stringResource(R.string.restart_apps_on_spoof),
-                        modifier = Modifier.weight(1f),
-                        fontSize = 15.sp,
-                        color = MaterialTheme.colorScheme.onBackground
+                    Spacer(Modifier.height(8.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = uiState.satelliteCountInput,
+                        onValueChange = onSatelliteCountChange,
+                        label = { Text(stringResource(R.string.satellite_count), fontSize = 12.sp) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                        ),
+                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentBlue,
+                            focusedLabelColor = AccentBlue
+                        )
                     )
-                    Switch(
-                        checked = uiState.restartAppsOnSpoof,
-                        onCheckedChange = { onToggleRestartApps() })
                 }
 
-                Spacer(Modifier.height(8.dp))
-                AltitudeSettingsCard(
-                    altitudeInput = uiState.altitudeInput,
-                    variationM = uiState.altitudeVariationM,
-                    onAltitudeChange = onAltitudeChange,
-                    onVariationChange = onAltitudeVariationChange
-                )
-                Spacer(Modifier.height(8.dp))
-                androidx.compose.material3.OutlinedTextField(
-                    value = uiState.satelliteCountInput,
-                    onValueChange = onSatelliteCountChange,
-                    label = { Text(stringResource(R.string.satellite_count), fontSize = 12.sp) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
-                    ),
-                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = AccentBlue,
-                        focusedLabelColor = AccentBlue
-                    )
-                )
-
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(16.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End

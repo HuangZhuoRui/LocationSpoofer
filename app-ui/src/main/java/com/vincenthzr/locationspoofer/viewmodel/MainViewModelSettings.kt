@@ -643,10 +643,22 @@ internal fun MainViewModel.handleSpoofingIntent(intent: SpoofingIntent) {
             )
         }
 
-        is SpoofingIntent.SetStartSpoofingDialogVisible -> _spoofingUiState.update {
-            it.copy(
-                showStartSpoofingDialog = intent.visible
-            )
+        is SpoofingIntent.SetStartSpoofingDialogVisible -> {
+            if (intent.visible && !_spoofingUiState.value.showStartSpoofingDialog) {
+                // 仅在打开弹窗时默认开启有本地数据的模拟项，保留弹窗内的手动取消选择。
+                _uiState.update { state ->
+                    state.copy(
+                        mockWifi = state.canMockWifi || state.mockWifi,
+                        mockCell = state.canMockCell || state.mockCell,
+                        mockBluetooth = state.canMockBluetooth || state.mockBluetooth
+                    )
+                }
+                val state = _uiState.value
+                settingsRepository.mockWifi = state.mockWifi
+                settingsRepository.mockCell = state.mockCell
+                settingsRepository.mockBluetooth = state.mockBluetooth
+            }
+            _spoofingUiState.update { it.copy(showStartSpoofingDialog = intent.visible) }
         }
 
         is SpoofingIntent.SetAppCoordinateScreenVisible -> _spoofingUiState.update {
