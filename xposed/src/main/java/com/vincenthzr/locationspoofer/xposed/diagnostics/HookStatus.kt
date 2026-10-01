@@ -71,7 +71,7 @@ object HookStatus {
     @Volatile private var configPath: String? = null
     @Volatile private var configModified = 0L
 
-    /** 进程当前读取的配置文件及其修改时间：配置副本写入失败时，这里能直接看出进程在读一份旧配置 */
+    /** 当前配置来源与发布时刻，用于确认各系统进程是否收到了框架更新。 */
     fun configLoaded(path: String, modified: Long) {
         if (path == configPath && modified == configModified) return
         configPath = path

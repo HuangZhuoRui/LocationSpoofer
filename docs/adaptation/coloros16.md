@@ -25,6 +25,8 @@ ColorOS 16 通过 `usesFrameworkBleDelivery` 由 `ColorOs16BleDelivery` 派发�
 
 ## 验证记录
 
+以下验证记录来自配置通道迁移前的版本；框架远程配置版本尚需真机复验。
+
 测试设备：PJX110，ColorOS `PJX110_16.0.1.301`，Android API 36，LSPosed IT 2.1.1（7846），2026-09。其他设备及 OxygenOS 未验证。
 
 重启后联合复验通过的项目：
@@ -40,7 +42,7 @@ ColorOS 16 通过 `usesFrameworkBleDelivery` 由 `ColorOs16BleDelivery` 派发�
 - 运动世界校园曾出现 `SWLatLng` 空指针崩溃，未完成复测，不标记为兼容。
 - 普通回调与 PendingIntent 同时请求硬件 FIRST_MATCH / MATCH_LOST 时，系统可能因硬件资源不足拒绝第二个扫描（状态 5），属于平台限制。
 
-配置写入逻辑可以用 `python tools/test_system_file_commands.py` 在已连接的设备上回归测试（只在 `/data/local/tmp` 下的临时目录里运行，不修改真实配置）。
+框架配置通道的发布失败、通知、文件读取和恢复逻辑由 `FrameworkConfigPublisherTest` / `FrameworkConfigReceiverTest` 覆盖。安装对应 debug APK 及 androidTest APK、重启并开始静止模拟后，可运行 `python tools/test_framework_config.py` 检查框架配置、旧临时文件清理和全局版三个系统进程的接收情况；该检查不发布新配置。
 
 ### Hook 运行状态截图
 

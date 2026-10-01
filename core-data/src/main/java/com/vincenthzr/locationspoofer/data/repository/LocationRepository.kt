@@ -24,7 +24,7 @@ class LocationRepository(
     private val savedRouteDao: SavedRouteDao,
     private val spoofingServiceController: SpoofingServiceController
 ) {
-    /** 用户在设置里选择的 root 方案；解析失败（脏数据/尚未设置）时退回 AUTO 全集探测 */
+    /** 用户在设置里选择的 root 方案；解析失败（脏数据/尚未设置）时退回 AUTO */
     private fun currentRootSolution(): RootSolution =
         try {
             RootSolution.valueOf(settingsManager.rootSolution)
@@ -34,15 +34,15 @@ class LocationRepository(
 
     suspend fun checkRootAccess(): Boolean = rootManager.checkRootAccess(currentRootSolution())
 
-    /** 检测 root 权限与 sepolicy 规则注入是否正常，返回完整诊断结果供设置页"测试"按钮展示 */
+    /** 检测 Root 权限与框架配置通道是否正常，返回完整诊断结果供设置页"测试"按钮展示 */
     suspend fun testRootSetup(): RootSetupTestResult = rootManager.testRootSetup(currentRootSolution())
 
-    /** 强制停止目标 App，逼迫它们下次启动时以最新的 sepolicy 规则重新走一次访问判定 */
+    /** 强制停止目标 App，让它们下次启动时加载当前模块并订阅框架配置 */
     suspend fun forceStopApps(packages: List<String>) = rootManager.forceStopApps(packages)
 
     /**
-     * 设备重启 / App 更新后的统一自愈入口：重新下发 live sepolicy 规则，
-     * 并在模拟定位此前处于开启状态时重新调用 startSpoofing() 把配置完整落盘。
+     * 设备重启 / App 更新后的统一自愈入口：恢复 Root 后台运行权限，
+     * 并在模拟定位此前处于开启状态时重新调用 startSpoofing() 发布完整配置。
      * 供 BootCompletedReceiver 和 MainViewModel.initialize() 共同复用，
      * 避免这段逻辑两处各写一份。
      */

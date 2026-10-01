@@ -49,10 +49,7 @@ internal fun LocationHooker.hookBluetoothLE(
             try {
                 XposedHelpers.hookAllMethods(leScannerClass, scanName) { chain, method ->
                     XposedBridge.log("[LocationSpoofer] 捕获到 BluetoothLeScanner.$scanName: args=${chain.args.map { it?.javaClass?.simpleName }}")
-                    var config = readConfig()
-                    if (config == null) {
-                        config = loadConfigFromDisk("startScan_direct")
-                    }
+                    val config = readConfig()
                     if (config == null || !config.optBoolean("active", false) || !config.optBoolean("mock_bluetooth", true)) {
                         XposedBridge.log("[LocationSpoofer] BluetoothLeScanner.$scanName 放行原生系统 (active/mock_bt 为 false)")
                         return@hookAllMethods chain.proceed(chain.args.toTypedArray())
@@ -104,10 +101,7 @@ internal fun LocationHooker.hookBluetoothLE(
         try {
             XposedHelpers.hookAllMethods(bluetoothAdapterClass, "startLeScan") { chain, _ ->
                 XposedBridge.log("[LocationSpoofer] 捕获到 BluetoothAdapter.startLeScan: args=${chain.args.map { it?.javaClass?.simpleName }}")
-                var config = readConfig()
-                if (config == null) {
-                    config = loadConfigFromDisk("startLeScan_direct")
-                }
+                val config = readConfig()
                 if (config == null || !config.optBoolean("active", false) || !config.optBoolean("mock_bluetooth", true)) {
                     return@hookAllMethods chain.proceed(chain.args.toTypedArray())
                 }
@@ -164,7 +158,7 @@ internal fun LocationHooker.hookBluetoothLE(
         for (mName in booleanTrueMethods) {
             try {
                 XposedHelpers.hookAllMethods(bluetoothAdapterClass, mName) { chain, _ ->
-                    val config = readConfig() ?: loadConfigFromDisk(mName)
+                    val config = readConfig()
                     if (config != null && config.optBoolean("active", false) && config.optBoolean("mock_bluetooth", true)) {
                         return@hookAllMethods true
                     }
@@ -177,7 +171,7 @@ internal fun LocationHooker.hookBluetoothLE(
         for (mName in stateMethods) {
             try {
                 XposedHelpers.hookAllMethods(bluetoothAdapterClass, mName) { chain, _ ->
-                    val config = readConfig() ?: loadConfigFromDisk(mName)
+                    val config = readConfig()
                     if (config != null && config.optBoolean("active", false) && config.optBoolean("mock_bluetooth", true)) {
                         return@hookAllMethods 12 // BluetoothAdapter.STATE_ON
                     }
@@ -295,7 +289,7 @@ internal fun LocationHooker.hookBluetoothLE(
             XposedHelpers.hookAllMethods(bluetoothDeviceClass, "getAddress") { chain, _ ->
                 val result = chain.proceed(chain.args.toTypedArray()) as? String
                 if (!result.isNullOrEmpty() && result != "00:00:00:00:00:00") return@hookAllMethods result
-                val config = readConfig() ?: loadConfigFromDisk("getAddress")
+                val config = readConfig()
                 if (config != null && config.optBoolean("active", false) && config.optBoolean("mock_bluetooth", true)) {
                     val bluetoothArray = config.optJSONArray("bluetooth_json")
                     if (bluetoothArray != null && bluetoothArray.length() > 0) {
@@ -466,7 +460,7 @@ internal fun LocationHooker.hookBluetoothLE(
 
         try {
             XposedHelpers.hookAllMethods(scanRecordClass, "getManufacturerSpecificData") { chain, _ ->
-                val config = readConfig() ?: loadConfigFromDisk("mfr_data")
+                val config = readConfig()
                 if (config != null && config.optBoolean("active", false) && config.optBoolean("mock_bluetooth", true)) {
                     val bluetoothArray = config.optJSONArray("bluetooth_json")
                     if (bluetoothArray != null && bluetoothArray.length() > 0) {
@@ -493,7 +487,7 @@ internal fun LocationHooker.hookBluetoothLE(
 
         try {
             XposedHelpers.hookAllMethods(scanRecordClass, "getBytes") { chain, _ ->
-                val config = readConfig() ?: loadConfigFromDisk("getBytes")
+                val config = readConfig()
                 if (config != null && config.optBoolean("active", false) && config.optBoolean("mock_bluetooth", true)) {
                     val bluetoothArray = config.optJSONArray("bluetooth_json")
                     if (bluetoothArray != null && bluetoothArray.length() > 0) {
@@ -743,17 +737,14 @@ internal fun LocationHooker.startBleTimer(callback: Any, cl: ClassLoader) {
         bleScanTimers[callback] = timer
 
         // 立即执行第一次
-        var config = readConfig()
-        if (config == null) {
-            config = loadConfigFromDisk("startBleTimer_init")
-        }
+        val config = readConfig()
         if (config != null && config.optBoolean("active", false) && config.optBoolean("mock_bluetooth", true)) {
             deliverBleScanResults(config, callback, cl)
         }
 
         timer.schedule(object : java.util.TimerTask() {
             override fun run() {
-                val cfg = readConfig() ?: loadConfigFromDisk("bleTimer")
+                val cfg = readConfig()
                 if (cfg == null || !cfg.optBoolean("active", false) || !cfg.optBoolean("mock_bluetooth", true)) {
                     cancel()
                     bleScanTimers.remove(callback)
@@ -801,17 +792,14 @@ internal fun LocationHooker.startOldLeScanTimer(callback: Any, cl: ClassLoader) 
         val timer = java.util.Timer("LocationSpoofer-OldBleTimer", true)
         bleScanTimers[callback] = timer
 
-        var config = readConfig()
-        if (config == null) {
-            config = loadConfigFromDisk("startOldLeScanTimer")
-        }
+        val config = readConfig()
         if (config != null && config.optBoolean("active", false) && config.optBoolean("mock_bluetooth", true)) {
             deliverOldLeScanResults(config, callback, cl)
         }
 
         timer.schedule(object : java.util.TimerTask() {
             override fun run() {
-                val cfg = readConfig() ?: loadConfigFromDisk("oldTimer")
+                val cfg = readConfig()
                 if (cfg == null || !cfg.optBoolean("active", false) || !cfg.optBoolean("mock_bluetooth", true)) {
                     cancel()
                     bleScanTimers.remove(callback)

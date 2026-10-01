@@ -13,16 +13,20 @@ object XposedModuleStatus {
     private val _isModuleActive = MutableStateFlow(false)
     val isModuleActive: StateFlow<Boolean> = _isModuleActive
 
-    var mService: XposedService? = null
-        private set
+    private val _service = MutableStateFlow<XposedService?>(null)
+    val service: StateFlow<XposedService?> = _service
+    val mService: XposedService? get() = _service.value
 
+    @Synchronized
     fun update(service: XposedService) {
-        mService = service
+        _service.value = service
         _isModuleActive.value = true
     }
 
-    fun clear() {
-        mService = null
+    @Synchronized
+    fun clear(service: XposedService? = null) {
+        if (service != null && _service.value !== service) return
+        _service.value = null
         _isModuleActive.value = false
     }
 }

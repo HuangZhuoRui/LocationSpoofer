@@ -12,12 +12,8 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
 /**
- * 设备重启 / App 更新后自愈：RootManager 打的 live sepolicy 规则只存在于
- * 当次开机的内核内存里，不会跨重启持久化，此前只有用户手动打开 MainActivity
- * （MainViewModel.initialize() 触发 checkRootAccess()）才会重新下发，导致
- * 用户重启设备后模拟定位在没有任何提示的情况下"悄悄失效"。
- * 这里在系统广播 BOOT_COMPLETED / MY_PACKAGE_REPLACED 时，不依赖 Activity/ViewModel，
- * 直接复用 LocationRepository.recoverAfterBoot() 完成同样的修复。
+ * 在设备重启 / App 更新广播中恢复保活和模拟状态，不依赖 Activity/ViewModel。
+ * 最新配置由 ConfigManager 在框架连接后自动发布。
  */
 class BootCompletedReceiver : BroadcastReceiver(), KoinComponent {
     private val locationRepository: LocationRepository by inject()

@@ -83,8 +83,7 @@ internal fun MainViewModel.startSpoofing() {
 }
 
 /**
- * 强制重启已勾选作用域的目标 App，逼迫它们以刚写入的最新配置/sepolicy 规则重新走一次
- * 全新的 SELinux 判定——不再受历史 AVC 缓存或其他模块 sepolicy 操作的影响。
+ * 强制重启已勾选作用域的目标 App，让它们加载当前模块并订阅框架配置。
  * 由"开始模拟"弹窗里的开关驱动，用户已经通过默认打开的开关预先同意，这里不再二次确认。
  */
 
@@ -93,7 +92,7 @@ private suspend fun MainViewModel.restartHookedAppsSilently() {
         // 非全局方案：重启 LSPosed 作用域里勾选的全部 App（包括承担融合定位的 GMS）
         val apps = lsposedManager.getHookedApps(context)
         if (apps.isNotEmpty()) {
-            locationRepository.checkRootAccess() // 重新下发 sepolicy 规则，确保重启后读到的是最新的
+            locationRepository.checkRootAccess() // 确认 Root 授权，以便强制停止目标应用
             locationRepository.forceStopApps(apps.map { it.packageName })
         }
         return
@@ -119,7 +118,7 @@ private suspend fun MainViewModel.restartHookedAppsSilently() {
     )
     val toKill = targetPackages.filter { it.isNotBlank() && !exempt.contains(it) }
     if (toKill.isNotEmpty()) {
-        locationRepository.checkRootAccess() // 重新下发 sepolicy 规则，确保重启后读到的是最新的
+        locationRepository.checkRootAccess() // 确认 Root 授权，以便强制停止目标应用
         locationRepository.forceStopApps(toKill)
     }
 }

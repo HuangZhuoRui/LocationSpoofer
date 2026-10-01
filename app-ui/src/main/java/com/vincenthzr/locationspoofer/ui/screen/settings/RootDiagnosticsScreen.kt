@@ -204,7 +204,7 @@ fun RootDiagnosticsScreen(
 
                         Spacer(Modifier.height(14.dp))
 
-                        // 测试 Root 权限与 sepolicy 规则注入
+                        // 测试 Root 权限与框架配置通道
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -254,8 +254,7 @@ fun RootDiagnosticsScreen(
 
                         Spacer(Modifier.height(8.dp))
 
-                        // 重启目标应用以应用最新规则：检测通过但目标 App 仍读不到配置时，
-                        // 让它们以全新状态重新走一次 SELinux 判定，不再受历史缓存影响。
+                        // 重启目标应用，让它们加载当前模块并重新订阅框架配置。
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()

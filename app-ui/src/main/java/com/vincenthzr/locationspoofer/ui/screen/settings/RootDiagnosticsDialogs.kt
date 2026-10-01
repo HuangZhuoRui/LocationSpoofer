@@ -130,36 +130,19 @@ fun RootSetupTestResultDialog(
                         detail = result.idOutput.take(120)
                     )
                     DiagnosticItemRow(
-                        label = stringResource(R.string.root_test_item_tool),
-                        ok = result.toolUsed != null,
-                        detail = result.toolUsed ?: stringResource(R.string.root_test_tool_not_found)
+                        label = stringResource(R.string.root_test_item_framework),
+                        ok = result.frameworkConnected
                     )
                     DiagnosticItemRow(
-                        label = stringResource(R.string.root_test_item_type_rule),
-                        ok = result.typeRuleOk
-                    )
-                    result.allowRuleResults.forEach { (domain, ok) ->
-                        DiagnosticItemRow(
-                            label = stringResource(R.string.root_test_item_allow_domain, domain),
-                            ok = ok
-                        )
-                    }
-                    DiagnosticItemRow(
-                        label = stringResource(R.string.root_test_item_label_check),
-                        ok = result.labelVerified,
-                        detail = result.labelCheckRaw
+                        label = stringResource(R.string.root_test_item_remote_config),
+                        ok = result.remoteConfigAccessible,
+                        detail = stringResource(R.string.root_test_remote_config_detail)
                     )
                     DiagnosticItemRow(
-                        label = stringResource(R.string.root_test_item_app_read),
-                        ok = result.appCanReadProbe,
-                        detail = stringResource(R.string.root_test_item_app_read_detail)
+                        label = stringResource(R.string.root_test_item_config_published),
+                        ok = result.configPublished,
+                        detail = if (result.configPublished) null else stringResource(R.string.root_test_config_not_published)
                     )
-                    result.configFileChconResults.forEach { (path, ok) ->
-                        DiagnosticItemRow(
-                            label = path,
-                            ok = ok
-                        )
-                    }
                 }
 
                 Spacer(Modifier.height(16.dp))
@@ -184,13 +167,10 @@ fun RootSetupTestResultDialog(
                                     appendLine("solution=${result.solution}")
                                     appendLine("hasRoot=${result.hasRoot}")
                                     appendLine("idOutput=${result.idOutput}")
-                                    appendLine("toolUsed=${result.toolUsed}")
-                                    appendLine("typeRuleOk=${result.typeRuleOk}")
-                                    appendLine("allowRuleResults=${result.allowRuleResults}")
-                                    appendLine("labelVerified=${result.labelVerified}")
-                                    appendLine("labelCheckRaw=${result.labelCheckRaw}")
-                                    appendLine("configFileChconResults=${result.configFileChconResults}")
-                                    appendLine("rawScriptOutput=${result.rawScriptOutput}")
+                                    appendLine("frameworkConnected=${result.frameworkConnected}")
+                                    appendLine("remoteConfigAccessible=${result.remoteConfigAccessible}")
+                                    appendLine("configPublished=${result.configPublished}")
+                                    appendLine("frameworkDetail=${result.frameworkDetail}")
                                 }
                                 clipboardManager.setText(AnnotatedString(summary))
                                 Toast.makeText(

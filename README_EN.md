@@ -141,7 +141,7 @@ Built on modern **MVVM + Clean Architecture**, split into 6 Gradle modules by re
 | `core-data` | Android Library | The data/domain layer shared by `app`, `app-ui`, and `service`: the Room database, repositories, and core utilities such as `ConfigManager`, `RootManager`, `EnvironmentScanner` |
 | `core-geo` | Pure Kotlin/JVM | The only module in the project with no Android dependency: coordinate conversion, route geometry and the motion realism engine, plus the system detection rules shared by the hooks and the app (`vendor/`) |
 
-Using root shell privileges to bypass package visibility restrictions and SELinux isolation on Android 11+:
+Both variants deliver JSON through libxposed remote configuration; hooks read an in-memory snapshot:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -153,19 +153,19 @@ Using root shell privileges to bypass package visibility restrictions and SELinu
 │               │                                  │                      │
 │  ┌────────────▼──────────────────────────────────▼───────────────────┐  │
 │  │                     ConfigManager (core-data)                     │  │
-│  │     Serializes config + coord mappings, multi-path + SELinux      │  │
+│  │     Serializes config + coord mappings, publishes via framework      │  │
 │  └──────────────────────────────────┬────────────────────────────────┘  │
 │  ┌──────────────────────────────────▼────────────────────────────────┐  │
 │  │                     SpoofingService (service)                     │  │
 │  │ Foreground service, floating joystick controller, gait/route calc │  │
 │  └───────────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────┬───────────────────────────────────┘
-                                      │ (core-data ConfigManager writes, chmod 644 + dedicated SELinux type)
+                                      │ (ConfigManager publishes remote preferences / remote files)
                                       ▼
               ┌─────────────────────────────────────────────────┐
-              │ 3 config files (tmp / system / app private dir) │
+              │ Framework-managed remote preferences / files │
               └────────────────────────┬────────────────────────┘
-                                      │ (LocationHooker daemon polls every 1000ms by default, backs off to 10s/60s on failure)
+                                      │ (Framework notification -> background decode -> memory snapshot)
                                       ▼ LSPosed / libxposed (API 101+) Injection
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                           Target App Process                            │
@@ -181,9 +181,10 @@ Using root shell privileges to bypass package visibility restrictions and SELinu
 
 > [!NOTE]
 > **IPC Design Decision**:
-> Sandboxed app processes cannot query a custom `ContentProvider` on Android 11+ due to package visibility rules and SELinux isolation.
-> The `core-data` module's `ConfigManager` uses root privileges to write the config as JSON to **three paths at once** (`/data/local/tmp/`, `/data/system/`, and the app's private `files/` directory, with a fourth read-only fallback at `/sdcard/Download/`), with permissions tightened to `644` (owner-writable only). `RootManager` dynamically injects a dedicated SELinux type, `locationspoofer_config_file` (not the generic `shell_data_file`), granting only `read/open/getattr` to the specific domains that need it (`untrusted_app`, `platform_app`, etc.) instead of a blanket world-readable/writable hack.
-> The `xposed` module's `LocationHooker` runs a background daemon thread that picks its read-path priority based on the caller's UID, polling every 1000ms by default into an in-memory cache; on read failure it backs off to 10s (general failures) or 60s (when `com.android.phone` hits a permission denial), avoiding pointless high-frequency retries in a broken state. Hook methods on the main thread only ever read the in-memory cache, achieving 0-IO latency and preventing target-app frame drops.
+> `ConfigManager` publishes complete JSON snapshots with `XposedService.getRemotePreferences()`. UTF-8 payloads larger than 128 KiB are written to immutable framework-managed remote files before their pointers are atomically published. Both variants share this channel, without SELinux patches or public temporary configuration files.
+> Hooks load the initial snapshot during module initialization and subscribe to preference changes. Background decoding and normalization replace the memory cache; hook calls only read that cache. A background check of the preference snapshot retries early initialization failures every second. Motion delivery and service discovery retain a separate timer.
+> Private app preferences retain the latest desired state. Failed publications retry automatically, and framework reconnection republishes that state, including the latest stop or pause. Successful framework publication triggers cleanup of legacy config files, probes, and scripts. The framework persists its own configuration; this is not an entirely disk-free design.
+> The framework must implement remote configuration. After upgrading, enable the module, reboot, and start a simulation. In the global variant, Hook Status should show `libxposed:remote-preferences` or `libxposed:remote-file` with matching publication times across system processes. This transport migration still requires device verification.
 
 ### System Adaptation (global scheme)
 

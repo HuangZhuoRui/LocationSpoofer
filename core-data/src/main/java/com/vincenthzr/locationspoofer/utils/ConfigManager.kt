@@ -2,11 +2,16 @@ package com.vincenthzr.locationspoofer.utils
 
 import android.content.Context
 import android.location.Geocoder
-import com.vincenthzr.locationspoofer.data.BuildConfig
 import com.vincenthzr.locationspoofer.data.model.RoutePoint
 import com.vincenthzr.locationspoofer.data.state.SpoofingState
 import com.vincenthzr.locationspoofer.utils.CoordinateUtils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import android.os.ParcelFileDescriptor
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -19,7 +24,7 @@ import org.json.JSONObject
 class ConfigManager(private val context: Context, private val rootManager: RootManager) {
 
     // system_hook_packages 是独立于每次模拟会话的常驻勾选项（在"系统级模拟应用"页面里配置），
-    // 不随 lat/lng/active 这类瞬时状态一起在调用方逐层透传，这里每次落盘时直接读取最新值即可。
+    // 不随 lat/lng/active 这类瞬时状态一起在调用方逐层透传，这里每次发布时直接读取最新值即可。
     private val settingsManager = SettingsManager(context)
 
     private var lastGeocodedLat = -999.0
@@ -100,14 +105,14 @@ class ConfigManager(private val context: Context, private val rootManager: RootM
 
     private val _writeFailures = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
-    /** 系统进程读取的那份配置写入失败时发出，界面据此提示用户（core-data 没有字符串资源，不在这里直接弹提示） */
+    /** 框架配置发布失败时发出，界面据此提示用户（core-data 没有字符串资源，不在这里直接弹提示） */
     val writeFailures: SharedFlow<Unit> = _writeFailures
 
     /**
      * 在上一次写入的配置基础上只改动部分字段，其余字段原样保留；常驻设置项每次都刷新为最新值。
      * 暂停、摇杆、周边环境数据、开关设置等局部更新都走这里，避免某个调用方用自己手里过时的整份状态
      * 覆盖掉别人刚写入的字段（例如悬浮窗刚把路线暂停，界面的周边数据刷新又把路线模式写回去）。
-     * 还没有写过配置（未开始模拟）或写入失败时返回 false。
+     * 还没有配置（未开始模拟）或发布失败时返回 false；未发布的最新状态会在框架重连后重试。
      */
     suspend fun patchConfig(mutate: (JSONObject) -> Unit): Boolean = withContext(Dispatchers.IO) {
         // 读取、修改、写入整体放在锁内：并发的局部更新若各自基于同一份旧配置修改，后写的会冲掉先写的改动
@@ -157,7 +162,7 @@ class ConfigManager(private val context: Context, private val rootManager: RootM
         json.put("bluetooth_json", JSONArray(bluetoothJson))
     }
 
-    /** 独立于每次模拟会话的常驻设置项，调用方不逐层透传，每次落盘时直接读取最新值 */
+    /** 独立于每次模拟会话的常驻设置项，调用方不逐层透传，每次发布时直接读取最新值 */
     private fun putPersistentSettings(json: JSONObject) {
         val systemHookPackagesArr = JSONArray()
         settingsManager.getSystemHookPackages().forEach { systemHookPackagesArr.put(it) }
@@ -207,78 +212,96 @@ class ConfigManager(private val context: Context, private val rootManager: RootM
 
     private val writeMutex = Mutex()
 
-    @Volatile
-    private var lastJson: JSONObject? = null
+    private val transportPrefs = context.getSharedPreferences("framework_config_state", Context.MODE_PRIVATE)
+    private val publisher = FrameworkConfigPublisher()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /**
-     * 使用 stdin 写入，避免命令行过长 (ARG_MAX) 导致 su 执行失败，实现实时更新。
-     * 权限模型：DAC 只开到 644（owner=root 读写，其余只读，不再世界可写），不再落一份到 /sdcard/Download 外部存储。
-     * 两种模拟方案的"谁来读配置"不同，SELinux 标签策略也不同，见下面两个 xxxWriteCommand。
-     * 写入串行化：多个来源（界面、悬浮窗、周边数据刷新）并发写同一组文件时，保证最后落盘的是最后一次写入。
-     */
+    @Volatile
+    private var lastJson: JSONObject? = transportPrefs.getString("desired_config", null)?.let {
+        runCatching { JSONObject(it) }.getOrNull()
+    }
+    @Volatile private var publicationPending = lastJson != null
+    private var nextCleanupAttemptAt = 0L
+
+    init {
+        // StateFlow delivers an already-connected service too, so initialization order is harmless.
+        scope.launch {
+            XposedModuleStatus.service.collect { service ->
+                if (service != null) writeMutex.withLock {
+                    publisher.onReconnect()
+                    lastJson?.let { publishLocked(it, service) }
+                }
+            }
+        }
+        scope.launch {
+            while (isActive) {
+                delay(3_000)
+                if (publicationPending) writeMutex.withLock {
+                    val service = XposedModuleStatus.mService
+                    if (publicationPending && service != null) lastJson?.let {
+                        publishLocked(it, service, notifyFailure = false)
+                    }
+                }
+            }
+        }
+    }
+
     private suspend fun write(json: JSONObject): Boolean = writeMutex.withLock { writeLocked(json) }
 
-    /**
-     * 失败分两级：系统进程读取的那份写不进去才算失败（返回 false 并通知界面，[lastJson] 保持上一次成功的内容）；
-     * App 私有目录、电话、蓝牙副本写失败只记警告——这些进程另有读取 /data/local/tmp 公共副本的兜底。
-     * 不抛异常：调用方遍布界面、悬浮窗和后台协程，一次写失败不应该让 App 崩溃。
-     */
-    private suspend fun writeLocked(json: JSONObject): Boolean {
-        val command = if (BuildConfig.GLOBAL_SCHEME) globalWriteCommand() else scopedWriteCommand()
-        val output = if (context.filesDir.isDirectory) rootManager.executeCommandWithInput(command, json.toString()) else "ERROR"
-        if (output == "ERROR") {
-            android.util.Log.e("LocationSpoofer", "配置写入失败，请检查 Root 权限和系统目录访问权限")
+    private fun writeLocked(json: JSONObject): Boolean {
+        // Remember the desired state even if a stop/pause happens while the service is disconnected.
+        // Reconnection must never replay an older active session over a newer stop request.
+        if (!transportPrefs.edit().putString("desired_config", json.toString()).commit()) {
             _writeFailures.tryEmit(Unit)
             return false
         }
-        if (output.contains(SystemFileCommands.PARTIAL_FAILURE_MARKER)) {
-            android.util.Log.w("LocationSpoofer", "部分配置副本写入失败：${output.take(1000)}")
-        }
         lastJson = json
-        return true
+        publicationPending = true
+        val service = XposedModuleStatus.mService
+        if (service == null) {
+            android.util.Log.w("LocationSpoofer", "Framework disconnected; latest configuration queued")
+            _writeFailures.tryEmit(Unit)
+            return false
+        }
+        return publishLocked(json, service)
     }
 
-    /**
-     * 非全局方案：配置由各目标 App 进程自己读取，统一打项目专属 SELinux type，
-     * 再由 RootManager.ensureSepolicyRules 给 untrusted_app 等域授权读取。
-     */
-    private fun scopedWriteCommand(): String {
-        val selinuxType = RootManager.CONFIG_SELINUX_TYPE
-        return """
-            chmod 755 /data/local/tmp 2>/dev/null || true
-            chmod 755 /data/local 2>/dev/null || true
-            mkdir -p /data/data/com.vincenthzr.locationspoofer/files 2>/dev/null || true
-            chmod 755 /data/data/com.vincenthzr.locationspoofer 2>/dev/null || true
-            chmod 755 /data/data/com.vincenthzr.locationspoofer/files 2>/dev/null || true
-            cat > /data/local/tmp/locationspoofer_config_tmp.json
-            chmod 644 /data/local/tmp/locationspoofer_config_tmp.json
-            chcon u:object_r:$selinuxType:s0 /data/local/tmp/locationspoofer_config_tmp.json 2>/dev/null || true
-            cp /data/local/tmp/locationspoofer_config_tmp.json /data/system/locationspoofer_config_tmp.json
-            chown system:system /data/system/locationspoofer_config_tmp.json 2>/dev/null || true
-            chmod 644 /data/system/locationspoofer_config_tmp.json
-            chcon u:object_r:$selinuxType:s0 /data/system/locationspoofer_config_tmp.json 2>/dev/null || true
-            cp /data/local/tmp/locationspoofer_config_tmp.json /data/data/com.vincenthzr.locationspoofer/files/locationspoofer_config.json
-            chmod 644 /data/data/com.vincenthzr.locationspoofer/files/locationspoofer_config.json 2>/dev/null || true
-            chcon u:object_r:$selinuxType:s0 /data/data/com.vincenthzr.locationspoofer/files/locationspoofer_config.json 2>/dev/null || true
-            mv /data/local/tmp/locationspoofer_config_tmp.json /data/local/tmp/locationspoofer_config.json
-            mv /data/system/locationspoofer_config_tmp.json /data/system/locationspoofer_config.json
-            chmod 644 /data/local/tmp/locationspoofer_config.json 2>/dev/null || true
-            chmod 644 /data/system/locationspoofer_config.json 2>/dev/null || true
-            chcon u:object_r:$selinuxType:s0 /data/local/tmp/locationspoofer_config.json 2>/dev/null || true
-            chcon u:object_r:$selinuxType:s0 /data/system/locationspoofer_config.json 2>/dev/null || true
-        """.trimIndent()
-    }
+    private fun publishLocked(
+        json: JSONObject,
+        service: io.github.libxposed.service.XposedService,
+        notifyFailure: Boolean = true
+    ): Boolean {
+        return try {
+            val prefs = service.getRemotePreferences(FrameworkConfigChannel.GROUP)
+            publisher.publish(json.toString(), object : FrameworkConfigStore {
+                override fun commit(snapshot: String): Boolean =
+                    prefs.edit().putString(FrameworkConfigChannel.SNAPSHOT_KEY, snapshot).commit()
 
-    /**
-     * 全局方案：配置由 system_server / com.android.phone / com.android.bluetooth 三个系统进程读取，
-     * 各自落一份到本域可读的数据目录，并使用该域原生的 SELinux 标签与 uid 所有权。
-     */
-    private fun globalWriteCommand(): String = SystemFileCommands.writeGlobal()
+                override fun writeFile(name: String, payload: ByteArray) {
+                    ParcelFileDescriptor.AutoCloseOutputStream(service.openRemoteFile(name)).use { it.write(payload) }
+                }
 
-    fun syncDomainConfigs() {
-        if (!BuildConfig.GLOBAL_SCHEME) return
-        if (rootManager.executeCommand(SystemFileCommands.syncGlobal()) == "ERROR") {
-            android.util.Log.e("LocationSpoofer", "Failed to synchronize phone/Bluetooth configuration")
+                override fun listFiles(): List<String> = service.listRemoteFiles().toList()
+                override fun deleteFile(name: String) { service.deleteRemoteFile(name) }
+            })
+            publicationPending = false
+            // Migration runs only after the replacement channel accepted a complete snapshot.
+            val now = System.currentTimeMillis()
+            if (!transportPrefs.getBoolean("legacy_files_removed", false) && now >= nextCleanupAttemptAt) {
+                nextCleanupAttemptAt = now + 60_000
+                // Root authorization/cleanup must not delay subsequent stop or coordinate updates.
+                scope.launch {
+                    if (rootManager.executeCommand(SystemFileCommands.removeLegacyConfigs()) != "ERROR") {
+                        transportPrefs.edit().putBoolean("legacy_files_removed", true).apply()
+                    }
+                }
+            }
+            true
+        } catch (error: Exception) {
+            android.util.Log.e("LocationSpoofer", "Framework config publication failed", error)
+            publicationPending = true
+            if (notifyFailure) _writeFailures.tryEmit(Unit)
+            false
         }
     }
 }

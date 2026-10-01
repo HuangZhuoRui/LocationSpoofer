@@ -18,14 +18,6 @@ class LocationApp : Application(), XposedServiceHelper.OnServiceListener {
     override fun onCreate() {
         super.onCreate()
 
-        Thread {
-            try {
-                XposedServiceHelper.registerListener(this@LocationApp)
-            } catch (e: Throwable) {
-                e.printStackTrace()
-            }
-        }.start()
-
         val prefs = getSharedPreferences("app_settings", MODE_PRIVATE)
         MapsInitializer.updatePrivacyShow(this, true, true)
         MapsInitializer.updatePrivacyAgree(this, true)
@@ -69,13 +61,16 @@ class LocationApp : Application(), XposedServiceHelper.OnServiceListener {
             modules(appModules)
         }
 
+        // Create the config publisher before registering; it observes the current service and rebinds.
+        org.koin.java.KoinJavaComponent.get<com.vincenthzr.locationspoofer.utils.ConfigManager>(
+            com.vincenthzr.locationspoofer.utils.ConfigManager::class.java
+        )
         Thread {
             try {
-                val configManager: com.vincenthzr.locationspoofer.utils.ConfigManager by org.koin.java.KoinJavaComponent.inject(
-                    com.vincenthzr.locationspoofer.utils.ConfigManager::class.java
-                )
-                configManager.syncDomainConfigs()
-            } catch (_: Throwable) {}
+                XposedServiceHelper.registerListener(this@LocationApp)
+            } catch (e: Throwable) {
+                e.printStackTrace()
+            }
         }.start()
     }
 
@@ -84,6 +79,6 @@ class LocationApp : Application(), XposedServiceHelper.OnServiceListener {
     }
 
     override fun onServiceDied(service: XposedService) {
-        XposedModuleStatus.clear()
+        XposedModuleStatus.clear(service)
     }
 }

@@ -115,8 +115,8 @@ LocationSpoofer 基于 **MVVM + Clean Architecture** 构建，代码按职责拆
 * **Xposed Hook 核心层**：
   * 位于 `xposed` 模块的 `com.vincenthzr.locationspoofer.xposed` 包，入口类 `LocationHooker`；具体 Hook 实现按类型拆分在 `hooks/`（定位/GNSS/地图 SDK/计步/反检测）与 `hooks/network/`（Wi-Fi/基站/蓝牙/连接状态）两个子包，新增 Hook 时优先归类到已有子包，而不是堆到 `xposed` 根包或 `LocationHooker.kt` 里。
   * 严格遵循 **LSPosed API 101+ / libxposed (Service 模式)** 规范。
-  * 高频 Hook 线程 0-IO 原则：`LocationHooker` 内置后台守护线程按调用方 UID 轮询多份配置文件路径（默认 1000ms，读取失败时退避到 10s/60s）写入内存缓存，Hook 方法只从内存直读，不做任何同步 IO。
-  * 跨进程配置传递不使用 `ContentProvider`（Android 11+ 包可见性下会卡死主线程），而是由 `core-data` 的 `ConfigManager` 以 Root 权限把 JSON 配置同时写入 `/data/local/tmp/`、`/data/system/`、应用私有目录三份路径，权限收紧为 `644`，并由 `RootManager` 动态注入专属 SELinux 类型（而非笼统的 `shell_data_file`）按需授权，不要为了图省事退回到 `777` 或复用通用 SELinux 类型。
+  * Hook 调用只读 `LocationHooker` 的内存配置缓存；框架通知、远程文件读取和 JSON 解码必须在配置接收线程处理，路线派发与系统服务重试由独立定时器执行。
+  * 两种变体统一使用 libxposed 远程偏好 / 远程文件传递完整配置快照；大配置先完成独立文件写入再发布指针。保留最新期望状态，发布失败与重连时重试。不要恢复公共配置文件、主线程 IPC 或自定义 SELinux 授权。
   * MultiDex 兼容安全性：通过动态 ClassLoader 拦截定位组件，并通过 `/proc/self/cmdline` 锁定宿主进程主包名，避免插件或内嵌 Webview 破坏全局上下文。
   * 保持调用栈深度清洗，避免暴露 Xposed 检查痕迹。
   * **系统适配**：全局方案的系统服务类名、厂商差异一律写在 `hooks/vendor/` 的适配器里，共享 Hook 代码不写死类名。新增或修复某个系统的适配前，先读 [vendor/README.md](xposed/src/main/java/com/vincenthzr/locationspoofer/xposed/hooks/vendor/README.md)（含完整检查清单）与 [ADAPTATION_GUIDE.md](xposed/ADAPTATION_GUIDE.md)，验证后更新 [ADAPTATION_PROGRESS.md](ADAPTATION_PROGRESS.md)。

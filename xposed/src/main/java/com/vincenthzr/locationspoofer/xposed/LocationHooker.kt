@@ -29,6 +29,8 @@ import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface
 import org.json.JSONObject
 import java.io.File
+import android.os.ParcelFileDescriptor
+import com.vincenthzr.locationspoofer.utils.FrameworkConfigChannel
 import java.util.Random
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
@@ -119,6 +121,10 @@ class LocationHooker : XposedModule() {
     @Volatile
     internal var lastGeocodedLng = -999.0
 
+    override fun onModuleLoaded(param: XposedModuleInterface.ModuleLoadedParam) {
+        startFrameworkConfigReceiver()
+    }
+
     override fun onPackageLoaded(param: XposedModuleInterface.PackageLoadedParam) {
         // 目前这里没有内容
     }
@@ -142,6 +148,13 @@ class LocationHooker : XposedModule() {
     internal val vendorExtraHooks = mutableListOf<AutoCloseable>()
 
     override fun onHotReloading(param: XposedModuleInterface.HotReloadingParam): Boolean {
+        configReceiver?.close()
+        configReceiver = null
+        synchronized(pollingLock) {
+            configWorker?.interrupt()
+            configWorker = null
+            isConfigWorkerStarted = false
+        }
         vendorExtraHooks.asReversed().forEach { runCatching { it.close() } }
         vendorExtraHooks.clear()
         nmeaTimers.values.forEach { it.cancel() }
@@ -162,6 +175,7 @@ class LocationHooker : XposedModule() {
     // LibXposed API 102: 热重载完成后重新部署 Hook
     override fun onHotReloaded(param: XposedModuleInterface.HotReloadedParam) {
         super.onHotReloaded(param)
+        startFrameworkConfigReceiver()
         val pkg = currentPackageName
         val classLoader = currentClassLoader
         if (pkg.isNotEmpty() && classLoader != null) {
@@ -202,6 +216,7 @@ class LocationHooker : XposedModule() {
             currentClassLoader = classLoader
         }
 
+        startConfigWorker()
         val handledAsSystemProcess = if (BuildConfig.GLOBAL_SCHEME) {
             handleSystemProcessGlobal(pkg, processName, classLoader)
         } else {
@@ -354,7 +369,7 @@ class LocationHooker : XposedModule() {
         // 厂商适配方案的手动覆盖（VendorRegistry.applyManualOverride）必须在下面任何一个
         // hookSystemXxxService 之前生效——它们会通过 SystemClassLocator 查询 VendorRegistry，从而触发
         // VendorRegistry.active 这个 by lazy 属性首次求值，晚了就再也覆盖不了。这里提前读一次
-        // 配置：readConfig() 可重复调用，后续调用只返回内存里已缓存的 lastConfig，不会重复走磁盘 IO。
+        // 配置：readConfig() 可重复调用，后续调用只返回内存里已缓存的 lastConfig，只读内存。
         val earlyCfg = readConfig()
         VendorRegistry.applyManualOverride(earlyCfg?.optString("vendor_override", "auto"))
 
@@ -460,37 +475,38 @@ class LocationHooker : XposedModule() {
     internal var hookAccuracyDrift = 0.0
     internal var hookLastCallTime = 0L
 
-    /**
-     * 拦截GnssStatus回调,注入伪造的卫星星座数据
-     *
-     * 反作弊SDK通过registerGnssStatusCallback获取卫星可见数和信噪比(C/N0),
-     * 若Location坐标正常但卫星数为0或信噪比全为0,则判定为模拟位置。
-     *
-     * 伪造策略:
-     * - 可见卫星数: 12-18颗(真实室外环境的典型值)
-     * - 信噪比(C/N0): 15-40 dB-Hz(真实GPS信号的典型范围)
-     * - 卫星类型: GPS(1) + GLONASS(3) + BDS(5)混合星座
-     */
+    /** Complete normalized snapshots are swapped atomically by the framework receiver. */
+    @Volatile
     internal var lastConfig: JSONObject? = null
 
     @Volatile
     internal var lastOpenCellConfigLogKey: String? = null
 
     @Volatile
-    internal var lastOpenCellConfigReadFailureLogTime = 0L
+    private var configReceiver: FrameworkConfigReceiver? = null
+    @Volatile private var configWorker: Thread? = null
+    @Volatile private var isConfigWorkerStarted = false
+    private val pollingLock = Any()
 
-    @Volatile
-    internal var isConfigPollingStarted = false
-
-    @Volatile
-    internal var configPollIntervalMs = 1_000L
-    internal val pollingLock = Any()
-    internal val localConfigPath = "/data/local/tmp/locationspoofer_config.json"
-    internal val systemConfigPath = "/data/system/locationspoofer_config.json"
-    internal val phoneConfigPath = "/data/user_de/0/com.android.phone/files/locationspoofer_config.json"
-    internal val bluetoothConfigPath = "/data/user_de/0/com.android.bluetooth/files/locationspoofer_config.json"
-    internal val appDataConfigPath = "/data/data/com.vincenthzr.locationspoofer/files/locationspoofer_config.json"
-    internal val sdcardConfigPath = "/sdcard/Download/locationspoofer_config.json"
+    private fun startFrameworkConfigReceiver() {
+        if (configReceiver != null) return
+        configReceiver = FrameworkConfigReceiver(
+            getPreferences = { getRemotePreferences(FrameworkConfigChannel.GROUP) },
+            readFile = { name ->
+                ParcelFileDescriptor.AutoCloseInputStream(openRemoteFile(name))
+                    .bufferedReader(Charsets.UTF_8).use { it.readText() }
+            },
+            onConfig = { snapshot ->
+                val config = normalizeConfig(snapshot.config)
+                lastConfig = config
+                HookStatus.configLoaded(snapshot.source, snapshot.publishedAt)
+                logOpenCellConfigLoaded(snapshot.source, config)
+            },
+            onError = { error ->
+                XposedBridge.log("[Config] Framework receive failed: ${error.javaClass.simpleName}: ${error.message}")
+            }
+        ).also { it.start() }
+    }
 
     internal fun logOpenCellConfigLoaded(source: String, config: JSONObject) {
         val cellArray = config.optJSONArray("cell_json")
@@ -509,32 +525,6 @@ class LocationHooker : XposedModule() {
             val msg = "[SysHook] 配置已加载[$source]: active=$active, globalMode=$isGlobal, 目标应用数=$sysPkgs, lat=$lat, lng=$lng, 蓝牙数=$btCount, 基站数=$cellCount"
             android.util.Log.i("LocationSpoofer", msg)
             XposedBridge.log(msg)
-        }
-    }
-
-    internal fun configReadPaths(): Array<String> {
-        if (!BuildConfig.GLOBAL_SCHEME) {
-            // 非全局方案：配置文件统一打项目自定义 SELinux 标签（见 ConfigManager），按优先级依次尝试
-            return if (android.os.Process.myUid() == 1000) {
-                arrayOf(systemConfigPath, localConfigPath, appDataConfigPath, sdcardConfigPath)
-            } else {
-                arrayOf(localConfigPath, systemConfigPath, appDataConfigPath, sdcardConfigPath)
-            }
-        }
-        val uid = android.os.Process.myUid()
-        // 电话 / 蓝牙进程的专属副本由 App 用 root 写进它们自己的数据目录，但部分 root 方案的 su 域没有
-        // radio_data_file / bluetooth_data_file 的写权限，副本会一直停在旧内容（HyperOS 4 + KernelSU 实测）。
-        // 所以同时列出 RootManager 已授权这两个域读取的 /data/local/tmp 副本，由 loadConfigFromDisk 取最新的一份。
-        if (isPhoneProcessInstance || uid == 1001) {
-            return arrayOf(phoneConfigPath, localConfigPath)
-        }
-        if (isBluetoothProcessInstance || uid == 1002) {
-            return arrayOf(bluetoothConfigPath, localConfigPath)
-        }
-        return if (uid == 1000) {
-            arrayOf(systemConfigPath)
-        } else {
-            arrayOf(localConfigPath, systemConfigPath, appDataConfigPath)
         }
     }
 
@@ -559,113 +549,23 @@ class LocationHooker : XposedModule() {
         return config
     }
 
-    private val lastConfigModifiedMap = ConcurrentHashMap<String, Long>()
+    /** The hook call path performs no framework calls, parsing, or file IO. */
+    internal fun readConfig(): JSONObject? = lastConfig
 
-    /**
-     * 电话 / 蓝牙进程读到比自己专属副本更新的配置时，由进程自己把它写回专属副本（自己的数据目录可写）。
-     * 重启后 App 重新下发 SELinux 规则之前，这两个进程只能读到专属副本，这样至少是最近一次的配置而不是很久以前的。
-     */
-    private fun refreshOwnConfigCopy(readPath: String, text: String) {
-        if (!BuildConfig.GLOBAL_SCHEME) return
-        val own = when {
-            isPhoneProcessInstance -> phoneConfigPath
-            isBluetoothProcessInstance -> bluetoothConfigPath
-            else -> return
-        }
-        if (readPath == own) return
-        try {
-            val target = File(own)
-            val tmp = File(target.parentFile, "${target.name}.tmp")
-            tmp.writeText(text)
-            tmp.setReadable(true, false)
-            tmp.setWritable(false, false)
-            tmp.setWritable(true, true) // 644：只有本进程可写
-            if (tmp.renameTo(target)) lastConfigModifiedMap[own] = target.lastModified()
-        } catch (t: Throwable) {
-            XposedBridge.log("[SysHook] refresh own config copy failed: $t")
-        }
-    }
-
-    internal fun loadConfigFromDisk(source: String): JSONObject? {
-        val errors = ArrayList<String>()
-        // 全局方案的多份副本内容相同、只是写入是否成功不同：按修改时间从新到旧尝试，避免读到某份写入失败而停留在旧内容的副本
-        // （无权访问的文件 lastModified 为 0，自然排在最后）
-        val paths = configReadPaths().let { candidates ->
-            if (BuildConfig.GLOBAL_SCHEME) candidates.sortedByDescending { File(it).lastModified() } else candidates.toList()
-        }
-        for (path in paths) {
-            try {
-                val file = File(path)
-                if (!file.exists()) {
-                    errors.add("$path missing")
-                    continue
-                }
-                val lastModified = file.lastModified()
-                val cachedMod = lastConfigModifiedMap[path]
-                if (lastConfig != null && cachedMod != null && cachedMod == lastModified) {
-                    HookStatus.configLoaded(path, lastModified)
-                    return lastConfig
-                }
-                val text = file.readText()
-                val config = normalizeConfig(JSONObject(text))
-                lastConfig = config
-                lastConfigModifiedMap[path] = lastModified
-                HookStatus.configLoaded(path, lastModified)
-                refreshOwnConfigCopy(path, text)
-                configPollIntervalMs = 1_000L
-                logOpenCellConfigLoaded("$source:$path", config)
-                return config
-            } catch (e: Throwable) {
-                errors.add("$path ${e.javaClass.simpleName}: ${e.message}")
-            }
-        }
-
-        val now = System.currentTimeMillis()
-        val isPermissionDenied =
-            errors.any { it.contains("EACCES") || it.contains("Permission denied") }
-        val shouldBackoff = currentPackageName == "com.android.phone" && isPermissionDenied
-        val logIntervalMs = if (isPermissionDenied) 60_000L else 10_000L
-        if (shouldBackoff) {
-            configPollIntervalMs = 60_000L
-        }
-        if (now - lastOpenCellConfigReadFailureLogTime > logIntervalMs) {
-            lastOpenCellConfigReadFailureLogTime = now
-            val msg = "[SysHook] readConfig[$source] no readable config (${
-                errors.joinToString(
-                    " | "
-                )
-            })"
-            android.util.Log.e("LocationSpoofer", msg)
-            XposedBridge.logOpenCellId(msg)
-        }
-        return null
-    }
-
-    /**
-     * 从本地文件读取模拟配置(纯文件方案,无ContentProvider跨进程调用)
-     *
-     * 架构优化:
-     *    由于此方法会被各种 Hook 在主线程极其高频地调用（例如每秒数百次），
-     *    任何在主线程进行的文件 IO（哪怕是偶尔一次）都会导致严重的丢帧卡顿（Stutter）。
-     *    因此重构为：在首次调用时启动一个后台守护线程（Daemon Thread），
-     *    每隔 1000ms 在后台异步读取文件并更新 Volatile 的 lastConfig。
-     *    主线程的 readConfig() 永远只返回内存中的 lastConfig，实现真正的 0 IO 延迟。
-     */
-    internal fun readConfig(): JSONObject? {
-        if (!isConfigPollingStarted) {
+    /** Motion delivery and service discovery need a timer independently of config reception. */
+    private fun startConfigWorker() {
+        if (!isConfigWorkerStarted) {
             synchronized(pollingLock) {
-                if (!isConfigPollingStarted) {
-                    isConfigPollingStarted = true
+                if (!isConfigWorkerStarted) {
+                    isConfigWorkerStarted = true
 
-                    // 首次调用时同步读取一次，确保立即有数据可用
-                    loadConfigFromDisk("initial")
-
-                    // 启动后台轮询守护线程
-                    Thread {
-                        while (true) {
+                    // 后台定时器只读内存中的配置，不轮询配置文件
+                    val worker = Thread {
+                        val workerThread = Thread.currentThread()
+                        while (configWorker === workerThread && !workerThread.isInterrupted) {
                             try {
-                                Thread.sleep(configPollIntervalMs)
-                                val newConfig = loadConfigFromDisk("poll")
+                                Thread.sleep(1_000L)
+                                val newConfig = readConfig()
 
                                 // 若系统核心服务在初次加载时尚未初始化完成，在后台轮询线程中重试挂载，直至成功
                                 // isXxxProcess 标记只在全局方案的系统进程分支里被置位，非全局方案下这三个条件恒为 false
@@ -731,6 +631,7 @@ class LocationHooker : XposedModule() {
                                     }
 
                                     val dispatchBlock = Runnable {
+                                        if (configWorker !== workerThread) return@Runnable
                                         // 1. Android Native LocationListener & Consumer
                                         if (nCount > 0 && cl != null) {
                                             val listenersToNotify = capturedLocationListeners.toList()
@@ -1057,20 +958,22 @@ class LocationHooker : XposedModule() {
                                         dispatchBlock.run()
                                     }
                                 }
+                            } catch (_: InterruptedException) {
+                                break
                             } catch (t: Throwable) {
-                                XposedBridge.log("ConfigPoller error: " + t.javaClass.simpleName + ": " + t.message)
+                                XposedBridge.log("ConfigWorker error: " + t.javaClass.simpleName + ": " + t.message)
                             }
                         }
                     }.apply {
                         isDaemon = true
-                        name = "LocationSpoofer_ConfigPoller"
-                        start()
+                        name = "LocationSpoofer_MotionWorker"
                     }
+                    configWorker = worker
+                    worker.start()
 
                 }
             }
         }
-        return lastConfig
     }
 
     internal var cachedGpsSatellitesList: Iterable<Any>? = null

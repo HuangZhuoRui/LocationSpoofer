@@ -93,7 +93,7 @@
    ```bash
    adb shell getprop ro.build.version.release
    ```
-2. **Root 方案与 LSPosed 版本**：非全局方案尤其需要，不同 Root 方案的 sepolicy 行为不同。
+2. **Root 方案与 LSPosed 版本**：确认框架支持 libxposed 远程配置；记录实际版本以便复现连接和通知问题。
 3. **验证了哪些组件 / 应用**：没测的保持 ❔，不要因为"应该没问题"就标 ✅。
 4. **验证日期**：精确到月即可。
 5. **问题与现象**：标 ⚠️ 或 ❌ 时写明现象，最好附上关键日志或 issue 链接。

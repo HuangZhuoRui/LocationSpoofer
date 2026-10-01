@@ -4,14 +4,11 @@ data class RootSetupTestResult(
     val hasRoot: Boolean,
     val idOutput: String,
     val solution: RootSolution,
-    val toolUsed: String?,
-    val typeRuleOk: Boolean,
-    val allowRuleResults: List<Pair<String, Boolean>>,
-    val labelCheckRaw: String?,
-    val labelVerified: Boolean,
-    /** 唯一真正决定成败的验证：App 自己的进程（和目标 App 同一类域）实测能否读到探针文件 */
-    val appCanReadProbe: Boolean,
-    val configFileChconResults: List<Pair<String, Boolean>>,
-    val rawScriptOutput: String,
-    val overallVerified: Boolean
-)
+    val frameworkConnected: Boolean,
+    /** App-side access only; per-process Hook status confirms actual reception. */
+    val remoteConfigAccessible: Boolean,
+    val configPublished: Boolean,
+    val frameworkDetail: String
+) {
+    val overallVerified: Boolean get() = hasRoot && frameworkConnected && remoteConfigAccessible
+}

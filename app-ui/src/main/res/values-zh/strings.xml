@@ -65,7 +65,7 @@
     <string name="root_required">需要 Root 权限</string>
     <string name="root_message">本应用需要 KernelSU Root 权限才能运行。\n请在 KernelSU 中授权后重启应用。</string>
     <string name="root_solution_title">Root 方案</string>
-    <string name="root_solution_desc">选择你使用的 root 管理方案，精确调用对应的权限注入命令</string>
+    <string name="root_solution_desc">记录 Root 方案以便排查；配置通过框架传递</string>
     <string name="root_solution_auto">自动检测</string>
     <string name="root_solution_magisk">Magisk</string>
     <string name="root_solution_kernelsu">KernelSU</string>
@@ -111,7 +111,7 @@
     <string name="system_adaptation_title">系统适配</string>
     <string name="adaptation_progress_full">完整适配进度</string>
     <string name="progress_scoped_simple">非全局方案只 Hook 目标 App，不依赖系统适配</string>
-    <string name="config_write_failed">模拟配置写入失败，系统进程读不到最新设置。请检查 Root 授权后重试</string>
+    <string name="config_write_failed">配置暂未发布成功，请检查模块启用状态和框架连接；最新设置会自动重试</string>
     <string name="hook_status_title">Hook 运行状态</string>
     <string name="hook_status_summary">%1$d/%2$d 个组件已挂载</string>
     <string name="hook_status_summary_none">暂无报告</string>
@@ -163,19 +163,12 @@
     <string name="vendor_scheme_oneui">三星 One UI</string>
     <string name="vendor_scheme_aosp">原生 AOSP / 其他</string>
     <string name="vendor_scheme_reboot_notice">系统级 Hook 只在开机时安装一次，切换方案需要重启设备才能生效</string>
-    <string name="test_root_setup_title">测试 Root 权限与规则注入</string>
-    <string name="test_root_setup_desc">检查 root 权限和 sepolicy 规则是否配置正常</string>
+    <string name="test_root_setup_title">测试 Root 权限与框架连接</string>
+    <string name="test_root_setup_desc">检查 Root 权限、框架连接和配置发布状态</string>
     <string name="root_test_result_title">诊断结果</string>
     <string name="root_test_item_root">Root 权限检测</string>
-    <string name="root_test_item_tool">使用的 sepolicy 工具</string>
-    <string name="root_test_tool_not_found">当前方案下未探测到可用工具</string>
-    <string name="root_test_item_type_rule">type 规则应用</string>
-    <string name="root_test_item_allow_domain">域授权: %1$s</string>
-    <string name="root_test_item_label_check">标签验证(su 自证，仅供参考)</string>
-    <string name="root_test_item_app_read">App 进程实测读取(决定性结果)</string>
-    <string name="root_test_item_app_read_detail">验证目标域是否真的能读到文件，比上面 su 自证更可靠</string>
-    <string name="restart_hooked_apps_title">重启目标应用以应用最新规则</string>
-    <string name="restart_hooked_apps_desc">强制停止已勾选的应用，让它们重新走一次全新的权限判定</string>
+    <string name="restart_hooked_apps_title">重启目标应用以加载当前模块</string>
+    <string name="restart_hooked_apps_desc">强制停止已勾选的应用，让它们重新加载模块并订阅配置</string>
     <string name="restart_hooked_apps_confirm_title">确认重启应用</string>
     <string name="restart_hooked_apps_confirm_message">这会强制关闭以下 %1$d 个应用，其中未保存的内容可能丢失。</string>
     <string name="restart_hooked_apps_confirm_button">确认重启</string>
@@ -608,4 +601,9 @@
     <string name="collection_save_failed">本地数据保存失败，采集已自动停止</string>
     <string name="coloros_virtual_location_title">虚拟定位可用</string>
     <string name="coloros_virtual_location_desc">系统定位关闭时，允许选定应用接收模拟位置。仅用于 ColorOS 16，默认关闭。</string>
+    <string name="root_test_item_framework">框架已连接</string>
+    <string name="root_test_item_remote_config">框架配置可访问</string>
+    <string name="root_test_remote_config_detail">此项检查 App 侧访问能力；系统进程是否收到更新请查看 Hook 运行状态</string>
+    <string name="root_test_item_config_published">配置已发布</string>
+    <string name="root_test_config_not_published">尚无已发布配置，开始模拟后会发布</string>
 </resources>

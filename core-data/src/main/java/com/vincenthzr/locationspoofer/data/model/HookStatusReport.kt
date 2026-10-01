@@ -12,7 +12,7 @@ data class HookStatusReport(
     val vendorId: String,
     val manualVendor: Boolean,
     val system: String,
-    /** 进程当前读取的配置文件与其修改时间，未读到配置时为空 */
+    /** 配置通道与发布时刻，未收到配置时为空；字段名兼容旧诊断报告。 */
     val configPath: String,
     val configModified: Long,
     val components: List<Component>,

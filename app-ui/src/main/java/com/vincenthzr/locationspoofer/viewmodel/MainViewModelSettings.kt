@@ -259,9 +259,8 @@ internal fun MainViewModel.dismissRestartHookedAppsDialog() {
 }
 
 /**
- * 用户确认后：先重新下发一次 sepolicy 规则（确保是最新的，不假设之前打的还在），
- * 再强制停止这些目标 App，逼迫它们下次启动时重新走一次全新的 SELinux 判定，
- * 不再受历史 AVC 缓存或其他模块 sepolicy 操作的影响。
+ * 用户确认后检查 Root 授权，再强制停止目标 App，
+ * 让它们下次启动时加载当前模块并订阅框架配置。
  */
 
 internal fun MainViewModel.confirmRestartHookedApps(onDone: (Int) -> Unit = {}) {
