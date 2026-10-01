@@ -147,23 +147,66 @@ class LocationHooker : XposedModule() {
     // LibXposed API 102: 热重载请求前置确认与资源清理
     internal val vendorExtraHooks = mutableListOf<AutoCloseable>()
 
+    @Volatile internal var retiringGeneration = false
+    private val ownedReloadTimers = java.util.Collections.synchronizedSet(mutableSetOf<java.util.Timer>())
+
+    internal fun ownReloadTimer(timer: java.util.Timer): java.util.Timer {
+        synchronized(ownedReloadTimers) {
+            if (retiringGeneration) timer.cancel() else ownedReloadTimers.add(timer)
+        }
+        return timer
+    }
+
+    internal fun releaseReloadTimer(timer: java.util.Timer) { ownedReloadTimers.remove(timer) }
+
     override fun onHotReloading(param: XposedModuleInterface.HotReloadingParam): Boolean {
-        configReceiver?.close()
-        configReceiver = null
-        synchronized(pollingLock) {
-            configWorker?.interrupt()
+        val loader = currentClassLoader ?: return false
+        if (currentPackageName.isBlank()) return false
+        // A new module instance receives this bootstrap-owned state. Never pass this module or
+        // module-defined registration records across the classloader boundary.
+        param.setSavedInstanceState(hashMapOf<String, Any>(
+            "host" to HotReloadHost(currentPackageName, loader).save(),
+            "callbacks" to arrayOf(
+                capturedLocationListeners.toTypedArray(), capturedAMapListeners.toTypedArray(),
+                capturedBaiduListeners.toTypedArray(), capturedTencentListeners.toTypedArray(),
+                capturedFusedLocationCallbacks.toTypedArray(), bleScanTimers.keys.toTypedArray()
+            ),
+            "system_location" to saveSystemLocationReloadState(),
+            "system_ble" to saveSystemBleReloadState(),
+            "sensor" to SensorStepHooker.saveReloadState()
+        ))
+        retiringGeneration = true
+        val worker = synchronized(pollingLock) {
+            val previous = configWorker
             configWorker = null
             isConfigWorkerStarted = false
+            previous?.interrupt()
+            previous
+        }
+        worker?.join(2_000)
+        if (worker?.isAlive == true) {
+            retiringGeneration = false
+            startConfigWorker()
+            return false
+        }
+        configReceiver?.close()
+        configReceiver = null
+        lastConfig = null
+        synchronized(ownedReloadTimers) {
+            ownedReloadTimers.forEach { it.cancel() }
+            ownedReloadTimers.clear()
         }
         vendorExtraHooks.asReversed().forEach { runCatching { it.close() } }
         vendorExtraHooks.clear()
+        ModuleBinderDeaths.close()
+        HookStatus.close()
         nmeaTimers.values.forEach { it.cancel() }
         nmeaTimers.clear()
         bleScanTimers.values.forEach { it.cancel() }
         bleScanTimers.clear()
-        hookedCallbackClasses.clear()
-        environmentHooksInstalled = false
-        systemHooksInstalled = false
+        clearSystemLocationReloadState()
+        clearSystemBleReloadState()
+        SensorStepHooker.clearReloadState()
         capturedLocationListeners.clear()
         capturedAMapListeners.clear()
         capturedBaiduListeners.clear()
@@ -172,15 +215,68 @@ class LocationHooker : XposedModule() {
         return true
     }
 
-    // LibXposed API 102: 热重载完成后重新部署 Hook
     override fun onHotReloaded(param: XposedModuleInterface.HotReloadedParam) {
-        super.onHotReloaded(param)
-        startFrameworkConfigReceiver()
-        val pkg = currentPackageName
-        val classLoader = currentClassLoader
-        if (pkg.isNotEmpty() && classLoader != null) {
-            handleLoadPackage(pkg, classLoader)
+        val state = param.savedInstanceState as? Map<*, *>
+        reinstallAfterHotReload(
+            state = state?.get("host"),
+            // First upgrade from older versions has no saved state. Recover the already-running
+            // host through its Application / system service, not module-instance fields.
+            resolveHost = { resolveRunningHost(param) },
+            removeOldHooks = { super.onHotReloaded(param) },
+            install = { host ->
+                currentPackageName = host.packageName
+                currentClassLoader = host.classLoader
+                HookStatus.markHotReload()
+                startFrameworkConfigReceiver()
+                handleLoadPackage(host.packageName, host.classLoader)
+                val callbacks = state?.get("callbacks") as? Array<*>
+                val lists = listOf(capturedLocationListeners, capturedAMapListeners,
+                    capturedBaiduListeners, capturedTencentListeners, capturedFusedLocationCallbacks)
+                lists.forEachIndexed { index, list ->
+                    (callbacks?.getOrNull(index) as? Array<*>)?.filterNotNull()?.let { list.addAll(it) }
+                }
+                restoreSystemLocationReloadState(state?.get("system_location"))
+                restoreSystemBleReloadState(state?.get("system_ble"))
+                SensorStepHooker.restoreReloadState(state?.get("sensor"))
+                (callbacks?.getOrNull(5) as? Array<*>)?.filterNotNull()?.forEach { callback ->
+                    if (hasTypeByName(callback.javaClass, "android.bluetooth.BluetoothAdapter\$LeScanCallback")) {
+                        startOldLeScanTimer(callback, host.classLoader)
+                    } else startBleTimer(callback, host.classLoader)
+                }
+                android.util.Log.i("LocationSpoofer", "[HotReload] Reinstalled hooks in ${param.processName}; generation=${HookStatus.generationId}")
+            }
+        )
+    }
+
+    private fun resolveRunningHost(param: XposedModuleInterface.HotReloadedParam): HotReloadHost? {
+        val app = runCatching {
+            Class.forName("android.app.ActivityThread").getDeclaredMethod("currentApplication")
+                .invoke(null) as? android.app.Application
+        }.getOrNull()
+        if (!param.isSystemServer && app != null) return HotReloadHost(app.packageName, app.classLoader)
+        if (param.isSystemServer) {
+            // Hook handles belong to the framework; their declaring classes retain the real
+            // system-service loader even when an older module did not save lifecycle state.
+            param.oldHookHandles.forEach { handle ->
+                val clazz = handle.executable.declaringClass
+                if (clazz.name.startsWith("com.android.server.")) {
+                    val loader = clazz.classLoader
+                    if (loader != null) return HotReloadHost("android", loader)
+                }
+            }
+            val serviceLoader = runCatching {
+                val serviceManager = Class.forName("android.os.ServiceManager")
+                serviceManager.getDeclaredMethod("getService", String::class.java).invoke(null, "location")
+                    ?.javaClass?.classLoader
+            }.getOrNull()
+            val candidates = listOfNotNull(serviceLoader, Thread.currentThread().contextClassLoader,
+                ClassLoader.getSystemClassLoader(), javaClass.classLoader?.parent)
+            candidates.forEach { candidate ->
+                val hostLoader = runCatching { candidate.loadClass("com.android.server.SystemServer").classLoader }.getOrNull()
+                if (hostLoader != null) return HotReloadHost("android", hostLoader)
+            }
         }
+        return null
     }
 
 

@@ -20,6 +20,7 @@ import com.vincenthzr.locationspoofer.utils.XposedModuleStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.update
@@ -80,8 +81,8 @@ internal fun MainViewModel.initialize() {
 
     // 监听完整环境数据，同一坐标追加设备时记录数量不变，也必须刷新模拟能力。
     viewModelScope.launch {
-        environmentLocations.collect { locations ->
-            _uiState.update { it.copy(environmentRecordCount = locations.size) }
+        combine(environmentLocations, collectionRoutes) { locations, routes -> locations to routes }.collect { (locations, routes) ->
+            _uiState.update { it.copy(environmentRecordCount = locations.count { point -> point.location.collectionRouteId == null } + routes.size) }
             evaluateMockCapabilities()
         }
     }
@@ -134,7 +135,7 @@ internal fun MainViewModel.initialize() {
 }
 
 private suspend fun MainViewModel.mergeLegacyRecords() {
-    val allComplete = environmentDao.getAllCompleteLocations()
+    val allComplete = environmentDao.getAllCompleteLocations().filter { it.location.collectionRouteId == null }
     if (allComplete.isEmpty()) return
 
     // 按近似坐标分组（四舍五入到4位小数，约11米）

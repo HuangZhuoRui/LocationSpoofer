@@ -606,4 +606,35 @@ Error details: %s</string>
     <string name="root_test_remote_config_detail">This checks app-side access. Hook status confirms reception in system processes</string>
     <string name="root_test_item_config_published">Configuration published</string>
     <string name="root_test_config_not_published">No configuration yet; start a simulation to publish one</string>
+
+    <string name="collection_info_title">Collection Point Details</string>
+    <string name="collection_info_description">Data has been saved. Add a location name and note so you can find this point later.</string>
+    <string name="collection_info_remaining">%d points remain to be described.</string>
+    <string name="collection_location_name">Location Name</string>
+    <string name="collection_info_skip">Skip</string>
+    <string name="collection_info_saving">Saving…</string>
+    <string name="collection_stopping">Finishing collection…</string>
+    <string name="collection_no_saved_points">No points were saved. Check location and collection permissions, then try again.</string>
+    <string name="collection_info_save_failed">Could not save point details. Please try again.</string>
+
+    <!-- Named route collection -->
+    <string name="collection_point_mode">Point collection</string>
+    <string name="collection_route_mode">Route collection</string>
+    <string name="collection_route_draw_hint">Move the map to place the crosshair, then add waypoints in order. The route covers 50 m on each side.</string>
+    <string name="collection_route_collect_hint">Move along the drawn route to collect real nearby data. Only samples within 50 m of the route are saved.</string>
+    <string name="collection_route_add_point">Add waypoint</string>
+    <string name="collection_route_done">Done</string>
+    <string name="collection_route_undo">Undo</string>
+    <string name="collection_route_edit_drawing">Edit route</string>
+    <string name="collection_route_start">Start route collection</string>
+    <string name="collection_route_center">Waypoint crosshair</string>
+    <string name="collection_route_default_name">Collected route %1$s</string>
+    <string name="collection_route_unnamed">Unnamed route</string>
+    <string name="collection_route_summary">%1$d samples · %2$d m on each side</string>
+    <string name="collection_route_details">Route information</string>
+    <string name="collection_route_name">Route name</string>
+    <string name="collection_route_save_description">Save a name and notes for this route and its collected samples.</string>
+    <string name="collection_route_delete_title">Delete collected route</string>
+    <string name="collection_route_delete_message">Delete “%1$s” and all its collected samples?</string>
+    <string name="local_collection_records_count">%1$d points · %2$d routes</string>
 </resources>

@@ -26,6 +26,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.serialization.encodeToString
+import com.vincenthzr.locationspoofer.ui.components.CollectionRouteMapHelper
+import com.vincenthzr.locationspoofer.data.db.CollectionRouteRecord
 import com.vincenthzr.locationspoofer.ui.R
 import com.vincenthzr.locationspoofer.data.model.AppState
 import com.vincenthzr.locationspoofer.ui.components.AppMapController
@@ -57,7 +60,8 @@ fun ScannerMapScreen(
     var mapController by remember { mutableStateOf<AppMapController?>(null) }
     var showMapTypeDialog by remember { mutableStateOf(false) }
     val environmentLocations by viewModel.environmentLocations.collectAsState()
-    val locations = remember(environmentLocations) { environmentLocations.map { it.location } }
+    val collectionRoutes by viewModel.collectionRoutes.collectAsState()
+    val locations = remember(environmentLocations) { environmentLocations.map { it.location }.filter { it.collectionRouteId == null } }
 
     // 进入页面时主动尝试刷新一次真实 GPS 定位
     LaunchedEffect(Unit) {
@@ -72,7 +76,7 @@ fun ScannerMapScreen(
     }
 
     // 数据变化时刷新覆盖范围，包括数量不变的坐标编辑和重复采集。
-    LaunchedEffect(mapController, locations) {
+    LaunchedEffect(mapController, locations, collectionRoutes, uiState.collectionRoutePoints) {
         val controller = mapController ?: return@LaunchedEffect
         val currentLat = uiState.latitudeInput.toDoubleOrNull() ?: 39.9042
         val currentLng = uiState.longitudeInput.toDoubleOrNull() ?: 116.4074
@@ -81,8 +85,13 @@ fun ScannerMapScreen(
         // 绘制覆盖范围圆圈（带空间降采样与硬上限，确保高帧率流畅运行）
         MapCoverageHelper.drawCoverage(controller, locations, currentLat, currentLng)
 
-        // 自动定位到当前位置
-        controller.animateCamera(currentLat, currentLng, 16.5f)
+        collectionRoutes.take(10).forEach { CollectionRouteMapHelper.draw(controller, it.route, 12) }
+        if (uiState.collectionRoutePoints.size >= 2) {
+            CollectionRouteMapHelper.draw(controller, CollectionRouteRecord(
+                pointsJson = kotlinx.serialization.json.Json.encodeToString(uiState.collectionRoutePoints)), 60)
+        } else uiState.collectionRoutePoints.firstOrNull()?.let {
+            controller.addMarker(it.lat, it.lng, "", com.vincenthzr.locationspoofer.ui.components.MarkerType.GREEN)
+        }
     }
 
     Box(
@@ -164,7 +173,9 @@ fun ScannerMapScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (uiState.isContinuousScanning) {
+                        text = if (uiState.isStoppingCollection) {
+                            stringResource(R.string.collection_stopping)
+                        } else if (uiState.isContinuousScanning) {
                             stringResource(
                                 R.string.scanning_status_active,
                                 uiState.environmentRecordCount
@@ -259,33 +270,12 @@ fun ScannerMapScreen(
             }
         }
 
-        // 底部扫街采集控制按钮
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = 32.dp)
-        ) {
-            ExtendedFloatingActionButton(
-                onClick = { viewModel.toggleContinuousScanning() },
-                containerColor = if (uiState.isContinuousScanning) MaterialTheme.colorScheme.surface else AccentGreen,
-                contentColor = if (uiState.isContinuousScanning) AccentGreen else Color.White,
-                shape = RoundedCornerShape(24.dp),
-                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
-                icon = { Icon(Icons.Rounded.Radar, null, modifier = Modifier.size(22.dp)) },
-                text = {
-                    Text(
-                        text = if (uiState.isContinuousScanning) {
-                            stringResource(R.string.stop_collection)
-                        } else {
-                            stringResource(R.string.start_collection)
-                        },
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            )
+        if (uiState.isDrawingCollectionRoute) {
+            Icon(Icons.Rounded.MyLocation, contentDescription = stringResource(R.string.collection_route_center),
+                tint = AccentBlue, modifier = Modifier.align(Alignment.Center).size(32.dp))
         }
+        CollectionRouteControls(viewModel, uiState, mapController,
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp))
     }
 
     if (showMapTypeDialog) {

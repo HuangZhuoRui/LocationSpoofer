@@ -11,17 +11,31 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 
-/** Read-only device regression. Start a simulation before running this instrumentation. */
+/** Checks framework configuration and system reports without changing simulation state. */
 class SystemFilesInstrumentation : Instrumentation() {
     private var environmentRefresh = false
+    private var moduleRuntime = false
+    private var moduleHotReload = false
 
     override fun onCreate(arguments: Bundle?) {
         super.onCreate(arguments)
         environmentRefresh = arguments?.getString("check") == "environment-refresh"
+        moduleRuntime = arguments?.getString("check") == "module-runtime"
+        moduleHotReload = arguments?.getString("check") == "module-hot-reload"
         start()
     }
 
     override fun onStart() {
+        if (moduleHotReload) {
+            val output = verifyModuleHotReload()
+            finish(if (output.getString("result") == "PASS") -1 else 0, output)
+            return
+        }
+        if (moduleRuntime) {
+            val output = verifyModuleRuntime()
+            finish(if (output.getString("result") == "PASS") -1 else 0, output)
+            return
+        }
         if (environmentRefresh) {
             val output = verifyEnvironmentRefresh()
             finish(if (output.getString("result")?.startsWith("PASS") == true) -1 else 0, output)
@@ -56,13 +70,21 @@ class SystemFilesInstrumentation : Instrumentation() {
             """.trimIndent())
             check(noLegacyTmp != "ERROR") { "Legacy tmp artifacts remain or root access is unavailable" }
             if (BuildConfig.GLOBAL_SCHEME) {
-                val reports = runBlocking { HookStatusRepository(root).readAll() }
-                check(reports.values.all { it?.configPath?.startsWith("libxposed:") == true }) {
-                    "Some system processes have not received framework config: ${reports.mapValues { it.value?.configPath }}"
-                }
-                val publishedAt = envelope.getLong("published_at")
-                check(reports.values.all { it?.configModified == publishedAt }) {
-                    "System processes have not converged on the latest publication; retry while coordinates are stationary"
+                val reports = runBlocking {
+                    val repository = HookStatusRepository(root)
+                    // Reconnecting the app may republish its snapshot; status files are debounced.
+                    // Wait for that publication instead of comparing an immediately stale report.
+                    repeat(40) {
+                        val current = repository.readAll()
+                        val latest = service.getRemotePreferences(FrameworkConfigChannel.GROUP)
+                            .getString(FrameworkConfigChannel.SNAPSHOT_KEY, null)
+                            ?.let { JSONObject(it).getLong("published_at") }
+                        if (latest != null && current.values.all {
+                                it?.configPath?.startsWith("libxposed:") == true && it.configModified == latest
+                            }) return@runBlocking current
+                        delay(250)
+                    }
+                    error("System processes have not converged on the latest publication; retry while coordinates are stationary")
                 }
                 output.putString("receivers", reports.keys.joinToString())
             }

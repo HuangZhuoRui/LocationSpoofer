@@ -42,6 +42,10 @@ import com.vincenthzr.locationspoofer.viewmodel.FavoriteToggleResult
 import com.vincenthzr.locationspoofer.viewmodel.MainViewModel
 import com.vincenthzr.locationspoofer.viewmodel.ManageDataViewModel
 import com.vincenthzr.locationspoofer.viewmodel.isDomesticEnvironment
+import com.vincenthzr.locationspoofer.data.model.geometry
+import com.vincenthzr.locationspoofer.viewmodel.selectCollectedRoute
+import com.vincenthzr.locationspoofer.viewmodel.saveCollectionRouteInfo
+import com.vincenthzr.locationspoofer.viewmodel.deleteCollectedRoute
 import com.vincenthzr.locationspoofer.viewmodel.selectCollectedLocation
 import com.vincenthzr.locationspoofer.viewmodel.syncFavoriteCoordinateIfExists
 import com.vincenthzr.locationspoofer.viewmodel.toggleCollectedLocationFavorite
@@ -63,6 +67,9 @@ fun ManageDataScreen(
 
     val manageDataUiState by manageDataViewModel.uiState.collectAsState()
     val dataList = manageDataUiState.dataList
+    val collectionRoutes = manageDataUiState.collectionRoutes
+    var editingRoute by remember { mutableStateOf<com.vincenthzr.locationspoofer.data.db.CollectionRouteRecord?>(null) }
+    var deletingRoute by remember { mutableStateOf<com.vincenthzr.locationspoofer.data.db.CollectionRouteRecord?>(null) }
 
     // 优先按 sourceLocationId 判断是否已收藏（编辑坐标后依然认得出）；
     // 没有来源 id 的老收藏才退回按坐标匹配。
@@ -80,13 +87,19 @@ fun ManageDataScreen(
         mapController?.setMapType(uiState.mapType)
     }
 
-    LaunchedEffect(mapController, dataList) {
+    LaunchedEffect(mapController, dataList, collectionRoutes) {
         val controller = mapController ?: return@LaunchedEffect
         controller.clear()
         val locations = dataList.map { it.location }
         val last = locations.lastOrNull()
         MapCoverageHelper.drawCoverage(controller, locations, last?.lat, last?.lng)
-        if (last != null) {
+        collectionRoutes.take(20).forEach { route ->
+            com.vincenthzr.locationspoofer.ui.components.CollectionRouteMapHelper.draw(controller, route.route, maxOf(8, 160 / maxOf(1, collectionRoutes.size)))
+        }
+        if (collectionRoutes.isNotEmpty()) {
+            val geometry = collectionRoutes.first().route.geometry()
+            if (geometry.isNotEmpty()) controller.fitBounds(geometry.map { it.lat to it.lng }, 80)
+        } else if (last != null) {
             controller.moveCamera(last.lat, last.lng, 15f)
         }
     }
@@ -143,7 +156,7 @@ fun ManageDataScreen(
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
-                        text = stringResource(R.string.total_collected_data_count, dataList.size),
+                        text = stringResource(R.string.total_collected_data_count, (dataList.size + collectionRoutes.size)),
                         fontSize = 12.5.sp,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f)
                     )
@@ -185,7 +198,7 @@ fun ManageDataScreen(
                 ) {
                     CircularProgressIndicator(color = AccentBlue)
                 }
-            } else if (dataList.isEmpty()) {
+            } else if ((dataList.isEmpty() && collectionRoutes.isEmpty())) {
                 // 空数据状态质感呈现
                 Box(
                     modifier = Modifier
@@ -275,7 +288,7 @@ fun ManageDataScreen(
                             )
                             Spacer(Modifier.width(6.dp))
                             Text(
-                                text = stringResource(R.string.points_drawn_count, dataList.size),
+                                text = stringResource(R.string.local_collection_records_count, dataList.size, collectionRoutes.size),
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -300,6 +313,17 @@ fun ManageDataScreen(
                         ),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
+                        items(collectionRoutes, key = { "collection-route-${it.route.id}" }) { route ->
+                            com.vincenthzr.locationspoofer.ui.components.CollectionRouteListItem(
+                                route,
+                                onClick = {
+                                    viewModel.selectCollectedRoute(route.route.id)
+                                    mapController?.let { com.vincenthzr.locationspoofer.ui.components.CollectionRouteMapHelper.show(it, route.route, 120) }
+                                },
+                                onEdit = { editingRoute = route.route },
+                                onDelete = { deletingRoute = route.route }
+                            )
+                        }
                         items(dataList, key = { it.location.id }) { item ->
                             SwipeableDataListItem(
                                 item = item,
@@ -447,6 +471,23 @@ fun ManageDataScreen(
                     address = address
                 )
             }
+        )
+    }
+
+    editingRoute?.let { route ->
+        CollectionRouteInfoDialog(route, uiState.isSavingCollectionInfo,
+            onDismiss = { editingRoute = null },
+            onSave = { name, remark ->
+                viewModel.saveCollectionRouteInfo(route.id, name, remark, closePending = false, onSaved = { editingRoute = null })
+            })
+    }
+    deletingRoute?.let { route ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { deletingRoute = null },
+            title = { Text(stringResource(R.string.collection_route_delete_title)) },
+            text = { Text(stringResource(R.string.collection_route_delete_message, route.name)) },
+            confirmButton = { TextButton(onClick = { viewModel.deleteCollectedRoute(route.id); deletingRoute = null }) { Text(stringResource(R.string.delete)) } },
+            dismissButton = { TextButton(onClick = { deletingRoute = null }) { Text(stringResource(R.string.cancel)) } }
         )
     }
 

@@ -33,13 +33,17 @@ internal suspend fun MainViewModel.saveEnvironmentData(
     lng: Double,
     wifiJson: String,
     cellJson: String,
-    bluetoothJson: String
-) {
-    val existingLocation = environmentDao.findLocationByCoordinates(lat, lng)
-    val locId = if (existingLocation != null) {
-        val updated = existingLocation.copy(timestamp = System.currentTimeMillis())
-        environmentDao.insertLocation(updated)
-        updated.id
+    bluetoothJson: String,
+    mergeNearby: Boolean = false,
+    collectionRouteId: Long? = null
+): Long {
+    val existingLocation = if (mergeNearby) null else environmentDao.findLocationByCoordinates(lat, lng)
+    val locId = if (mergeNearby) {
+        environmentDao.findOrCreateCollectionLocation(lat, lng, collectionRouteId)
+    } else if (existingLocation != null) {
+        // REPLACE 会删除父记录并级联清空已有设备关联，复用点位只更新时间。
+        environmentDao.updateCollectionTimestamp(existingLocation.id, System.currentTimeMillis())
+        existingLocation.id
     } else {
         environmentDao.insertLocation(
             com.vincenthzr.locationspoofer.data.db.LocationRecord(
@@ -94,7 +98,7 @@ internal suspend fun MainViewModel.saveEnvironmentData(
                 )
             }
         }
-    } catch (e: Exception) {
+    } catch (e: org.json.JSONException) {
         e.printStackTrace()
     }
 
@@ -168,7 +172,7 @@ internal suspend fun MainViewModel.saveEnvironmentData(
                 )
             )
         }
-    } catch (e: Exception) {
+    } catch (e: org.json.JSONException) {
     }
 
     try {
@@ -192,8 +196,9 @@ internal suspend fun MainViewModel.saveEnvironmentData(
                 )
             )
         }
-    } catch (e: Exception) {
+    } catch (e: org.json.JSONException) {
     }
+    return locId
 }
 
 internal fun MainViewModel.locationToJson(
@@ -403,7 +408,7 @@ internal fun MainViewModel.collectExportCounts(onResult: (ImportExportCounts) ->
     viewModelScope.launch(Dispatchers.IO) {
         val counts = try {
             ImportExportCounts(
-                locations = environmentDao.getAllCompleteLocations().size,
+                locations = environmentDao.getAllCompleteLocations().count { it.location.collectionRouteId == null } + environmentDao.getCollectionRoutes().size,
                 savedLocations = settingsRepository.getSavedLocations().size,
                 savedRoutes = locationRepository.getAllSavedRoutesList().size,
                 appCoordinateSystems = settingsRepository.getAppCoordinateSystems().size,
@@ -432,7 +437,8 @@ internal fun MainViewModel.exportEnvironmentData(
     viewModelScope.launch(Dispatchers.IO) {
         try {
             // 未勾选的分类直接留空/留 null，不写进文件
-            val locations = if (selection.locations) environmentDao.getAllCompleteLocations() else emptyList()
+            val locations = if (selection.locations) environmentDao.getAllCompleteLocations().filter { it.location.collectionRouteId == null } else emptyList()
+            val collectionRoutes = if (selection.locations) environmentDao.getCollectionRoutes() else emptyList()
             val savedLocations = if (selection.savedLocations) settingsRepository.getSavedLocations() else emptyList()
             val savedRoutes = if (selection.savedRoutes) locationRepository.getAllSavedRoutesList() else emptyList()
             val appCoordinateSystems =
@@ -461,10 +467,11 @@ internal fun MainViewModel.exportEnvironmentData(
             } else null
 
             val dataPackage = com.vincenthzr.locationspoofer.data.db.LocationSpooferDataPackage(
-                version = 3,
+                version = 4,
                 exportTimestamp = System.currentTimeMillis(),
                 appVersion = "2.0.0",
                 locations = locations,
+                collectionRoutes = collectionRoutes,
                 savedLocations = savedLocations,
                 savedRoutes = savedRoutes,
                 appCoordinateSystems = appCoordinateSystems,
@@ -554,7 +561,7 @@ private fun MainViewModel.parseImportPackageInternal(
         null
     }
     val pkgHasContent = pkg != null && (
-            pkg.locations.isNotEmpty() || pkg.savedLocations.isNotEmpty() ||
+            pkg.locations.isNotEmpty() || pkg.collectionRoutes.isNotEmpty() || pkg.savedLocations.isNotEmpty() ||
                     pkg.savedRoutes.isNotEmpty() || pkg.appCoordinateSystems.isNotEmpty() ||
                     pkg.settings != null || pkg.apiKeys != null
             )
@@ -592,24 +599,8 @@ internal fun MainViewModel.applyImportPackage(
         try {
             // 安全导入环境定位点 (通过 copy(id = 0) 消除主键冲突，并正确绑定关联设备外键)
             if (selection.locations) {
-                pkg.locations.forEach { cl ->
-                    val locId = environmentDao.insertLocation(cl.location.copy(id = 0))
-                    cl.connectedWifi?.let { cw ->
-                        environmentDao.insertConnectedWifi(cw.copy(locationId = locId))
-                    }
-                    cl.wifis.forEach { w ->
-                        environmentDao.insertWifiDevice(w.device)
-                        environmentDao.insertLocationWifi(w.locationWifi.copy(locationId = locId))
-                    }
-                    cl.cells.forEach { c ->
-                        environmentDao.insertCellDevice(c.device)
-                        environmentDao.insertLocationCell(c.locationCell.copy(locationId = locId))
-                    }
-                    cl.bluetooths.forEach { b ->
-                        environmentDao.insertBluetoothDevice(b.device)
-                        environmentDao.insertLocationBluetooth(b.locationBluetooth.copy(locationId = locId))
-                    }
-                }
+                pkg.locations.forEach { environmentDao.insertCompleteLocationData(it) }
+                pkg.collectionRoutes.forEach { environmentDao.insertCompleteCollectionRoute(it) }
             }
 
             // 合并收藏点位 (避免重复点位)

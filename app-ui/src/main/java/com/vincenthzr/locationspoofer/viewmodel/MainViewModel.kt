@@ -50,6 +50,10 @@ class MainViewModel(
     internal var mapMoveJob: Job? = null
     internal var gaitRecordingJob: Job? = null
     internal var mockCapabilitiesJob: Job? = null
+    internal var environmentUpdateJob: Job? = null
+
+    val collectionRoutes = environmentDao.observeCollectionRoutes().distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val environmentLocations: StateFlow<List<CompleteLocation>> = environmentDao
         .observeAllCompleteLocations()
@@ -127,6 +131,7 @@ class MainViewModel(
 
     internal val favoriteToggleMutex = kotlinx.coroutines.sync.Mutex()
 
+    internal var lastEnvironmentRouteId: Long? = null
     internal var lastDbQueryLat: Double = 0.0
     internal var lastDbQueryLng: Double = 0.0
 }

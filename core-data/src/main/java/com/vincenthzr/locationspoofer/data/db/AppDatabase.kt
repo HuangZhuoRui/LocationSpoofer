@@ -12,9 +12,9 @@ import androidx.room.RoomDatabase
         WifiDevice::class, LocationWifi::class,
         BluetoothDevice::class, LocationBluetooth::class,
         CellDevice::class, LocationCell::class,
-        SavedRouteEntity::class
+        SavedRouteEntity::class, CollectionRouteRecord::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -47,6 +47,14 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_8_9 = object : androidx.room.migration.Migration(8, 9) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS collection_routes (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL, remark TEXT NOT NULL, pointsJson TEXT NOT NULL, halfWidthM REAL NOT NULL, timestamp INTEGER NOT NULL)")
+                db.execSQL("ALTER TABLE location_records ADD COLUMN collectionRouteId INTEGER REFERENCES collection_routes(id) ON DELETE CASCADE")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_location_records_collectionRouteId ON location_records(collectionRouteId)")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -54,7 +62,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "environment_database"
                 )
-                    .addMigrations(MIGRATION_3_4, MIGRATION_6_7, MIGRATION_7_8)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

@@ -240,4 +240,5 @@ fun MainScreen(
             uiState = uiState
         )
     }
+    com.vincenthzr.locationspoofer.ui.screen.CollectionInfoDialogHost(viewModel, uiState)
 }

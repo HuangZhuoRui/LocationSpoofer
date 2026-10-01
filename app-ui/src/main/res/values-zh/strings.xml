@@ -606,4 +606,35 @@
     <string name="root_test_remote_config_detail">此项检查 App 侧访问能力；系统进程是否收到更新请查看 Hook 运行状态</string>
     <string name="root_test_item_config_published">配置已发布</string>
     <string name="root_test_config_not_published">尚无已发布配置，开始模拟后会发布</string>
+
+    <string name="collection_info_title">采集点基本信息</string>
+    <string name="collection_info_description">采集数据已保存。填写位置名称和备注，方便以后查找这个点位。</string>
+    <string name="collection_info_remaining">本次还有 %d 个点位待填写。</string>
+    <string name="collection_location_name">位置名称</string>
+    <string name="collection_info_skip">跳过</string>
+    <string name="collection_info_saving">保存中…</string>
+    <string name="collection_stopping">正在完成采集…</string>
+    <string name="collection_no_saved_points">本次没有保存点位，请检查定位及采集权限后重试。</string>
+    <string name="collection_info_save_failed">基本信息保存失败，请重试。</string>
+
+    <!-- Named route collection -->
+    <string name="collection_point_mode">点位采集</string>
+    <string name="collection_route_mode">路线采集</string>
+    <string name="collection_route_draw_hint">移动地图，将中心标记对准路线，依次添加路点。路线左右各覆盖 50 米。</string>
+    <string name="collection_route_collect_hint">沿绘制的路线移动，采集沿途真实环境数据；仅保存距离路线 50 米内的样本。</string>
+    <string name="collection_route_add_point">添加路点</string>
+    <string name="collection_route_done">完成绘制</string>
+    <string name="collection_route_undo">撤销</string>
+    <string name="collection_route_edit_drawing">编辑路线</string>
+    <string name="collection_route_start">开始路线采集</string>
+    <string name="collection_route_center">路点中心标记</string>
+    <string name="collection_route_default_name">采集路线 %1$s</string>
+    <string name="collection_route_unnamed">未命名路线</string>
+    <string name="collection_route_summary">%1$d 个采样点 · 左右各 %2$d 米</string>
+    <string name="collection_route_details">路线基本信息</string>
+    <string name="collection_route_name">路线名称</string>
+    <string name="collection_route_save_description">为整条路线及其沿途采集的数据填写名称和备注。</string>
+    <string name="collection_route_delete_title">删除采集路线</string>
+    <string name="collection_route_delete_message">删除“%1$s”及其全部采样数据？</string>
+    <string name="local_collection_records_count">%1$d 个点位 · %2$d 条路线</string>
 </resources>

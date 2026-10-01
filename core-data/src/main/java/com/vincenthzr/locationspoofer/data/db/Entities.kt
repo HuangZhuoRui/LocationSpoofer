@@ -14,7 +14,13 @@ import kotlinx.serialization.Serializable
 @Serializable
 @Entity(
     tableName = "location_records",
+    foreignKeys = [ForeignKey(
+        entity = CollectionRouteRecord::class,
+        parentColumns = ["id"], childColumns = ["collectionRouteId"],
+        onDelete = ForeignKey.CASCADE
+    )],
     indices = [
+        Index(value = ["collectionRouteId"]),
         Index(value = ["lat", "lng"]),
         Index(value = ["timestamp"])
     ]
@@ -29,7 +35,26 @@ data class LocationRecord(
     val remark: String = "",
     val selectedWifiBssid: String? = null,
     val selectedBluetoothAddress: String? = null,
-    val selectedCellKey: String? = null
+    val selectedCellKey: String? = null,
+    val collectionRouteId: Long? = null
+)
+
+@Serializable
+@Entity(tableName = "collection_routes")
+data class CollectionRouteRecord(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String = "",
+    val remark: String = "",
+    val pointsJson: String = "[]",
+    val halfWidthM: Double = 50.0,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Serializable
+data class CompleteCollectionRoute(
+    @Embedded val route: CollectionRouteRecord,
+    @Relation(entity = LocationRecord::class, parentColumn = "id", entityColumn = "collectionRouteId")
+    val samples: List<CompleteLocation> = emptyList()
 )
 
 @Serializable
@@ -260,10 +285,11 @@ data class ExportedApiKeys(
 // 旧的 version 2 文件缺这两个字段时会落到默认值 null，无需特殊兼容处理。
 @Serializable
 data class LocationSpooferDataPackage(
-    val version: Int = 3,
+    val version: Int = 4,
     val exportTimestamp: Long = System.currentTimeMillis(),
     val appVersion: String = "2.0.0",
     val locations: List<CompleteLocation> = emptyList(),
+    val collectionRoutes: List<CompleteCollectionRoute> = emptyList(),
     val savedLocations: List<SavedLocation> = emptyList(),
     val savedRoutes: List<SavedRouteEntity> = emptyList(),
     val appCoordinateSystems: Map<String, String> = emptyMap(),

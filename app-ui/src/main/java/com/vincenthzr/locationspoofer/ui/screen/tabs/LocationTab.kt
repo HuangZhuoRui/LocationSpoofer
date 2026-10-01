@@ -76,6 +76,7 @@ import com.vincenthzr.locationspoofer.viewmodel.loadSavedLocation
 import com.vincenthzr.locationspoofer.viewmodel.performLocalSearch
 import com.vincenthzr.locationspoofer.viewmodel.removeSavedLocation
 import com.vincenthzr.locationspoofer.viewmodel.saveCurrentLocation
+import com.vincenthzr.locationspoofer.viewmodel.selectCollectedRoute
 import com.vincenthzr.locationspoofer.viewmodel.selectCollectedLocation
 import com.vincenthzr.locationspoofer.viewmodel.setAltitude
 import com.vincenthzr.locationspoofer.viewmodel.setAltitudeVariation
@@ -105,7 +106,8 @@ fun LocationTab(
     uiState: AppState,
     mapController: AppMapController?,
     tabBarHeight: Dp = 90.dp,
-    manageDataViewModel: ManageDataViewModel = koinViewModel()
+    manageDataViewModel: ManageDataViewModel = koinViewModel(),
+    onCollectionRouteSelected: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
@@ -472,6 +474,12 @@ fun LocationTab(
         val manageDataUiState by manageDataViewModel.uiState.collectAsState()
         LocalEnvironmentDataDialog(
             dataList = manageDataUiState.dataList,
+            collectionRoutes = manageDataUiState.collectionRoutes,
+            onSelectRoute = { route ->
+                viewModel.selectCollectedRoute(route.route.id)
+                onCollectionRouteSelected()
+                showLocalDataDialog = false
+            },
             isLoading = manageDataUiState.isLoading,
             savedLocations = uiState.savedLocations,
             onSelectPoint = { item ->
@@ -600,4 +608,3 @@ fun LocationTab(
         )
     }
 }
-

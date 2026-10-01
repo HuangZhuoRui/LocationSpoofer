@@ -300,6 +300,7 @@ fun MainScaffoldScreen(
                             viewModel = viewModel,
                             uiState = uiState,
                             mapController = mapController,
+                            onCollectionRouteSelected = { selectedTab = BottomTab.Route.ordinal },
                             tabBarHeight = paddingValues.calculateBottomPadding()
                         )
 

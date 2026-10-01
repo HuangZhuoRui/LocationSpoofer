@@ -44,7 +44,9 @@ fun LocalEnvironmentDataDialog(
     onSelectPoint: (item: CompleteLocation) -> Unit,
     onFavorite: (item: CompleteLocation) -> Unit,
     onImportClick: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    collectionRoutes: List<com.vincenthzr.locationspoofer.data.db.CompleteCollectionRoute> = emptyList(),
+    onSelectRoute: (com.vincenthzr.locationspoofer.data.db.CompleteCollectionRoute) -> Unit = {}
 ) {
     var searchQuery by remember { mutableStateOf("") }
     val timeFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
@@ -72,6 +74,11 @@ fun LocalEnvironmentDataDialog(
                         "${item.location.lat},${item.location.lng}".contains(query)
             }
         }
+    }
+
+    val filteredRoutes = remember(collectionRoutes, searchQuery) {
+        val query = searchQuery.trim()
+        collectionRoutes.filter { query.isBlank() || it.route.name.contains(query, true) || it.route.remark.contains(query, true) }
     }
 
     Dialog(
@@ -121,7 +128,7 @@ fun LocalEnvironmentDataDialog(
                                 color = MaterialTheme.colorScheme.onBackground
                             )
                             Text(
-                                text = if (dataList.isEmpty()) stringResource(R.string.no_local_env_data) else stringResource(R.string.local_collected_points_format, dataList.size),
+                                text = if (dataList.isEmpty() && collectionRoutes.isEmpty()) stringResource(R.string.no_local_env_data) else stringResource(R.string.local_collection_records_count, dataList.size, collectionRoutes.size),
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                             )
@@ -144,7 +151,7 @@ fun LocalEnvironmentDataDialog(
                 Spacer(Modifier.height(14.dp))
 
                 // 搜索过滤框
-                if (dataList.isNotEmpty()) {
+                if (dataList.isNotEmpty() || collectionRoutes.isNotEmpty()) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -218,7 +225,7 @@ fun LocalEnvironmentDataDialog(
                             modifier = Modifier.size(32.dp)
                         )
                     }
-                } else if (dataList.isEmpty()) {
+                } else if (dataList.isEmpty() && collectionRoutes.isEmpty()) {
                     // 空数据状态
                     Column(
                         modifier = Modifier
@@ -259,7 +266,7 @@ fun LocalEnvironmentDataDialog(
                             Text(stringResource(R.string.import_external_data_json), fontSize = 13.sp)
                         }
                     }
-                } else if (filteredList.isEmpty()) {
+                } else if (filteredList.isEmpty() && filteredRoutes.isEmpty()) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -279,6 +286,9 @@ fun LocalEnvironmentDataDialog(
                             .heightIn(max = 340.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        items(filteredRoutes, key = { "collection-route-${it.route.id}" }) { route ->
+                            CollectionRouteListItem(route, onClick = { onSelectRoute(route) })
+                        }
                         items(filteredList, key = { it.location.id }) { item ->
                             LocalDataItem(
                                 item = item,
@@ -295,7 +305,7 @@ fun LocalEnvironmentDataDialog(
                     }
                 }
 
-                if (dataList.isNotEmpty()) {
+                if (dataList.isNotEmpty() || collectionRoutes.isNotEmpty()) {
                     Spacer(Modifier.height(12.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),

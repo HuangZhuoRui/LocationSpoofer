@@ -116,7 +116,7 @@ fun FeaturesTab(
         ImportExportSelectionDialog(
             isExport = false,
             counts = ImportExportCounts(
-                locations = pkg.locations.size,
+                locations = pkg.locations.size + pkg.collectionRoutes.size,
                 savedLocations = pkg.savedLocations.size,
                 savedRoutes = pkg.savedRoutes.size,
                 appCoordinateSystems = pkg.appCoordinateSystems.size,

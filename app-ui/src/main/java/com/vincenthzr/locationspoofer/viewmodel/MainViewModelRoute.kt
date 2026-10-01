@@ -26,6 +26,7 @@ internal fun MainViewModel.enterRoutePlanning() {
     _uiState.update {
         it.copy(
             routePlanStage = RoutePlanStage.SELECTING,
+            selectedCollectionRouteId = null,
             routePoints = emptyList()
         )
     }
@@ -59,7 +60,8 @@ internal fun MainViewModel.restartSelectingPoints() {
     _uiState.update {
         it.copy(
             routePoints = emptyList(),
-            routePlanStage = RoutePlanStage.SELECTING
+            routePlanStage = RoutePlanStage.SELECTING,
+            selectedCollectionRouteId = null
         )
     }
 }
@@ -189,7 +191,7 @@ internal fun MainViewModel.setIsAutoCadence(auto: Boolean) {
 
 internal fun MainViewModel.startRoutePlanning() {
     val state = _uiState.value
-    if (state.isContinuousScanning) {
+    if (state.isContinuousScanning || state.isStoppingCollection) {
         android.widget.Toast.makeText(
             context,
             context.getString(com.vincenthzr.locationspoofer.ui.R.string.disable_continuous_scan_route_first),
@@ -328,6 +330,10 @@ private fun MainViewModel.startSimulationWithPoints(pointsToRun: List<RoutePoint
     SpoofingState.simBearing = 0f
 
     viewModelScope.launch {
+        // 配置必须来自路线起点，避免将此前地图位置的环境数据带入模拟。
+        val records = environmentRecordsAt(startPoint.lat, startPoint.lng)
+        val (wifi, cell, bluetooth) = locationToJson(records, startPoint.lat, startPoint.lng)
+        _uiState.update { it.copy(collectedWifiJson = wifi, collectedCellJson = cell, collectedBluetoothJson = bluetooth) }
         locationRepository.startSpoofing(
             context,
             startPoint.lat,
@@ -379,6 +385,7 @@ internal fun MainViewModel.stopRoutePlanning() {
     locationSyncJob?.cancel()
     locationSyncJob = null
     motionController.onStopped()
+    environmentUpdateJob?.cancel()
     viewModelScope.launch {
         locationRepository.stopSpoofing(context)
         _uiState.update {
@@ -598,40 +605,22 @@ private fun MainViewModel.updatePosition(lat: Double, lng: Double, bearing: Floa
     val distance =
         2 * 6378137.0 * kotlin.math.atan2(kotlin.math.sqrt(a), kotlin.math.sqrt(1 - a))
 
-    if (distance > 20.0) {
+    val coveredRouteId = com.vincenthzr.locationspoofer.data.model.CollectionRouteMatcher.routeAt(
+        collectionRoutes.value,
+        com.vincenthzr.locationspoofer.utils.CoordinateUtils.LatLng(lat, lng),
+        _uiState.value.selectedCollectionRouteId
+    )?.route?.id
+    // 跨越路线边界立即切换环境；沿途仍按 20 米刷新附近样本。
+    if (distance > 20.0 || coveredRouteId != lastEnvironmentRouteId) {
+        lastEnvironmentRouteId = coveredRouteId
         lastDbQueryLat = lat
         lastDbQueryLng = lng
 
-        viewModelScope.launch(Dispatchers.IO) {
-            val records = environmentDao.getNearestLocations(lat, lng, 3)
-            if (records.isNotEmpty()) {
-                val record = records[0]
-                // 检查最近的记录是否实际上在大约 50 米内
-                val rLat = Math.toRadians(record.location.lat - lat)
-                val rLng = Math.toRadians(record.location.lng - lng)
-                val rA = kotlin.math.sin(rLat / 2).let { it * it } + kotlin.math.cos(
-                    Math.toRadians(lat)
-                ) * kotlin.math.cos(Math.toRadians(record.location.lat)) * kotlin.math.sin(rLng / 2)
-                    .let { it * it }
-                val rDist = 2 * 6378137.0 * kotlin.math.atan2(
-                    kotlin.math.sqrt(rA),
-                    kotlin.math.sqrt(1 - rA)
-                )
-
-                if (rDist <= 50.0) {
-                    val jsons = locationToJson(records, lat, lng)
-                    SpoofingState.cellJson = jsons.second
-                    // 保存配置文件，写入新的 cell_json、wifi_json 和 bluetoothJson
-                    locationRepository.updateEnvironment(jsons.first, jsons.second, jsons.third)
-                } else {
-                    // 回退到随机基站生成
-                    SpoofingState.cellJson = "[]"
-                    locationRepository.updateEnvironment("[]", "[]", "[]")
-                }
-            } else {
-                SpoofingState.cellJson = "[]"
-                locationRepository.updateEnvironment("[]", "[]", "[]")
-            }
+        environmentUpdateJob?.cancel()
+        environmentUpdateJob = viewModelScope.launch {
+            val records = environmentRecordsAt(lat, lng)
+            val jsons = locationToJson(records, lat, lng)
+            locationRepository.updateEnvironment(jsons.first, jsons.second, jsons.third)
         }
     }
 }

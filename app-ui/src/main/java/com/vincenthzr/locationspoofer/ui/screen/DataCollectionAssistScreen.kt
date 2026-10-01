@@ -274,6 +274,7 @@ fun DataCollectionAssistScreen(
 
                 Button(
                     onClick = { viewModel.toggleContinuousScanning() },
+                    enabled = !uiState.isStoppingCollection,
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(
@@ -283,7 +284,9 @@ fun DataCollectionAssistScreen(
                     Icon(Icons.Rounded.Radar, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = if (uiState.isContinuousScanning) {
+                        text = if (uiState.isStoppingCollection) {
+                            stringResource(R.string.collection_stopping)
+                        } else if (uiState.isContinuousScanning) {
                             stringResource(R.string.stop_collection)
                         } else {
                             stringResource(R.string.start_collection)

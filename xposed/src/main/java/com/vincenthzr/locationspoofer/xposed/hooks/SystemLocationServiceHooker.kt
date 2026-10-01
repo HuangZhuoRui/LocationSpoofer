@@ -98,6 +98,71 @@ private val activePendingIntents = ConcurrentHashMap<android.app.PendingIntent, 
 @Volatile
 private var isHeartbeatTimerStarted = false
 
+/** Flatten module-defined registrations into bootstrap arrays before handing them to new code. */
+internal fun saveSystemLocationReloadState(): Array<Any> = arrayOf(
+    activeListenerBinders.mapTo(java.util.ArrayList()) { (binder, info) ->
+        arrayOf<Any>(binder, info.listener, info.packageName, info.provider, info.registeredTime)
+    },
+    activeGnssStatusBinders.mapTo(java.util.ArrayList()) { (binder, info) ->
+        arrayOf<Any>(binder, info.listener, info.packageName, info.registeredTime)
+    },
+    activeGnssNmeaBinders.mapTo(java.util.ArrayList()) { (binder, info) ->
+        arrayOf<Any>(binder, info.listener, info.packageName, info.registeredTime)
+    },
+    activeCallbackBinders.mapTo(java.util.ArrayList()) { (binder, info) ->
+        arrayOf<Any>(binder, info.callback, info.packageName, info.registeredTime)
+    },
+    activePendingIntents.mapTo(java.util.ArrayList()) { (pendingIntent, packageName) ->
+        arrayOf<Any>(pendingIntent, packageName)
+    }
+)
+
+internal fun clearSystemLocationReloadState() {
+    isHeartbeatTimerStarted = false
+    activeListenerBinders.clear()
+    activeGnssStatusBinders.clear()
+    activeGnssNmeaBinders.clear()
+    activeCallbackBinders.clear()
+    activePendingIntents.clear()
+    spoofedListenerInstances.clear()
+}
+
+internal fun LocationHooker.restoreSystemLocationReloadState(value: Any?) {
+    val state = value as? Array<*> ?: return
+    fun rows(index: Int): List<Array<*>> = (state.getOrNull(index) as? List<*>)?.filterIsInstance<Array<*>>() ?: emptyList()
+    rows(0).forEach { row ->
+        val binder = row[0] as IBinder
+        if (!binder.isBinderAlive) return@forEach
+        val listener = row[1]!!
+        activeListenerBinders[binder] = ListenerRegistrationInfo(listener, row[2] as String, row[3] as String, row[4] as Long)
+        spoofedListenerInstances.add(listener)
+        ensureCallbackHooked(listener, "onLocationChanged")
+        runCatching { ModuleBinderDeaths.watch(binder) { activeListenerBinders.remove(binder) } }
+    }
+    rows(1).forEach { row ->
+        val binder = row[0] as IBinder
+        if (!binder.isBinderAlive) return@forEach
+        activeGnssStatusBinders[binder] = GnssStatusRegistrationInfo(row[1]!!, row[2] as String, row[3] as Long)
+        runCatching { ModuleBinderDeaths.watch(binder) { activeGnssStatusBinders.remove(binder) } }
+    }
+    rows(2).forEach { row ->
+        val binder = row[0] as IBinder
+        if (!binder.isBinderAlive) return@forEach
+        activeGnssNmeaBinders[binder] = GnssNmeaRegistrationInfo(row[1]!!, row[2] as String, row[3] as Long)
+        runCatching { ModuleBinderDeaths.watch(binder) { activeGnssNmeaBinders.remove(binder) } }
+    }
+    rows(3).forEach { row ->
+        val binder = row[0] as IBinder
+        if (!binder.isBinderAlive) return@forEach
+        val callback = row[1]!!
+        activeCallbackBinders[binder] = CallbackRegistrationInfo(callback, row[2] as String, row[3] as Long)
+        spoofedListenerInstances.add(callback)
+        ensureCallbackHooked(callback, "onLocation")
+        runCatching { ModuleBinderDeaths.watch(binder) { activeCallbackBinders.remove(binder) } }
+    }
+    rows(4).forEach { row -> activePendingIntents[row[0] as android.app.PendingIntent] = row[1] as String }
+}
+
 /** 在 args 里递归找出所有 android.location.Location（单个、List、或 LocationResult 形态）并就地改写 */
 private fun rewriteLocationArgs(
     args: List<Any?>,
@@ -184,7 +249,7 @@ private fun LocationHooker.startSystemLocationHeartbeat(classLoader: ClassLoader
         isHeartbeatTimerStarted = true
     }
 
-    val timer = Timer("LocationSpoofer-SysHeartbeat", true)
+    val timer = ownReloadTimer(Timer("LocationSpoofer-SysHeartbeat", true))
     timer.scheduleAtFixedRate(object : TimerTask() {
         override fun run() {
             try {
@@ -571,10 +636,10 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
                                         provider = provider
                                     )
                                     try {
-                                        binder.linkToDeath({
+                                        ModuleBinderDeaths.watch(binder) {
                                             activeListenerBinders.remove(binder)
                                             logLoc("[SysHook] Listener died and removed for $pkgName")
-                                        }, 0)
+                                        }
                                     } catch (_: Throwable) {}
                                 }
                                 spoofedListenerInstances.add(listener)
@@ -684,10 +749,10 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
                                     packageName = pkgName
                                 )
                                 try {
-                                    binder.linkToDeath({
+                                    ModuleBinderDeaths.watch(binder) {
                                         activeCallbackBinders.remove(binder)
                                         logLoc("[SysLoc] Callback binder died: $pkgName")
-                                    }, 0)
+                                    }
                                 } catch (_: Throwable) {}
                             }
 
@@ -793,10 +858,10 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
                                         packageName = pkgName
                                     )
                                     try {
-                                        binder.linkToDeath({
+                                        ModuleBinderDeaths.watch(binder) {
                                             activeGnssStatusBinders.remove(binder)
                                             logLoc("[SysLoc] GNSS status listener died: $pkgName")
-                                        }, 0)
+                                        }
                                     } catch (_: Throwable) {}
 
                                     // 立即向新注册的监听器派发一次卫星数据，避免等待心跳周期
@@ -867,10 +932,10 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
                                         packageName = pkgName
                                     )
                                     try {
-                                        binder.linkToDeath({
+                                        ModuleBinderDeaths.watch(binder) {
                                             activeGnssNmeaBinders.remove(binder)
                                             logLoc("[SysLoc] NMEA listener died: $pkgName")
-                                        }, 0)
+                                        }
                                     } catch (_: Throwable) {}
 
                                     val motion = getCurrentSpoofedMotion("WGS-84")
@@ -1009,7 +1074,7 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
                                         packageName = targetPkg
                                     )
                                     try {
-                                        binder.linkToDeath({ activeCallbackBinders.remove(binder) }, 0)
+                                        ModuleBinderDeaths.watch(binder) { activeCallbackBinders.remove(binder) }
                                     } catch (_: Throwable) {}
                                 }
                                 spoofedListenerInstances.add(callback)
@@ -1086,7 +1151,7 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
                                         packageName = pkgName ?: "target",
                                         provider = providerName
                                     )
-                                    try { binder.linkToDeath({ activeListenerBinders.remove(binder) }, 0) } catch (_: Throwable) {}
+                                    try { ModuleBinderDeaths.watch(binder) { activeListenerBinders.remove(binder) } } catch (_: Throwable) {}
                                 }
                                 spoofedListenerInstances.add(listener)
                                 ensureCallbackHooked(listener, "onLocationChanged")

@@ -200,6 +200,32 @@ object SensorStepHooker {
         } catch (_: Throwable) {}
     }
 
+    internal fun saveReloadState(): Array<Any?> = arrayOf(
+        capturedListeners.map { arrayOf<Any?>(it.listener, it.sensor, it.handler) }.toTypedArray(),
+        stepBase, lastStepsFloat, lastStepInitTime,
+        mockStepCounterSensor, mockStepDetectorSensor, mockAccelerometerSensor,
+        handleToTypeMap.map { arrayOf(it.key, it.value) }.toTypedArray()
+    )
+
+    internal fun clearReloadState() { capturedListeners.clear(); hookedListenerClasses.clear() }
+
+    internal fun restoreReloadState(value: Any?) {
+        val state = value as? Array<*> ?: return
+        (state.getOrNull(0) as? Array<*>)?.filterIsInstance<Array<*>>()?.forEach {
+            capturedListeners.add(CapturedSensorListener(it[0]!!, it[1] as? Sensor, it[2] as? Handler))
+            hookConcreteListenerClass(it[0]!!.javaClass, it[0]!!.javaClass.classLoader ?: ClassLoader.getSystemClassLoader())
+        }
+        stepBase = state[1] as Double
+        lastStepsFloat = state[2] as Double
+        lastStepInitTime = state[3] as Long
+        mockStepCounterSensor = state[4] as? Sensor
+        mockStepDetectorSensor = state[5] as? Sensor
+        mockAccelerometerSensor = state[6] as? Sensor
+        (state[7] as? Array<*>)?.filterIsInstance<Array<*>>()?.forEach {
+            handleToTypeMap[it[0] as Int] = it[1] as Int
+        }
+    }
+
     /**
      * 动态 Hook 具体的 Listener 实现类（如 Keep 的 StepListener）
      */

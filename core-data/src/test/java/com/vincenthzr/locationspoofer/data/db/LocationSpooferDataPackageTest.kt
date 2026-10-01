@@ -114,7 +114,7 @@ class LocationSpooferDataPackageTest {
             exportJson.encodeToString(original)
         )
 
-        assertEquals(3, restored.version)
+        assertEquals(4, restored.version)
         assertEquals(original.settings, restored.settings)
         assertEquals(original.apiKeys, restored.apiKeys)
         assertEquals(original.savedLocations, restored.savedLocations)

@@ -13,7 +13,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 
 // MainViewModel 的当前位置获取、原生定位回退与模拟能力评估相关扩展函数
 
@@ -154,99 +155,76 @@ private fun MainViewModel.applyNativeLocation(
     }
 }
 
-internal suspend fun MainViewModel.fetchRealLocationSilent(ctx: Context): Pair<Double, Double>? =
-    suspendCoroutine { cont ->
-        val client = try {
-            com.amap.api.location.AMapLocationClient(ctx.applicationContext)
-        } catch (e: Exception) {
-            fallbackToNativeLocationSilent(ctx, true, cont)
-            return@suspendCoroutine
-        }
-        client.setLocationOption(com.amap.api.location.AMapLocationClientOption().apply {
-            locationMode =
-                com.amap.api.location.AMapLocationClientOption.AMapLocationMode.Hight_Accuracy
-            isOnceLocation = true
-            isNeedAddress = false
-        })
-        client.setLocationListener { loc ->
-            if (loc != null && loc.errorCode == 0) {
-                cont.resume(Pair(loc.latitude, loc.longitude))
-            } else {
-                fallbackToNativeLocationSilent(ctx, true, cont)
-            }
-            client.stopLocation()
-            client.onDestroy()
-        }
-        client.startLocation()
-    }
-
-@android.annotation.SuppressLint("MissingPermission")
-
-private fun MainViewModel.fallbackToNativeLocationSilent(
-    ctx: Context,
-    convertToGcj: Boolean,
-    cont: kotlin.coroutines.Continuation<Pair<Double, Double>?>
-) {
-    try {
-        val locationManager =
-            ctx.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
-        val provider =
-            if (locationManager.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)) {
-                android.location.LocationManager.NETWORK_PROVIDER
-            } else if (locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)) {
-                android.location.LocationManager.GPS_PROVIDER
-            } else {
+internal suspend fun MainViewModel.fetchRealLocationSilent(ctx: Context): Pair<Double, Double>? {
+    val amapResult = withTimeoutOrNull(15_000) {
+        suspendCancellableCoroutine<Pair<Double, Double>?> { cont ->
+            val client = try {
+                AMapLocationClient(ctx.applicationContext)
+            } catch (error: Exception) {
                 cont.resume(null)
-                return
+                return@suspendCancellableCoroutine
             }
-
-        // 首先尝试最后已知位置
-        val lastLoc = locationManager.getLastKnownLocation(provider)
-        if (lastLoc != null) {
-            val res = getNativeConverted(ctx, lastLoc, convertToGcj)
-            cont.resume(res)
-            return
-        }
-
-        val listener = object : android.location.LocationListener {
-            override fun onLocationChanged(location: android.location.Location) {
-                val res = getNativeConverted(ctx, location, convertToGcj)
-                cont.resume(res)
-                locationManager.removeUpdates(this)
+            fun closeClient() {
+                runCatching { client.stopLocation(); client.onDestroy() }
             }
-
-            override fun onStatusChanged(
-                provider: String?,
-                status: Int,
-                extras: android.os.Bundle?
-            ) {
-            }
-
-            override fun onProviderEnabled(provider: String) {}
-            override fun onProviderDisabled(provider: String) {}
-        }
-        // 使用 main looper 处理 listener
-        locationManager.requestSingleUpdate(
-            provider,
-            listener,
-            android.os.Looper.getMainLooper()
-        )
-
-        // 5 秒后超时，以避免永远挂起
-        kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch {
-            delay(5000)
-            locationManager.removeUpdates(listener)
-            if (cont.context.isActive) {
-                try {
-                    cont.resume(null)
-                } catch (e: Exception) {
+            cont.invokeOnCancellation { closeClient() }
+            client.setLocationOption(AMapLocationClientOption().apply {
+                locationMode = AMapLocationClientOption.AMapLocationMode.Hight_Accuracy
+                isOnceLocation = true
+                isNeedAddress = false
+            })
+            client.setLocationListener { location ->
+                closeClient()
+                if (cont.isActive) {
+                    cont.resume(if (location != null && location.errorCode == 0) {
+                        location.latitude to location.longitude
+                    } else null)
                 }
             }
+            if (cont.isActive) client.startLocation() else closeClient()
         }
-    } catch (e: Exception) {
+    }
+    return amapResult ?: fallbackToNativeLocationSilent(ctx, true)
+}
+
+@android.annotation.SuppressLint("MissingPermission")
+private suspend fun MainViewModel.fallbackToNativeLocationSilent(
+    ctx: Context,
+    convertToGcj: Boolean
+): Pair<Double, Double>? = withTimeoutOrNull(5_000) {
+    suspendCancellableCoroutine { cont ->
+        val locationManager = ctx.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+        var listener: android.location.LocationListener? = null
+        cont.invokeOnCancellation { listener?.let { runCatching { locationManager.removeUpdates(it) } } }
         try {
-            cont.resume(null)
-        } catch (e: Exception) {
+            val provider = when {
+                locationManager.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER) -> android.location.LocationManager.NETWORK_PROVIDER
+                locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) -> android.location.LocationManager.GPS_PROVIDER
+                else -> {
+                    cont.resume(null)
+                    return@suspendCancellableCoroutine
+                }
+            }
+            val lastLocation = locationManager.getLastKnownLocation(provider)
+            if (lastLocation != null) {
+                cont.resume(getNativeConverted(ctx, lastLocation, convertToGcj))
+                return@suspendCancellableCoroutine
+            }
+            val callback = object : android.location.LocationListener {
+                override fun onLocationChanged(location: android.location.Location) {
+                    locationManager.removeUpdates(this)
+                    if (cont.isActive) cont.resume(getNativeConverted(ctx, location, convertToGcj))
+                }
+                override fun onStatusChanged(provider: String?, status: Int, extras: android.os.Bundle?) {}
+                override fun onProviderEnabled(provider: String) {}
+                override fun onProviderDisabled(provider: String) {}
+            }
+            listener = callback
+            locationManager.requestSingleUpdate(provider, callback, android.os.Looper.getMainLooper())
+            if (!cont.isActive) locationManager.removeUpdates(callback)
+        } catch (error: Exception) {
+            listener?.let { runCatching { locationManager.removeUpdates(it) } }
+            if (cont.isActive) cont.resume(null)
         }
     }
 }
@@ -333,6 +311,7 @@ internal fun MainViewModel.selectCollectedLocation(locationId: Long) {
                 it.copy(
                     latitudeInput = record.location.lat.toString(),
                     longitudeInput = record.location.lng.toString(),
+                    selectedCollectionRouteId = null,
                     pinnedCollectedLocationId = locationId,
                     pinnedLocationName = name
                 )
@@ -400,30 +379,7 @@ internal suspend fun MainViewModel.evaluateMockCapabilitiesSuspend(lat: Double, 
         }
     }
 
-    val radLat = Math.toRadians(lat)
-    val degLat = 65.0 / 111320.0
-    val degLng = 65.0 / (111320.0 * maxOf(0.1, kotlin.math.cos(radLat)))
-
-    val nearbyCandidates = withContext(Dispatchers.IO) {
-        environmentDao.getCompleteLocationsInBounds(
-            minLat = lat - degLat,
-            maxLat = lat + degLat,
-            minLng = lng - degLng,
-            maxLng = lng + degLng,
-            limit = 10
-        )
-    }
-
-    val validRecords = mutableListOf<com.vincenthzr.locationspoofer.data.db.CompleteLocation>()
-    for (record in nearbyCandidates) {
-        val dist = calculateDistanceMeters(lat, lng, record.location.lat, record.location.lng)
-        if (dist <= 50.0) {
-            validRecords.add(record)
-        }
-    }
-
-    // 按与目标点距离从近到远排序
-    validRecords.sortBy { calculateDistanceMeters(lat, lng, it.location.lat, it.location.lng) }
+    val validRecords = environmentRecordsAt(lat, lng).toMutableList()
 
     // 若用户当前明确锁定了某个 50m 内的采集点，则将其置于首位最高优先级
     if (pinnedRecord != null) {
@@ -490,53 +446,11 @@ internal suspend fun MainViewModel.evaluateMockCapabilitiesSuspend(lat: Double, 
     }
 }
 
-internal suspend fun MainViewModel.hasLocalWifiWithin50m(lat: Double, lng: Double): Boolean {
-    val radLat = Math.toRadians(lat)
-    val degLat = 65.0 / 111320.0
-    val degLng = 65.0 / (111320.0 * maxOf(0.1, kotlin.math.cos(radLat)))
+internal suspend fun MainViewModel.hasLocalWifiWithin50m(lat: Double, lng: Double): Boolean =
+    environmentRecordsAt(lat, lng).any { it.wifis.isNotEmpty() || it.connectedWifi != null }
 
-    val nearby = withContext(Dispatchers.IO) {
-        environmentDao.getCompleteLocationsInBounds(
-            minLat = lat - degLat,
-            maxLat = lat + degLat,
-            minLng = lng - degLng,
-            maxLng = lng + degLng,
-            limit = 5
-        )
-    }
-    for (record in nearby) {
-        if (record.wifis.isEmpty() && record.connectedWifi == null) continue
-        val distance = calculateDistanceMeters(lat, lng, record.location.lat, record.location.lng)
-        if (distance <= 50.0) {
-            return true
-        }
-    }
-    return false
-}
-
-internal suspend fun MainViewModel.hasLocalCellsWithin50m(lat: Double, lng: Double): Boolean {
-    val radLat = Math.toRadians(lat)
-    val degLat = 65.0 / 111320.0
-    val degLng = 65.0 / (111320.0 * maxOf(0.1, kotlin.math.cos(radLat)))
-
-    val nearby = withContext(Dispatchers.IO) {
-        environmentDao.getCompleteLocationsInBounds(
-            minLat = lat - degLat,
-            maxLat = lat + degLat,
-            minLng = lng - degLng,
-            maxLng = lng + degLng,
-            limit = 5
-        )
-    }
-    for (record in nearby) {
-        if (record.cells.isEmpty()) continue
-        val distance = calculateDistanceMeters(lat, lng, record.location.lat, record.location.lng)
-        if (distance <= 50.0) {
-            return true
-        }
-    }
-    return false
-}
+internal suspend fun MainViewModel.hasLocalCellsWithin50m(lat: Double, lng: Double): Boolean =
+    environmentRecordsAt(lat, lng).any { it.cells.isNotEmpty() }
 
 internal suspend fun MainViewModel.fetchWifiFromWigleSync(lat: Double, lng: Double) {
     val settingsToken = settingsRepository.getWigleApiToken()

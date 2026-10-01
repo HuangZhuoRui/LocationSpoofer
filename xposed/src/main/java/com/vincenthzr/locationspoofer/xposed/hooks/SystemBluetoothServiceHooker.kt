@@ -64,6 +64,26 @@ private var isBleTimerStarted = false
 @Volatile
 internal var isBluetoothServiceHooked = false
 
+internal fun saveSystemBleReloadState(): Array<Any> = activeBleScanners.mapNotNull { (binder, info) ->
+    info.callbackRef.get()?.let { callback -> arrayOf<Any>(binder, callback, info.packageName, info.registeredTime) }
+}.toTypedArray()
+
+internal fun clearSystemBleReloadState() {
+    isBleTimerStarted = false
+    activeBleScanners.clear()
+}
+
+internal fun LocationHooker.restoreSystemBleReloadState(value: Any?) {
+    (value as? Array<*>)?.filterIsInstance<Array<*>>()?.forEach { row ->
+        val binder = row[0] as IBinder
+        if (!binder.isBinderAlive) return@forEach
+        val callback = row[1]!!
+        activeBleScanners[binder] = BleScannerRegistration(WeakReference(callback), row[2] as String, row[3] as Long)
+        ensureScannerCallbackHooked(callback)
+        runCatching { ModuleBinderDeaths.watch(binder) { activeBleScanners.remove(binder) } }
+    }
+}
+
 internal fun LocationHooker.hookSystemBluetoothService(classLoader: ClassLoader) {
     if (isBluetoothServiceHooked) return
     if (com.vincenthzr.locationspoofer.xposed.hooks.vendor.VendorRegistry.active.usesFrameworkBleDelivery) return
@@ -141,11 +161,15 @@ private fun LocationHooker.hookScannerEntry(
                         if (dispatchDelayMs == 0L) {
                             dispatchFakeBeaconsToActiveScanners(config, classLoader)
                         } else {
-                            Timer("LocationSpoofer-SysBleFirst", true).schedule(object : TimerTask() {
+                            val delayed = ownReloadTimer(Timer("LocationSpoofer-SysBleFirst", true))
+                            delayed.schedule(object : TimerTask() {
                                 override fun run() {
                                     try {
                                         dispatchFakeBeaconsToActiveScanners(readConfig() ?: return, classLoader)
-                                    } catch (_: Throwable) {}
+                                    } catch (_: Throwable) {} finally {
+                                        delayed.cancel()
+                                        releaseReloadTimer(delayed)
+                                    }
                                 }
                             }, dispatchDelayMs)
                         }
@@ -171,10 +195,10 @@ private fun LocationHooker.registerTargetScanner(args: List<Any?>, explicitPkg: 
     val pkgName = explicitPkg ?: "unknown"
     activeBleScanners[binder] = BleScannerRegistration(callbackRef = WeakReference(callback), packageName = pkgName)
     try {
-        binder.linkToDeath({
+        ModuleBinderDeaths.watch(binder) {
             activeBleScanners.remove(binder)
             sysLog("[SysBle] Scanner callback died and removed for $pkgName")
-        }, 0)
+        }
     } catch (_: Throwable) {}
     ensureScannerCallbackHooked(callback)
     sysLog("[SysBle] Registered target BLE scanner for $pkgName (total active: ${activeBleScanners.size})")
@@ -188,7 +212,7 @@ private fun LocationHooker.startSystemBleHeartbeat(classLoader: ClassLoader) {
         isBleTimerStarted = true
     }
 
-    val timer = Timer("LocationSpoofer-SysBleHeartbeat", true)
+    val timer = ownReloadTimer(Timer("LocationSpoofer-SysBleHeartbeat", true))
     timer.scheduleAtFixedRate(object : TimerTask() {
         override fun run() {
             try {

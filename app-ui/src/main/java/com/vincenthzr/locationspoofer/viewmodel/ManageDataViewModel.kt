@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -26,8 +27,10 @@ class ManageDataViewModel(private val environmentDao: EnvironmentDao) : ViewMode
         observationJob?.cancel()
         _uiState.update { it.copy(isLoading = true) }
         observationJob = viewModelScope.launch {
-            environmentDao.observeAllCompleteLocations().distinctUntilChanged().collect { list ->
-                _uiState.update { it.copy(dataList = list, isLoading = false) }
+            combine(environmentDao.observeAllCompleteLocations(), environmentDao.observeCollectionRoutes()) { list, routes ->
+                list.filter { it.location.collectionRouteId == null } to routes
+            }.distinctUntilChanged().collect { (list, routes) ->
+                _uiState.update { it.copy(dataList = list, collectionRoutes = routes, isLoading = false) }
             }
         }
     }
@@ -252,6 +255,7 @@ class ManageDataViewModel(private val environmentDao: EnvironmentDao) : ViewMode
 
     fun clearAllManageData() {
         viewModelScope.launch(Dispatchers.IO) {
+            environmentDao.clearCollectionRoutes()
             environmentDao.clearAll()
         }
     }

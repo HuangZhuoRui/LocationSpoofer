@@ -55,6 +55,7 @@ import com.vincenthzr.locationspoofer.ui.theme.AccentBlue
 import com.vincenthzr.locationspoofer.ui.theme.AccentOrange
 import com.vincenthzr.locationspoofer.ui.theme.noRippleClickable
 import com.vincenthzr.locationspoofer.ui.components.MapCoverageHelper
+import com.vincenthzr.locationspoofer.viewmodel.prepareRouteSimulationOptions
 import com.vincenthzr.locationspoofer.viewmodel.MainViewModel
 import com.vincenthzr.locationspoofer.viewmodel.setAltitude
 import com.vincenthzr.locationspoofer.viewmodel.setAltitudeVariation
@@ -98,6 +99,7 @@ fun RouteTab(
     bottomBarHeight: Dp = 90.dp,
     manageDataViewModel: ManageDataViewModel = koinViewModel()
 ) {
+    val collectionRoutes by viewModel.collectionRoutes.collectAsState()
     val context = LocalContext.current
     var showMapTypeDialog by remember { mutableStateOf(false) }
     var showConfigDialog by remember { mutableStateOf(false) }
@@ -173,10 +175,13 @@ fun RouteTab(
 
     val manageDataList = manageDataViewModel.uiState.collectAsState().value.dataList
     var liveMarker by remember { mutableStateOf<AppMapMarker?>(null) }
-    LaunchedEffect(routePoints, mapController, manageDataList, isActive) {
+    LaunchedEffect(routePoints, mapController, manageDataList, isActive, collectionRoutes, uiState.selectedCollectionRouteId) {
         if (!isActive) return@LaunchedEffect
         val map = mapController ?: return@LaunchedEffect
         map.clear()
+        collectionRoutes.firstOrNull { it.route.id == uiState.selectedCollectionRouteId }?.let {
+            com.vincenthzr.locationspoofer.ui.components.CollectionRouteMapHelper.draw(map, it.route)
+        }
         liveMarker = null
         val locations = manageDataList.map { it.location }
         MapCoverageHelper.drawCoverage(map, locations)
@@ -244,9 +249,10 @@ fun RouteTab(
         }
     }
 
-    LaunchedEffect(uiState.routePlanStage, routePoints, isActive) {
+    LaunchedEffect(uiState.routePlanStage, routePoints, isActive, mapController, uiState.selectedCollectionRouteId) {
         if (!isActive) return@LaunchedEffect
-        if (uiState.routePlanStage == RoutePlanStage.RUNNING && routePoints.size >= 2) {
+        if ((uiState.routePlanStage == RoutePlanStage.RUNNING ||
+                (uiState.routePlanStage == RoutePlanStage.READY && uiState.selectedCollectionRouteId != null)) && routePoints.size >= 2) {
             val padLeft = with(density) { 36.dp.roundToPx() }
             val padTop = with(density) { 80.dp.roundToPx() }
             val padRight = with(density) { 36.dp.roundToPx() }
@@ -478,7 +484,7 @@ fun RouteTab(
                         viewModel.restartSelectingPoints()
                     },
                     onSaveRoute = { showSaveRouteDialog = true },
-                    onStartPlanning = { showConfigDialog = true },
+                    onStartPlanning = { viewModel.prepareRouteSimulationOptions { showConfigDialog = true } },
                     onStopRoute = {
                         viewModel.stopRoutePlanning()
                     },

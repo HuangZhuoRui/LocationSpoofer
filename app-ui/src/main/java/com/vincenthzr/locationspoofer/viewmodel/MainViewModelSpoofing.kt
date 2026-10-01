@@ -20,7 +20,7 @@ import kotlinx.coroutines.withContext
 internal fun MainViewModel.startSpoofing() {
     val state = _uiState.value
 
-    if (state.isContinuousScanning) {
+    if (state.isContinuousScanning || state.isStoppingCollection) {
         android.widget.Toast.makeText(
             context,
             context.getString(com.vincenthzr.locationspoofer.ui.R.string.disable_continuous_scan_first),
@@ -211,107 +211,148 @@ private fun MainViewModel.syncMockSettings() {
 }
 
 internal fun MainViewModel.toggleContinuousScanning() {
-    if (_uiState.value.isSpoofingActive) {
+    val state = _uiState.value
+    if (state.isStoppingCollection || state.pendingCollectionLocations.isNotEmpty() || state.pendingCollectionRoute != null) return
+    if (state.isSpoofingActive) {
         android.widget.Toast.makeText(
             context,
-            context.getString(com.vincenthzr.locationspoofer.ui.R.string.disable_continuous_scan_route_first),
+            context.getString(R.string.stop_spoofing_before_scan),
             android.widget.Toast.LENGTH_SHORT
         ).show()
         return
     }
 
-    if (_uiState.value.isSpoofingActive) {
-        android.widget.Toast.makeText(
-            context,
-            context.getString(com.vincenthzr.locationspoofer.ui.R.string.stop_spoofing_before_scan),
-            android.widget.Toast.LENGTH_SHORT
-        ).show()
+    if (state.isContinuousScanning) {
+        _uiState.update { it.copy(isContinuousScanning = false, isStoppingCollection = true) }
+        // 最后一轮 NonCancellable 扫描与保存结束后，finally 才显示信息弹窗。
+        continuousScanJob?.cancel()
         return
     }
 
-    val currentState = _uiState.value.isContinuousScanning
-    _uiState.update { it.copy(isContinuousScanning = !currentState) }
+    if (state.isRouteCollection && (state.isDrawingCollectionRoute || state.collectionRoutePoints.size < 2)) return
 
-    if (!currentState) {
-        // Start scanning
-        _uiState.update {
-            it.copy(
-                scannedWifiCount = 0,
-                scannedCellCount = 0,
-                scannedBluetoothCount = 0
-            )
-        }
-        continuousScanJob = viewModelScope.launch(Dispatchers.IO) {
+    _uiState.update {
+        it.copy(
+            isContinuousScanning = true,
+            scannedWifiCount = 0,
+            scannedCellCount = 0,
+            scannedBluetoothCount = 0
+        )
+    }
+    continuousScanJob = viewModelScope.launch(Dispatchers.IO) {
+        val savedIds = linkedSetOf<Long>()
+        var routeId: Long? = null
+        try {
+            if (state.isRouteCollection) {
+                val route = com.vincenthzr.locationspoofer.data.db.CollectionRouteRecord(
+                    name = context.getString(R.string.collection_route_default_name,
+                        java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date())),
+                    pointsJson = kotlinx.serialization.json.Json.encodeToString(
+                        kotlinx.serialization.builtins.ListSerializer(com.vincenthzr.locationspoofer.data.model.RoutePoint.serializer()),
+                        state.collectionRoutePoints),
+                    halfWidthM = 50.0
+                )
+                withContext(NonCancellable) { routeId = environmentDao.insertCollectionRoute(route) }
+            }
             while (isActive) {
                 val realLoc = fetchRealLocationSilent(context)
-                if (realLoc != null) {
+                val insideRoute = !state.isRouteCollection || (realLoc != null &&
+                    com.vincenthzr.locationspoofer.utils.PolylineCoverage.distanceMeters(
+                        com.vincenthzr.locationspoofer.utils.CoordinateUtils.LatLng(realLoc.first, realLoc.second),
+                        state.collectionRoutePoints.map { com.vincenthzr.locationspoofer.utils.CoordinateUtils.LatLng(it.lat, it.lng) }
+                    ) <= 50.0)
+                if (realLoc != null && insideRoute) {
                     val lat = realLoc.first
                     val lng = realLoc.second
-
-                    // 用户点"停止采集"时 job 会被 cancel()，如果扫描/落库中途被取消，
-                    // 这一轮已经扫到的数据会直接丢失（对应 issue #59）。
-                    // 用 NonCancellable 包住这段，保证一轮扫描+保存要么完整做完要么还没开始，
-                    // 取消信号只会在下一次 delay 处生效。
-                    var saveFailed = false
                     withContext(NonCancellable) {
                         val wifiJson = environmentScanner.scanWifi()
                         val cellJson = environmentScanner.scanCell()
                         val bluetoothJson = environmentScanner.scanBluetooth()
-
+                        val id = saveEnvironmentData(lat, lng, wifiJson, cellJson, bluetoothJson, mergeNearby = true, collectionRouteId = routeId)
+                        savedIds += id
                         val wCount = parseWifiCount(wifiJson)
-                        val cCount = try {
-                            org.json.JSONArray(cellJson).length()
-                        } catch (e: Exception) {
-                            0
+                        val cCount = org.json.JSONArray(cellJson).length()
+                        val bCount = org.json.JSONArray(bluetoothJson).length()
+                        _uiState.update {
+                            it.copy(
+                                scannedWifiCount = it.scannedWifiCount + wCount,
+                                scannedCellCount = it.scannedCellCount + cCount,
+                                scannedBluetoothCount = it.scannedBluetoothCount + bCount
+                            )
                         }
-                        val bCount = try {
-                            org.json.JSONArray(bluetoothJson).length()
-                        } catch (e: Exception) {
-                            0
-                        }
-
-                        try {
-                            saveEnvironmentData(lat, lng, wifiJson, cellJson, bluetoothJson)
-                        } catch (e: Exception) {
-                            // 之前这里的异常会未捕获地冒泡出去，直接把整个采集协程杀死，
-                            // 但 isContinuousScanning 不会被重置，UI 会一直显示"采集中"，
-                            // 用户毫无感知（对应 issue #60 里"有时会采集失败或保存失败却没有提示"）。
-                            e.printStackTrace()
-                            saveFailed = true
-                        }
-
-                        if (!saveFailed) {
-                            _uiState.update {
-                                it.copy(
-                                    scannedWifiCount = it.scannedWifiCount + wCount,
-                                    scannedCellCount = it.scannedCellCount + cCount,
-                                    scannedBluetoothCount = it.scannedBluetoothCount + bCount
-                                )
-                            }
-                        }
-                    }
-
-                    if (saveFailed) {
-                        withContext(Dispatchers.Main) {
-                            android.widget.Toast.makeText(
-                                context,
-                                context.getString(com.vincenthzr.locationspoofer.ui.R.string.collection_save_failed),
-                                android.widget.Toast.LENGTH_LONG
-                            ).show()
-                        }
-                        _uiState.update { it.copy(isContinuousScanning = false) }
-                        continuousScanJob = null
-                        break
                     }
                 }
-
-                // 扫描之间延迟 10 秒
-                delay(10000)
+                delay(10_000)
+            }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            error.printStackTrace()
+            withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(context, R.string.collection_save_failed, android.widget.Toast.LENGTH_LONG).show()
+            }
+        } finally {
+            withContext(NonCancellable) {
+                val records = try {
+                    savedIds.mapNotNull { environmentDao.getCompleteLocationById(it)?.location }
+                } catch (error: Exception) {
+                    error.printStackTrace()
+                    emptyList()
+                }
+                val savedRoute = routeId?.let { id ->
+                    if (savedIds.isEmpty()) {
+                        environmentDao.deleteCollectionRoute(id)
+                        null
+                    } else runCatching { environmentDao.getCollectionRoute(id)?.route }.getOrNull()
+                }
+                withContext(Dispatchers.Main) {
+                    val requestedStop = _uiState.value.isStoppingCollection
+                    continuousScanJob = null
+                    _uiState.update {
+                        it.copy(
+                            isContinuousScanning = false,
+                            isStoppingCollection = false,
+                            pendingCollectionLocations = if (routeId == null) records else emptyList(),
+                            pendingCollectionRoute = savedRoute
+                        )
+                    }
+                    if (requestedStop && savedIds.isEmpty()) {
+                        android.widget.Toast.makeText(context, R.string.collection_no_saved_points, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
             }
         }
-    } else {
-        // Stop scanning
-        continuousScanJob?.cancel()
-        continuousScanJob = null
+    }
+}
+
+internal fun MainViewModel.skipCollectionInfo() {
+    if (_uiState.value.isSavingCollectionInfo) return
+    _uiState.update { it.copy(pendingCollectionLocations = it.pendingCollectionLocations.drop(1)) }
+}
+
+internal fun MainViewModel.saveCollectionInfo(locationId: Long, placeName: String, remark: String) {
+    val state = _uiState.value
+    if (state.isSavingCollectionInfo || state.pendingCollectionLocations.firstOrNull()?.id != locationId) return
+    _uiState.update { it.copy(isSavingCollectionInfo = true) }
+    viewModelScope.launch {
+        try {
+            withContext(Dispatchers.IO) {
+                environmentDao.updateBasicInfo(locationId, placeName.trim(), remark.trim())
+            }
+            _uiState.update {
+                it.copy(
+                    isSavingCollectionInfo = false,
+                    pendingCollectionLocations = it.pendingCollectionLocations.drop(1),
+                    pinnedLocationName = if (it.pinnedCollectedLocationId == locationId) {
+                        remark.trim().ifBlank { placeName.trim() }.ifBlank { it.pinnedLocationName }
+                    } else it.pinnedLocationName
+                )
+            }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            _uiState.update { it.copy(isSavingCollectionInfo = false) }
+            android.widget.Toast.makeText(context, R.string.collection_info_save_failed, android.widget.Toast.LENGTH_LONG).show()
+        }
     }
 }

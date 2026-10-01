@@ -24,6 +24,14 @@ import org.json.JSONObject
 object HookStatus {
 
     const val FORMAT_VERSION = 1
+    val generationId: String = java.util.UUID.randomUUID().toString()
+    @Volatile private var hotReload = false
+    @Volatile private var closed = false
+    fun markHotReload() { hotReload = true }
+    @Synchronized fun close() {
+        closed = true
+        if (writerDelegate.isInitialized()) writer.shutdownNow()
+    }
 
     /** 各进程报告的落盘位置，与 App 端共用（见 core-geo 的 HookStatusFiles） */
     fun reportPaths(process: SystemProcess): List<String> = HookStatusFiles.paths(process.name)
@@ -37,11 +45,12 @@ object HookStatus {
     private val errors = java.util.Collections.synchronizedList(ArrayList<String>())
 
     // 普通 App 进程里 hookAllMethods 也会调到这里，写线程只在真正需要落盘的系统进程里创建
-    private val writer by lazy {
+    private val writerDelegate = lazy {
         Executors.newSingleThreadScheduledExecutor { r ->
             Thread(r, "LocationSpoofer-HookStatus").apply { isDaemon = true }
         }
     }
+    private val writer by writerDelegate
     private val writePending = AtomicBoolean(false)
 
     /** 在系统进程开始部署 Hook 时调用，之后的记录才会落盘 */
@@ -86,8 +95,8 @@ object HookStatus {
         scheduleWrite()
     }
 
-    private fun scheduleWrite() {
-        if (process == null) return
+    @Synchronized private fun scheduleWrite() {
+        if (closed || process == null) return
         if (!writePending.compareAndSet(false, true)) return
         writer.schedule({
             writePending.set(false)
@@ -135,6 +144,9 @@ object HookStatus {
         }
         return JSONObject().apply {
             put("format", FORMAT_VERSION)
+            put("generation", generationId)
+            put("load_kind", if (hotReload) "hot-reload" else "initial")
+            put("pid", android.os.Process.myPid())
             put("process", proc.name)
             put("updated_at", System.currentTimeMillis())
             put("vendor", JSONObject().apply {

@@ -439,4 +439,14 @@
     <string name="save_bt">حفظ البلوتوث</string>
     <string name="edit_coordinates_title">إحداثيات نقطة الجمع</string>
     <string name="edit_coordinates_desc">تعديل الإحداثيات المرتبطة بنقطة الجمع هذه لإعادة استخدام بيانات بيئة Wi-Fi والخلية والبلوتوث في الموقع الهدف</string>
+
+    <string name="collection_info_title">تفاصيل نقطة الجمع</string>
+    <string name="collection_info_description">تم حفظ البيانات. أضف اسم الموقع وملاحظة لتسهيل العثور على هذه النقطة لاحقًا.</string>
+    <string name="collection_info_remaining">تبقى %d نقاط لإضافة تفاصيلها.</string>
+    <string name="collection_location_name">اسم الموقع</string>
+    <string name="collection_info_skip">تخطي</string>
+    <string name="collection_info_saving">جارٍ الحفظ…</string>
+    <string name="collection_stopping">جارٍ إنهاء الجمع…</string>
+    <string name="collection_no_saved_points">لم يتم حفظ أي نقاط. تحقق من الموقع وأذونات الجمع ثم حاول مجددًا.</string>
+    <string name="collection_info_save_failed">تعذر حفظ تفاصيل النقطة. حاول مجددًا.</string>
 </resources>
