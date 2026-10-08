@@ -27,7 +27,14 @@ import java.util.WeakHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.function.Predicate
 
-/** ColorOS moved BLE scanning out of GattService into le_scan.TransitionalScanHelper. */
+/**
+ * ColorOS16 BLE 扫描派发 hook。该版本存在两代实现：
+ * - PJX110 系列：le_scan.TransitionalScanHelper（OPPO 自研桥接 helper）；
+ * - PLC110 等重构固件：无 TransitionalScanHelper，派发逻辑在 le_scan.ScanController
+ *   （+ ScanManager / ScannerMap / ScanBinder），字段命名带 m 前缀（如 mScannerId）。
+ * 候选类名见 ColorOs16Vendor.classCandidates；字段差异由 ColorOs16HookSupport.field 的
+ * m 前缀自动回退 + getOf 多候选探测统一兼容，两代通吃。
+ */
 internal class ColorOs16BleDelivery(module: LocationHooker, loader: ClassLoader) :
     ColorOs16HookSupport(module, loader, "BLE") {
     private class Owner {
@@ -50,7 +57,7 @@ internal class ColorOs16BleDelivery(module: LocationHooker, loader: ClassLoader)
     private lateinit var sendIntent: Method
     private lateinit var dead: Method
 
-    fun install() = section("TransitionalScanHelper") {
+    fun install() = section("BleDelivery") {
         val helper = SystemClassLocator.locate(SystemComponent.BLUETOOTH_SCAN_SERVICE, loader)
             ?: error("BLE scan helper unavailable")
         val client = helper.declaredMethods.first { it.name == "hasScanResultPermission" }.parameterTypes[0]
@@ -99,9 +106,10 @@ internal class ColorOs16BleDelivery(module: LocationHooker, loader: ClassLoader)
                 config.optBoolean("mock_bluetooth", true) && target(who, config, chain.thisObject)) null
             else chain.proceed(chain.args.toTypedArray())
         }
-        // Only an app-requested flush may bypass reportDelay. Hardware thresholds and
-        // periodic controller flushes share the same handler and must not shorten it.
-        hook(method(helper, "flushPendingBatchResults", Int::class.javaPrimitiveType!!, AttributionSource::class.java)) { chain ->
+        // 两代兼容：PJX110 的 TransitionalScanHelper 有 (int,AttributionSource)；ScanController 结构该签名在 ScanBinder 上
+        val flushMethod = runCatching { method(helper, "flushPendingBatchResults", Int::class.javaPrimitiveType!!, AttributionSource::class.java) }
+            .getOrElse { method(type("com.android.bluetooth.le_scan.ScanBinder"), "flushPendingBatchResults", Int::class.javaPrimitiveType!!, AttributionSource::class.java) }
+        hook(flushMethod) { chain ->
             val source = chain.args[1] as AttributionSource
             explicitFlush.withValue(source.uid >= 10000 && source.uid == Binder.getCallingUid()) {
                 chain.proceed(chain.args.toTypedArray())
@@ -118,7 +126,7 @@ internal class ColorOs16BleDelivery(module: LocationHooker, loader: ClassLoader)
             val result = chain.proceed(chain.args.toTypedArray())
             guard("flush") {
                 val scanManager = get(chain.thisObject!!, "this\$0")!!
-                val helperObject = get(scanManager, "mScanHelper")!!
+                val helperObject = getOf(scanManager, "mScanHelper", "mScanController")!!
                 tick(helperObject, owner(helperObject), get(chain.args[0]!!, "scannerId") as Int, forced)
             }
             result
@@ -239,7 +247,7 @@ internal class ColorOs16BleDelivery(module: LocationHooker, loader: ClassLoader)
 
     private fun permitted(helper: Any, client: Any, who: ColorOsCaller): Boolean {
         if (permission.invoke(helper, client) != true) return false
-        val context = get(helper, "mContext") as Context
+        val context = getOf(helper, "mContext", "mAdapterService") as Context
         val pkg = who.pkg ?: return false
         val ops = context.getSystemService(AppOpsManager::class.java)
         // Recheck revocation while a session is already running; no fabricated denied result.
