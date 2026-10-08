@@ -18,6 +18,9 @@ object ColorOs16Vendor : SystemVersionVendor(ColorOsVendor) {
 
     override fun classCandidates(component: SystemComponent): List<String> = when (component) {
         SystemComponent.BLUETOOTH_SCAN_SERVICE -> listOf(
+            // 两代 ColorOS16 BLE 实现：重构固件用 ScanController，PJX110 系列用 TransitionalScanHelper。
+            // SystemClassLocator 按候选顺序逐个查找，先到先得，两代通吃。
+            "com.android.bluetooth.le_scan.ScanController",
             "com.android.bluetooth.le_scan.TransitionalScanHelper"
         )
         SystemComponent.CONNECTIVITY_SERVICE -> listOf(
