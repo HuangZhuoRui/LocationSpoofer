@@ -26,12 +26,31 @@ internal open class ColorOs16HookSupport(
 
     protected fun type(name: String): Class<*> = Class.forName(name, false, loader)
     protected fun field(type: Class<*>, name: String): Field {
+        // 两代 ColorOS16 固件字段命名差异：PJX110 用无 m 前缀，重构固件用 m 前缀。
+        // 找不到原名时自动补试 "m"+首字母大写，两代通吃。
+        val candidates = if (name.startsWith("m") || name.isEmpty()) listOf(name)
+            else listOf(name, "m" + name.replaceFirstChar { it.uppercase() })
         var current: Class<*>? = type
         while (current != null) {
-            try { return current.getDeclaredField(name).apply { isAccessible = true } }
-            catch (_: NoSuchFieldException) { current = current.superclass }
+            for (c in candidates) {
+                try { return current.getDeclaredField(c).apply { isAccessible = true } }
+                catch (_: NoSuchFieldException) { }
+            }
+            current = current.superclass
         }
-        throw NoSuchFieldException("${type.name}.$name")
+        throw NoSuchFieldException("${type.name}.${candidates.joinToString()}")
+    }
+    protected fun getOf(obj: Any, vararg names: String): Any? {
+        // 结构化差异字段（如 mScanHelper/mScanController、mContext/mAdapterService）按候选逐个探测
+        var current: Class<*>? = obj.javaClass
+        while (current != null) {
+            for (name in names) {
+                try { return current.getDeclaredField(name).apply { isAccessible = true }.get(obj) }
+                catch (_: NoSuchFieldException) { }
+            }
+            current = current.superclass
+        }
+        throw NoSuchFieldException("${obj.javaClass.name}.${names.joinToString()}")
     }
     protected fun method(type: Class<*>, name: String, vararg parameters: Class<*>): Method {
         var current: Class<*>? = type
