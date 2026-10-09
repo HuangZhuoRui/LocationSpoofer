@@ -66,8 +66,8 @@ internal class ColorOs16BleDelivery(module: LocationHooker, loader: ClassLoader)
         scannerInterface = type("android.bluetooth.le.IScannerCallback")
         permission = method(helper, "hasScanResultPermission", client)
         matches = method(helper, "matchesFilters", client, ScanResult::class.java)
-        sendBatch = method(helper, "sendBatchScanResults", app, client, ArrayList::class.java)
-        sendIntent = method(helper, "sendResultsByPendingIntent", intentInfo, ArrayList::class.java, Int::class.javaPrimitiveType!!)
+        sendBatch = method(helper, "sendBatchScanResults", app, client, List::class.java)
+        sendIntent = method(helper, "sendResultsByPendingIntent", intentInfo, List::class.java, Int::class.javaPrimitiveType!!)
         dead = method(helper, "handleDeadScanClient", client)
         val manager = field(helper, "mScanManager").type
         field(manager, "mHandler") // Probe before installing the callback filters.
