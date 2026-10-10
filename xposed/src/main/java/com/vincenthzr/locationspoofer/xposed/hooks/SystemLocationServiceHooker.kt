@@ -986,7 +986,14 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
     } catch (_: Throwable) {}
 
     // 屏蔽目标应用的底层伪距与导航电文回调，防止泄露真实原始测量特征
-    val suppressCallbackMethods = arrayOf("registerGnssMeasurementsCallback", "registerGnssNavigationMessageCallback")
+    // 原版注册方法为 registerGnssMeasurementsCallback / registerGnssNavigationMessageCallback。
+    // 新增候选 addGnssMeasurementsListener / addGnssNavigationMessageListener：
+    // ColorOS16 重构固件（如 PLC110）的 LocationManagerService 已将这两个注册方法改名为 add*Listener，
+    // 原 register 命名在该类固件上不存在。保留原方法名向后兼容（既有固件不受影响），命中哪个就用哪个。
+    val suppressCallbackMethods = arrayOf(
+        "registerGnssMeasurementsCallback", "addGnssMeasurementsListener",
+        "registerGnssNavigationMessageCallback", "addGnssNavigationMessageListener"
+    )
     for (mName in suppressCallbackMethods) {
         try {
             XposedHelpers.hookAllMethods(serviceClazz, mName) { chain, _ ->
@@ -994,8 +1001,20 @@ internal fun LocationHooker.hookSystemLocationService(classLoader: ClassLoader) 
                 if (config != null && config.optBoolean("active", false)) {
                     val explicitPkg = SystemHookUtils.extractPackageName(chain.args)
                     if (SystemHookUtils.isTargetCaller(chain.thisObject, explicitPkg, config)) {
+                        // 取 GNSS 监听回调对象（Binder listener）：
+                        // 取 GNSS 监听回调对象（Binder listener）：
+                        // 【原版】register* 命名：回调对象 = 参数中第一个"非 String 非 Int"的参数（首参即 listener）。
+                        // 【新增】add*Listener 命名（PLC110）：addGnssMeasurementsListener 首参是 GnssMeasurementRequest
+                        //        （非 listener），按首参取会取错，须按接口类型精确提取 IGnssMeasurementsListener /
+                        //        IGnssNavigationMessageListener；register* 命名的 listener 实现 IGnssMeasurementCallback /
+                        //        IGnssNavigationMessageCallback。两种接口名都匹配，兼容新旧固件。
                         val cb = chain.args.firstOrNull { arg ->
-                            arg != null && arg !is String && arg !is Int
+                            arg != null && (
+                                LocationHooker.hasTypeByName(arg.javaClass, "android.location.IGnssMeasurementsListener") ||
+                                LocationHooker.hasTypeByName(arg.javaClass, "android.location.IGnssMeasurementCallback") ||
+                                LocationHooker.hasTypeByName(arg.javaClass, "android.location.IGnssNavigationMessageListener") ||
+                                LocationHooker.hasTypeByName(arg.javaClass, "android.location.IGnssNavigationMessageCallback")
+                                )
                         }
                         if (cb != null) {
                             suppressCallbackMethods(cb, "onGnssMeasurementsReceived", "onGnssNavigationMessageReceived")
