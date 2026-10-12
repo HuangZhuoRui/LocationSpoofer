@@ -99,16 +99,16 @@ jobs:
           # 初始化 changelog 文件
           echo "" > changelog.txt
           
-          # 提取功能更新 (feat:)
-          FEATS=$(echo "$COMMITS" | grep "^feat:" | sed 's/^feat:[[:space:]]*/- /' || true)
+          # 提取功能更新 (feat: / feat(scope):)
+          FEATS=$(echo "$COMMITS" | grep -E '^feat(\([^()]+\))?:' | sed -E 's/^feat(\([^()]+\))?:[[:space:]]*/- /' || true)
           if [ -n "$FEATS" ]; then
             echo "## 功能" >> changelog.txt
             echo "$FEATS" >> changelog.txt
             echo "" >> changelog.txt
           fi
           
-          # 提取修复 (fix:)
-          FIXES=$(echo "$COMMITS" | grep "^fix:" | sed 's/^fix:[[:space:]]*/- /' || true)
+          # 提取修复 (fix: / fix(scope):)
+          FIXES=$(echo "$COMMITS" | grep -E '^fix(\([^()]+\))?:' | sed -E 's/^fix(\([^()]+\))?:[[:space:]]*/- /' || true)
           if [ -n "$FIXES" ]; then
             echo "## 修复" >> changelog.txt
             echo "$FIXES" >> changelog.txt
