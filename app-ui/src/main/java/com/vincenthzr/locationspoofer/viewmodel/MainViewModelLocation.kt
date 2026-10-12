@@ -37,8 +37,8 @@ internal fun MainViewModel.fetchCurrentLocation(ctx: Context, forceCallback: ((D
                 if (_uiState.value.longitudeInput.isEmpty() || _uiState.value.latitudeInput.isEmpty() || forceCallback != null) {
                     _uiState.update {
                         it.copy(
-                            latitudeInput = String.format("%.6f", loc.latitude),
-                            longitudeInput = String.format("%.6f", loc.longitude),
+                            latitudeInput = formatCoordinateInput(loc.latitude),
+                            longitudeInput = formatCoordinateInput(loc.longitude),
                             showCoordinateError = false
                         )
                     }
@@ -146,8 +146,8 @@ private fun MainViewModel.applyNativeLocation(
     if (_uiState.value.longitudeInput.isEmpty() || _uiState.value.latitudeInput.isEmpty() || forceCallback != null) {
         _uiState.update {
             it.copy(
-                latitudeInput = String.format("%.6f", finalLat),
-                longitudeInput = String.format("%.6f", finalLng),
+                latitudeInput = formatCoordinateInput(finalLat),
+                longitudeInput = formatCoordinateInput(finalLng),
                 showCoordinateError = false
             )
         }
