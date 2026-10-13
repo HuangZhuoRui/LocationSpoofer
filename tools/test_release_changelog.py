@@ -5,6 +5,7 @@ Run from any directory with: python3 tools/test_release_changelog.py
 
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import unittest
 
@@ -20,8 +21,9 @@ def release_entries(variable, commits):
     ]
     if len(assignments) != 1:
         raise AssertionError(f"Expected one {variable} filter in the release workflow")
+    # Windows 的进程搜索顺序可能先找到 WSL；完整路径才能保留 PATH 选中的 Bash。
     result = subprocess.run(
-        ["bash", "-e", "-o", "pipefail", "-c",
+        [shutil.which("bash") or "bash", "-e", "-o", "pipefail", "-c",
          assignments[0] + f'\nprintf "%s" "${{{variable}}}"'],
         env={**os.environ, "COMMITS": "\n".join(commits)},
         check=True,
