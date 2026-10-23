@@ -1,5 +1,7 @@
 # LocationSpoofer
 
+> 💬 **[加入 Telegram 讨论群](https://t.me/+GYuDlpQLzRc3OTc1)** · 交流测试需求、反馈问题、关注开发进展，也欢迎吹水。
+
 Android 定位、路线及环境数据模拟项目。项目现正转向面向开发者的 Android 模拟器测试工具。
 
 [简体中文](README.md) | [English](README_EN.md)

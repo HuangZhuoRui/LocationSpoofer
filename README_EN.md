@@ -1,5 +1,7 @@
 # LocationSpoofer
 
+> 💬 **[Join the Telegram discussion group](https://t.me/+GYuDlpQLzRc3OTc1)** · Discuss testing needs, report issues, follow development updates, or just chat.
+
 An Android project for location, route, and environmental data simulation, now transitioning to an Android emulator for developer testing.
 
 [简体中文](README.md) | [English](README_EN.md)
