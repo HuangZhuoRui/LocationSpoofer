@@ -1,8 +1,14 @@
-# LocationSpoofer
+# AwesomeDroid
+
+### From LocationSpoofer to Android development and testing
 
 > 💬 **[Join the Telegram discussion group](https://t.me/+GYuDlpQLzRc3OTc1)** · Discuss testing needs, report issues, follow development updates, or just chat.
 
-An Android project for location, route, and environmental data simulation, now transitioning to an Android emulator for developer testing.
+**LocationSpoofer is taking a new direction under its new name: AwesomeDroid.**
+
+From a location and environment simulation tool to an Android 17-based emulator for development and testing, we aim to bring location, route, sensor, and wireless environment simulation into a more controlled test environment, helping developers validate their own applications.
+
+This repository will remain the home for AwesomeDroid announcements, issue reports, and releases. Its address will retain `LocationSpoofer` for now so existing users can find the project. The legacy LocationSpoofer application will no longer receive maintenance or compatibility updates.
 
 [简体中文](README.md) | [English](README_EN.md)
 
@@ -12,7 +18,7 @@ We previously archived LocationSpoofer because of compliance risks and cases of 
 
 To reduce safety risks while continuing to help developers test their own software, we have decided to change direction: **we are building an Android emulator for developers, providing location, route, and device-environment simulation in a controlled testing environment.**
 
-The new tool will provide these capabilities through the Android system we maintain, for development and debugging of applications you own or are explicitly authorized to test. It is not intended for cracking third-party software or bypassing anti-cheat systems.
+AwesomeDroid will provide these capabilities through the Android system we maintain, for development and debugging of applications you own or are explicitly authorized to test. It is not intended for cracking third-party software or bypassing anti-cheat systems.
 
 ### Supported and planned platforms
 
@@ -24,7 +30,7 @@ Platform availability will be confirmed in release announcements. The first vers
 
 ### Main features
 
-The new tool is based on Android 17. Features already implemented or being refined include:
+AwesomeDroid is based on Android 17. Features already implemented or being refined include:
 
 - **Application debugging**: APK installation and launch, automatic package-name detection, Logcat viewing, per-application filtering, and search.
 - **Location and route simulation**: Setting locations, route editing, GPX import, and route playback.
@@ -54,7 +60,7 @@ You can report problems, bugs, and feature requests through this repository's [I
 
 When reporting an issue, please include the software version, operating system, reproduction steps, and relevant screenshots or logs. Remove account details, tokens, and sensitive personal information before sharing.
 
-**The reopened repository will be used for updates and future releases of the new project. The legacy LocationSpoofer application will no longer receive maintenance or compatibility updates.**
+**This repository will be used for AwesomeDroid updates and future releases. The legacy LocationSpoofer application will no longer receive maintenance or compatibility updates.**
 
 ---
 
