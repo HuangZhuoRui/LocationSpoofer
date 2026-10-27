@@ -1,114 +1,51 @@
-# AwesomeDroid
+# Awesome Edition
 
-### From LocationSpoofer to Android development and testing
+Two products for Android development and testing: the **LocationSpoofer** Android client and the **AwesomeDroid** desktop emulator.
 
-> 💬 **[Join the Telegram discussion group](https://t.me/+GYuDlpQLzRc3OTc1)** · Discuss testing needs, report issues, follow development updates, or just chat.
+[简体中文](README.md) · [Downloads and releases](https://github.com/HuangZhuoRui/LocationSpoofer/releases) · [Apply for test access](https://apply.awesomeedition.com/) · [Telegram community](https://t.me/+GYuDlpQLzRc3OTc1)
 
-**LocationSpoofer is taking a new direction under its new name: AwesomeDroid.**
+## Android client: LocationSpoofer
 
-From a location and environment simulation tool to an Android 17-based emulator for development and testing, we aim to bring location, route, sensor, and wireless environment simulation into a more controlled test environment, helping developers validate their own applications.
+LocationSpoofer provides location, route, and device-environment testing on Android devices with the owner's authorization. The maintained client uses the global scheme; available capabilities depend on the device, system, Root solution, and framework compatibility.
 
-This repository will remain the home for AwesomeDroid announcements, issue reports, and releases. Its address will retain `LocationSpoofer` for now so existing users can find the project. The legacy LocationSpoofer application will no longer receive maintenance or compatibility updates.
+For safety, Android testing requires an account and approval of the target application package names:
 
-[简体中文](README.md) | [English](README_EN.md)
+1. Create an account in the Android client or on the application website, then submit the target package names and test purpose at the [application website](https://apply.awesomeedition.com/).
+2. Each account can have at most **10 approved or pending package names**. Applications will be reviewed as soon as possible after submission.
+3. Once approved, use an active membership to test the approved applications. Approval remains in place when membership expires. You can still sign in, check for updates, and renew; maps and simulation features require an active membership.
 
-## Project direction and development update
+The Android client includes map selection, route planning and replay, route recording, location and motion simulation, and environment-data collection. Google roadmap, satellite imagery, and place search require an active membership and a network connection. Actual capabilities are subject to the client version and device status.
 
-We previously archived LocationSpoofer because of compliance risks and cases of misuse that departed from its original purpose of development and testing.
+## Desktop emulator: AwesomeDroid
 
-To reduce safety risks while continuing to help developers test their own software, we have decided to change direction: **we are building an Android emulator for developers, providing location, route, and device-environment simulation in a controlled testing environment.**
+AwesomeDroid is a separate Android development and testing emulator built around its accompanying Android 17 system. It provides application debugging, location and route testing, sensors, and wireless-environment tools. Each product follows its own version and service documentation.
 
-AwesomeDroid will provide these capabilities through the Android system we maintain, for development and debugging of applications you own or are explicitly authorized to test. It is not intended for cracking third-party software or bypassing anti-cheat systems.
+- **macOS on Apple Silicon**: the main development and validation platform.
+- **Windows x86_64**: under development and validation; availability will be announced separately.
+- Plans for other desktop platforms will be announced when available.
 
-### Supported and planned platforms
+This Release will provide Android client packages first. Emulator downloads and platform availability will be announced separately.
 
-- **macOS (Apple Silicon, M-series chips)**: The primary development and validation platform, with a native client.
-- **Windows (Intel / AMD x86_64)**: Support is planned. Work on the system and ARM64 application compatibility is underway; the client and Windows environment still require validation.
-- Release plans for Intel Macs and a Linux desktop client have not yet been determined.
+**Release timing:** AwesomeDroid remains under development and testing. Dates for public testing and general release have not yet been set. The availability and download details for macOS Apple Silicon and Windows will be announced in this repository and on Telegram once confirmed. The Android client Release is not an emulator release.
 
-Platform availability will be confirmed in release announcements. The first version is not guaranteed to launch on all platforms simultaneously.
+## Downloads and updates
 
-### Main features
+Android packages will be available through this repository's [Releases](https://github.com/HuangZhuoRui/LocationSpoofer/releases) and the in-app updater. Choose ARM64 for most 64-bit Android devices, or ARM32 for a supported 32-bit device.
 
-AwesomeDroid is based on Android 17. Features already implemented or being refined include:
+A compatibility update remains available for older non-global installations; the installed implementation uses the global scheme. Keep application data when updating, then configure the recommended global framework scope and restart the device.
 
-- **Application debugging**: APK installation and launch, automatic package-name detection, Logcat viewing, per-application filtering, and search.
-- **Location and route simulation**: Setting locations, route editing, GPX import, and route playback.
-- **Device-environment simulation**: Sensors, network bandwidth and latency, Wi-Fi, Bluetooth BLE, and NFC testing.
-- **Custom device profiles**: Configurable model, brand, serial number, IMEI, resolution, and other testing parameters.
-- **Fingerprint authentication debugging**: Virtual fingerprints and a bridge between macOS Touch ID and Android test authentication flows.
-- **Test scenario management**: Saving, importing, exporting, and repeating test scenarios.
-- **Accounts and memberships**: Account sign-in, membership authorization, and online loading of advanced testing modules.
+## Safety, permitted use, and disclaimer
 
-Some features depend on the accompanying system, host platform, or an active membership. Refer to the release notes for the exact scope. Simulation is intended for development and testing and is not equivalent to physical phone hardware. Touch ID bridging and software security simulation do not give Android genuine hardware-backed TEE or StrongBox capabilities.
+This project is intended for development, debugging, and testing of applications you own or are explicitly authorized to test. Simulated output does not represent actual location, physical activity, or wireless surroundings and must not be used as evidence of attendance, work, or athletic performance.
 
-### Expected release timeframe
+Provide accurate package names and purposes when applying. **Applications involving package names or intended uses suspected of fraud will be rejected.** If an approved application is later found to involve such concerns, its test access will be revoked. Users are responsible for ensuring their use is lawful and for their use of the project and test data; this project does not support or authorize fraud or other unlawful uses.
 
-**We currently expect to release the first development-testing version before November 2026, aiming for the end of October.**
+Root access and system-level interfaces can affect stability and data security. Use devices you are authorized to operate and back up important data. Maps and third-party services are subject to their respective terms and licenses; retain applicable source attribution.
 
-We are refining features and validating stability, security, and compatibility. The schedule may change if testing reveals issues that need to be resolved. Updates will be shared in this repository and the Telegram group.
+Relevant features may process account information, device identifiers, and test data selected by the user. Do not post passwords, access tokens, private keys, or personal location histories in issue reports.
 
-We plan to publish developer-tool builds through this repository's [Releases](https://github.com/HuangZhuoRui/LocationSpoofer/releases), with compliance and safety as design goals and subject to the relevant testing and review.
+## License and source
 
-### Discussion and feedback
+This project is provided under GNU GPL v3.0 or later as declared in [LICENSE](LICENSE). The Android release will include a corresponding source snapshot without Git history, server secrets, or databases. Third-party components retain their own copyrights and license terms.
 
-Join our new Telegram group to discuss development and testing needs, follow project updates, or simply chat:
-
-👉 **[Join the Telegram discussion group](https://t.me/+GYuDlpQLzRc3OTc1)**
-
-You can report problems, bugs, and feature requests through this repository's [Issues](https://github.com/HuangZhuoRui/LocationSpoofer/issues) or directly in the Telegram group.
-
-When reporting an issue, please include the software version, operating system, reproduction steps, and relevant screenshots or logs. Remove account details, tokens, and sensitive personal information before sharing.
-
-**This repository will be used for AwesomeDroid updates and future releases. The legacy LocationSpoofer application will no longer receive maintenance or compatibility updates.**
-
----
-
-Historical project information and usage guidance are retained below.
-
-## About the project
-
-Historical versions of this project contain implementations for location data simulation, route playback, wireless environment data collection, and sensor data simulation. Some features involve Root privileges and system interface hooking through LSPosed/Xposed.
-
-These capabilities can be used with applications you own or in test environments for which you have explicit authorization, for example:
-
-- Testing location and coordinate transformations.
-- Route playback and application compatibility testing.
-- Testing wireless environment and sensor interfaces.
-- Research into Android system interfaces and inter-process communication.
-
-Simulated data does not represent the device's actual location, actual physical activity, or actual wireless environment. It should not be used as evidence of attendance, athletic performance, or other real-world activity.
-
-## Safety and use guidance
-
-Before use, ensure that you have the required authorization to operate the device and the system being tested, and comply with applicable laws and relevant service agreements.
-
-Do not use this project for false attendance, falsifying assessment or exercise records, fraud, or unauthorized interference with third-party services.
-
-Root access and system-level hooks can affect system stability, application compatibility, and data security. Use a dedicated test device where possible and back up important data beforehand.
-
-These are lawful-use and safety notices. They do not add to or replace the permissions and conditions of the open-source license.
-
-## Data and privacy
-
-Some historical features may access device location, Wi-Fi, cellular, Bluetooth, and sensor information. Refer to the code and configuration of the relevant version for its actual data processing behavior.
-
-When using or developing the project further, clearly disclose the purposes and scope of processing, retention periods, and recipients; obtain the necessary authorization under applicable law; and provide appropriate data management and deletion mechanisms.
-
-Do not submit account passwords, access tokens, private keys, precise personal location histories, or other sensitive information in public issues, logs, or code.
-
-## Third-party services and components
-
-Map, search, and wireless environment data services are subject to their respective licenses, terms of service, and applicable laws.
-
-This project's open-source license does not grant equivalent rights to third-party data, APIs, trademarks, or map content. Check the relevant permissions before accessing, caching, displaying, or redistributing such content, and retain required copyright notices and attribution.
-
-## License
-
-This project is provided under GNU GPL version 3.0 or later, as declared in [LICENSE](LICENSE).
-
-Third-party components retain the copyrights and licenses of their respective rights holders. Follow the applicable licenses and retain relevant notices when copying, modifying, or distributing them.
-
-The project is provided under the applicable license, without warranties beyond those required by that license. This notice does not exclude liability that cannot lawfully be excluded.
-
-Copyright © 2026 SuseOAA
+Copyright © 2026 AwesomeEdition.com
