@@ -12,9 +12,9 @@ For safety, Android testing requires an account and approval of the target appli
 
 1. Create an account in the Android client or on the application website, then submit the target package names and test purpose at the [application website](https://apply.awesomeedition.com/).
 2. Each account can have at most **10 approved or pending package names**. Applications will be reviewed as soon as possible after submission.
-3. Once approved, use an active membership to test the approved applications. Approval remains in place when membership expires. You can still sign in, check for updates, and renew; maps and simulation features require an active membership.
+3. Once approved, free accounts can use OSM maps and place search, local location and route simulation, route recording, favorites, and cloud backup. Simulation remains limited to approved application package names. Google map services and cloud WiFi/cell datasets require an active membership; locally collected WiFi and cell data can be used for local simulation. Approved packages and free features remain available after membership expires.
 
-The Android client includes map selection, route planning and replay, route recording, location and motion simulation, and environment-data collection. Google roadmap, satellite imagery, and place search require an active membership and a network connection. Actual capabilities are subject to the client version and device status.
+The Android client includes map selection, route planning and replay, route recording, location and motion simulation, and environment-data collection. Google roadmap, satellite imagery, place search, reverse geocoding, and road routing require an active membership and a network connection. Actual capabilities are subject to the client version and device status.
 
 ## Desktop emulator: AwesomeDroid
 
@@ -44,8 +44,8 @@ Root access and system-level interfaces can affect stability and data security. 
 
 Relevant features may process account information, device identifiers, and test data selected by the user. Do not post passwords, access tokens, private keys, or personal location histories in issue reports.
 
-## License and source
+## License and third-party components
 
-This project is provided under GNU GPL v3.0 or later as declared in [LICENSE](LICENSE). The Android release will include a corresponding source snapshot without Git history, server secrets, or databases. Third-party components retain their own copyrights and license terms.
+This project is provided under GNU GPL v3.0 or later as declared in [LICENSE](LICENSE). Third-party components retain their own copyrights and license terms.
 
 Copyright © 2026 AwesomeEdition.com
