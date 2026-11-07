@@ -2,37 +2,64 @@
 
 面向 Android 应用开发与测试的两条产品线：手机端 **LocationSpoofer** 和桌面模拟器 **AwesomeDroid**。
 
-[English](README_EN.md) · [下载与版本](https://github.com/HuangZhuoRui/LocationSpoofer/releases) · [申请测试权限](https://apply.awesomeedition.com/) · [Telegram 交流群](https://t.me/+GYuDlpQLzRc3OTc1)
+[English](README_EN.md) · [下载与版本](https://github.com/HuangZhuoRui/LocationSpoofer/releases/latest) · [申请测试权限](https://apply.awesomeedition.com/) · [Telegram 交流群](https://t.me/+GYuDlpQLzRc3OTc1)
+
+## 下载
+
+### 手机端 · LocationSpoofer
+
+| 版本 | 架构 | 安装包 |
+| --- | --- | --- |
+| 全局 | 32 位 ARM | [下载 ARM32 安装包](https://github.com/HuangZhuoRui/LocationSpoofer/releases/download/v3.1.6/LocationSpoofer-v3.1.6-global-32bit-armeabi-v7a.apk) |
+| 全局 | 64 位 ARM | [下载 ARM64 安装包](https://github.com/HuangZhuoRui/LocationSpoofer/releases/download/v3.1.6/LocationSpoofer-v3.1.6-global-64bit-arm64-v8a.apk) |
+
+### 模拟器 · AwesomeDroid
+
+| 平台 | 架构 | 安装包 |
+| --- | --- | --- |
+| Windows | x64（x86_64） | [下载 AwesomeDroid 0.2.28](https://github.com/HuangZhuoRui/LocationSpoofer/releases/download/v3.1.6/AwesomeDroid-0.2.28-Windows-x64-Setup.exe) |
+| macOS | ARM64 | 开发中 |
 
 ## 手机端：LocationSpoofer
 
-LocationSpoofer 在用户授权的 Android 设备上提供位置、路线及设备环境测试能力。当前只维护全局方案，具体能力取决于设备系统、Root 方案与框架的兼容情况。
+LocationSpoofer 在用户授权的 Android 设备上提供位置、路线及设备环境测试能力。当前只维护全局方案，实际支持情况取决于系统、Root 方案及框架兼容性。
 
-出于安全考虑，手机端需要使用账号申请被测试应用的包名：
+### 开始使用
 
-1. 在手机端或申请网站创建账号，并在 [申请网站](https://apply.awesomeedition.com/) 提交应用包名和测试用途。
-2. 每个账号最多保留 **10 个已批准或待审核的包名**；提交申请后会尽快审核。
-3. 申请通过后，免费账号可使用 OSM 普通地图与地点搜索、本地位置及路线模拟、路线录制、收藏和云备份，模拟范围仅限已批准的应用包名。Google 地图服务和云端 WiFi、基站数据需要有效会员；自己采集的 WiFi、基站数据可用于本地模拟。会员到期后，已批准包名及免费功能继续保留。
+1. 在客户端注册并登录账号，注册邮箱为选填。
+2. 打开“申请测试包名”，从应用列表选择需要测试的应用，填写测试用途。支持多选应用，共用一份用途说明；也可以使用 [申请网站](https://apply.awesomeedition.com/)。
+3. 每个账号最多保留 **10 个已批准或待审核的包名**，提交后会尽快审核；客户端可查看申请状态与审核结果。
+4. 申请通过后，在生效应用列表中选择需要模拟的应用。已申请的包名支持删除，以释放名额。
 
-手机端包含地图选点、路线规划与回放、路线录制、位置及运动数据模拟，以及设备环境数据采集等功能。Google 平面图、卫星图、地点搜索、逆地理编码和道路规划需要有效会员与网络连接。实际支持范围以客户端和设备运行状态为准。
+### 功能与权限
 
-## 模拟器端：AwesomeDroid
+- **地图与搜索**：符合手机免费使用条件、已通过审核的账号可使用 OSM 地图与地点搜索；Google 平面图、卫星图、搜索、逆地理编码和道路规划需有效会员。
+- **位置与路线**：支持地图选点、收藏、定点模拟、路线模拟、路线录制、手绘路线和路线导入。循环路线从终点接回起点后继续，转弯采用平滑衔接。
+- **环境数据**：自己采集的 WiFi、基站数据可用于本地模拟；云端 WiFi、基站数据需有效会员。
+- **申请与会员**：已批准包名不因会员到期而失效。到期后仍可登录、检查更新及续费；符合条件的手机账号继续使用免费功能。
+- **设备限制**：模拟器及无 TEE／直接登录模式仍需有效会员才能使用地图、模拟等功能。具体状态以客户端显示为准。
 
-AwesomeDroid 是独立的 Android 开发测试模拟器，基于配套 Android 17 系统，提供应用调试、位置与路线、传感器和无线环境等测试能力。桌面模拟器与手机端分别以各自版本及服务说明为准。
+地图、传感器及其他系统能力的可用范围以设备实际运行情况为准。Google 服务需要网络连接。
 
-- **macOS Apple Silicon**：主要开发与验证平台。
-- **Windows x86_64**：正在开发与验收，开放时间以公告为准。
-- 其他桌面平台的计划以项目后续公告为准。
+### 安装与更新
 
-本次 Release 先提供手机端 Android 安装包；模拟器安装包与平台支持情况会另行公布。
+64 位 Android 设备优先选择 ARM64，支持的 32 位设备选择 ARM32。使用全局方案需要相应的 Root 和框架支持，请按客户端提示配置推荐作用域。
 
-**发布时间：** AwesomeDroid 目前仍在开发与测试，暂未确定公开测试或正式发布的日期。macOS Apple Silicon 和 Windows 的发布安排及下载方式将在确认后通过本仓库和 Telegram 公告，请勿将手机端 Release 视为模拟器发布。
+更新时保留数据覆盖安装，并重启设备加载模块。旧非全局版本保留兼容更新入口，更新后的实现统一为全局方案。客户端更新页面显示最新版更新日志；有新版时提供下载，已是最新版时可继续检查更新。
 
-## 下载与更新
+## Windows 模拟器：AwesomeDroid
 
-手机端安装包将在本仓库 [Releases](https://github.com/HuangZhuoRui/LocationSpoofer/releases) 和软件内更新中提供。64 位 Android 设备优先选择 ARM64 包，32 位设备选择 ARM32 包。
+AwesomeDroid 是独立的 Android 开发与测试模拟器，提供配套 Android 17 系统，以及应用安装与调试、位置和路线等测试能力。
 
-旧非全局安装保留对应的兼容更新入口，安装后的实现为全局方案。覆盖安装前请保留应用数据，安装后按全局版推荐的框架作用域配置并重启设备。
+Windows **0.2.28** 提供完整 x64 安装包，包含客户端、Emulator、ADB、运行依赖和系统镜像，无需另行下载镜像。
+
+1. 下载并双击 Windows 安装程序，按提示完成安装。
+2. 缺少 WebView2 时，安装器会联网补装。
+3. 启动后按客户端提示登录或注册，按账号权益使用对应功能。
+
+设备和应用数据保存在独立目录中，安装和更新不会主动清空该目录。登录就绪后自动检查更新，发现新版会显示版本号和更新日志；下载与安装需用户确认。
+
+**macOS ARM64** 版本继续开发，公开下载时间以本仓库和 Telegram 公告为准。本次不提供 macOS 安装包。
 
 ## 安全使用与免责声明
 
@@ -46,6 +73,6 @@ Root 和系统级接口可能影响设备稳定性与数据安全，请使用有
 
 ## 许可与第三方组件
 
-本项目按 [LICENSE](LICENSE) 中声明的 GNU GPL v3.0 或更新版本提供。第三方组件的版权和许可按各自声明执行。
+本仓库 LocationSpoofer 代码按 [LICENSE](LICENSE) 中声明的 GNU GPL v3.0 或更新版本提供。AwesomeDroid 及其随附组件以各自的许可声明为准；第三方组件的版权和许可按各自声明执行。
 
 Copyright © 2026 AwesomeEdition.com
