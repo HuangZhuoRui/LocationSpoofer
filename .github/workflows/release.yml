@@ -1,0 +1,210 @@
+name: Release on Version Update
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch: # 允许在 GitHub Actions 网页端手动一键触发
+
+permissions:
+  contents: write # 允许 GITHUB_TOKEN 创建 Release 和 Tag
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 需要完整的提交历史来获取 tag 和并生成 changelog
+
+      - name: Check Version Status
+        id: check_version
+        run: |
+          # 提取 gradle.properties 中的 APP_VERSION_NAME（多模块拆分后 :app 的 versionName
+          # 改为从这里读取，不再是 app/build.gradle.kts 里的字面量字符串）
+          VERSION_NAME=$(grep '^APP_VERSION_NAME=' gradle.properties | head -n 1 | cut -d'=' -f2)
+          echo "当前代码中的 versionName: $VERSION_NAME"
+
+          if [ -z "$VERSION_NAME" ]; then
+            echo "错误：未能从 gradle.properties 提取到 APP_VERSION_NAME，终止流程。"
+            exit 1
+          fi
+          
+          # 校验版本号格式（支持 x.y.z 或 x.y.z-beta-n / x.y.z-beta.n）
+          if ! echo "$VERSION_NAME" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-beta[-.][0-9]+)?$'; then
+            echo "警告：版本号 '$VERSION_NAME' 不符合标准语义化规范 (如 2.3.6 或 2.3.6-beta-1)，跳过发版。"
+            echo "changed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          TAG_NAME="v$VERSION_NAME"
+          
+          # 判断是否是 Beta 预发布版本
+          if echo "$VERSION_NAME" | grep -qi 'beta'; then
+            echo "当前版本为 Beta 测试版 (Pre-release)"
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            IS_PRERELEASE="true"
+          else
+            echo "当前版本为正式版本 (Stable Release)"
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            IS_PRERELEASE="false"
+          fi
+          
+          # 检查对应的 tag 是否已经在 GitHub 远端存在（精确匹配行尾，避免 v2.3.6-beta-1 误匹配 v2.3.6）
+          if git ls-remote --tags origin "refs/tags/$TAG_NAME" | grep -qE "refs/tags/$TAG_NAME(\^\{\})?$"; then
+            echo "Tag $TAG_NAME 已经在 GitHub 远端存在（已发布过），无需重复构建。"
+            echo "changed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "=========================================="
+          echo "检测到未发布的全新版本: $TAG_NAME"
+          echo "版本类型: $([ "$IS_PRERELEASE" = "true" ] && echo "Beta 预发布" || echo "正式稳定版")"
+          echo "状态检查通过，准备构建并发布！"
+          echo "=========================================="
+          echo "changed=true" >> $GITHUB_OUTPUT
+          echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+
+      - name: Generate Changelog
+        if: steps.check_version.outputs.changed == 'true'
+        id: changelog
+        run: |
+          TAG_NAME="${{ steps.check_version.outputs.tag }}"
+          IS_PRERELEASE="${{ steps.check_version.outputs.is_prerelease }}"
+          
+          # 获取上一个基准 tag
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            # Beta 版本：对比上一个 tag（包括旧 beta）
+            PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          else
+            # 正式版：对比上一个正式版 tag（排除包含 beta 的 tag，保证正式版汇总完整日志）
+            PREV_TAG=$(git tag -l --sort=-v:refname | grep -vE -- '-beta|_beta' | grep -vx "$TAG_NAME" | head -n 1 || echo "")
+            if [ -z "$PREV_TAG" ]; then
+              PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+            fi
+          fi
+          
+          # 获取提交记录
+          if [ -z "$PREV_TAG" ]; then
+            echo "没有找到上一个基准 tag，获取所有提交记录。"
+            COMMITS=$(git log --no-merges --pretty=format:"%s")
+          else
+            echo "上一个基准 tag: $PREV_TAG"
+            COMMITS=$(git log $PREV_TAG..HEAD --no-merges --pretty=format:"%s")
+          fi
+          
+          # 初始化 changelog 文件
+          echo "" > changelog.txt
+          
+          # 提取功能更新 (feat:)
+          FEATS=$(echo "$COMMITS" | grep "^feat:" | sed 's/^feat:[[:space:]]*/- /' || true)
+          if [ -n "$FEATS" ]; then
+            echo "## 功能" >> changelog.txt
+            echo "$FEATS" >> changelog.txt
+            echo "" >> changelog.txt
+          fi
+          
+          # 提取修复 (fix:)
+          FIXES=$(echo "$COMMITS" | grep "^fix:" | sed 's/^fix:[[:space:]]*/- /' || true)
+          if [ -n "$FIXES" ]; then
+            echo "## 修复" >> changelog.txt
+            echo "$FIXES" >> changelog.txt
+            echo "" >> changelog.txt
+          fi
+          
+          # 如果没有任何匹配的内容，至少留一行记录
+          if [ -z "$FEATS" ] && [ -z "$FIXES" ]; then
+            echo "常规更新与优化" >> changelog.txt
+          fi
+
+          cat >> changelog.txt <<'NOTES'
+
+          ## 安装包说明
+          - `LocationSpoofer-scoped-*`：非全局方案，在 LSPosed 作用域中勾选需要模拟的应用
+          - `LocationSpoofer-global-*`：全局方案，作用域勾选系统框架、电话、蓝牙，对全设备生效
+          - 两个方案二选一安装；绝大多数设备选择 `arm64-v8a`，32 位设备选择 `armeabi-v7a`
+          - 各系统的适配进度见 [ADAPTATION_PROGRESS.md](${{ github.server_url }}/${{ github.repository }}/blob/main/ADAPTATION_PROGRESS.md)
+
+          ## 从 2.x 版本升级
+          3.0 起包名改为 `com.vincenthzr.locationspoofer`，签名也已更换，**不能覆盖安装旧版**（旧包名 `com.suseoaa.locationspoofer`）——直接安装会多出一个独立的新应用，旧版的数据也不会带过来。请按以下步骤迁移：
+          1. 在旧版的「导入与导出数据」中导出备份（收藏位置、路线、采集数据等）；
+          2. 在 LSPosed 中停用旧版模块，然后卸载旧版；
+          3. 按上面的说明选择方案安装新版，在 LSPosed 中启用新模块、勾选作用域，并重启设备；
+          4. 在新版的「导入与导出数据」中导入第 1 步的备份。
+
+          新旧两个模块同时启用会同时改写定位服务、互相干扰，请务必先停用旧模块。
+          NOTES
+
+          cat changelog.txt
+          
+      - name: Setup Java
+        if: steps.check_version.outputs.changed == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17' # Gradle 需要 Java 17 进行编译
+          cache: 'gradle'
+
+      - name: Decode Keystore
+        if: steps.check_version.outputs.changed == 'true'
+        env:
+          ENCODED_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          echo $ENCODED_KEYSTORE | base64 -d > $RUNNER_TEMP/keystore.jks
+
+      - name: Build Release APK
+        if: steps.check_version.outputs.changed == 'true'
+        env:
+          KEYSTORE_FILE_PATH: ${{ runner.temp }}/keystore.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          chmod +x ./gradlew
+          # 两个模拟方案变体：scoped（非全局，Hook 目标 App 进程）与 global（全局，Hook 系统进程）。
+          # 必须分两次调用：同一次调用里并行打包多个变体 × ABI 拆分时，AGP 的 ApkFlinger 签名摘要任务
+          # 会和打包写文件任务抢占 ForkJoinPool 公共线程池而互相死锁（构建永久挂起、CPU 空闲）。
+          ./gradlew --no-daemon :app:assembleScopedRelease
+          ./gradlew --no-daemon :app:assembleGlobalRelease
+
+          # 统一重命名为 LocationSpoofer-<scheme>-<abi>-<tag>.apk 收集到 dist 目录。
+          # App 内更新检查（UpdateViewModel.isAssetForCurrentScheme）依赖文件名里的 -<scheme>- 标记挑选对应方案的安装包。
+          TAG="${{ steps.check_version.outputs.tag }}"
+          DIST_DIR="app/build/outputs/apk/dist"
+          mkdir -p "$DIST_DIR"
+          for SCHEME in scoped global; do
+            APK_DIR="app/build/outputs/apk/$SCHEME/release"
+            find "$APK_DIR" -name "*.apk" -print0 | while IFS= read -r -d '' file; do
+              BASENAME=$(basename "$file")
+              if [[ "$BASENAME" == *"arm64-v8a"* ]]; then
+                mv "$file" "$DIST_DIR/LocationSpoofer-$SCHEME-arm64-v8a-$TAG.apk"
+              elif [[ "$BASENAME" == *"armeabi-v7a"* ]]; then
+                mv "$file" "$DIST_DIR/LocationSpoofer-$SCHEME-armeabi-v7a-$TAG.apk"
+              else
+                mv "$file" "$DIST_DIR/LocationSpoofer-$SCHEME-$TAG.apk"
+              fi
+            done
+          done
+          ls -l "$DIST_DIR"
+
+          # 2 个方案 × 2 个 ABI，缺任何一个都不发版，避免发出只有单一方案的残缺 Release
+          APK_COUNT=$(find "$DIST_DIR" -name "LocationSpoofer-*.apk" | wc -l)
+          if [ "$APK_COUNT" -ne 4 ]; then
+            echo "错误：预期 4 个安装包（scoped/global × arm64-v8a/armeabi-v7a），实际 $APK_COUNT 个，终止发版。"
+            exit 1
+          fi
+
+      - name: Publish GitHub Release
+        if: steps.check_version.outputs.changed == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.check_version.outputs.tag }}
+          name: LocationSpoofer ${{ steps.check_version.outputs.tag }}
+          body_path: changelog.txt
+          prerelease: ${{ steps.check_version.outputs.is_prerelease == 'true' }}
+          files: app/build/outputs/apk/dist/LocationSpoofer-*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

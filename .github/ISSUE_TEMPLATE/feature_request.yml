@@ -1,0 +1,43 @@
+name: 💡 功能建议 (Feature Request)
+description: 为 LocationSpoofer 提出新的功能构想或体验改进建议
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你为 LocationSpoofer 提出宝贵的改进建议！请在下方详细描述你的功能设想。
+
+  - type: textarea
+    id: problem_statement
+    attributes:
+      label: 这个建议是否与某个具体问题或痛点相关？
+      description: 请清晰描述当前使用过程中遇到的局限性或不便之处。
+      placeholder: "在使用特定场景时，经常遇到..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: proposed_solution
+    attributes:
+      label: 期望的解决方案 / 功能设计
+      description: 请详细阐述你希望新增的功能机制或交互体验。
+      placeholder: "希望增加一个选项以支持..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 你考虑过的替代方案或临时解决办法
+      description: 描述你曾尝试过的其他备选方案或变通方法。
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: 补充说明
+      description: 添加关于该功能建议的任何其他上下文、原型草图或截图。
+    validations:
+      required: false
