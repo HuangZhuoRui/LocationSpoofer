@@ -4,6 +4,23 @@
 
 <p>基于 KernelSU + LSPosed 的 Android 系统级虚拟定位与无线环境伪装框架</p>
 <p>Android system-level location spoofing and wireless environment simulation framework based on KernelSU + LSPosed</p>
+[English](README_EN.md) · [下载与版本](https://github.com/HuangZhuoRui/LocationSpoofer/releases/latest) · [申请测试权限](https://apply.awesomeedition.com/) · [Telegram 交流群](https://t.me/+GYuDlpQLzRc3OTc1)
+
+## 下载
+
+### 手机端 · LocationSpoofer
+
+| 版本 | 架构 | 安装包 |
+| --- | --- | --- |
+| 全局 | 32 位 ARM | [下载 ARM32 安装包](https://github.com/HuangZhuoRui/LocationSpoofer/releases/download/v3.1.6/LocationSpoofer-v3.1.6-global-32bit-armeabi-v7a.apk) |
+| 全局 | 64 位 ARM | [下载 ARM64 安装包](https://github.com/HuangZhuoRui/LocationSpoofer/releases/download/v3.1.6/LocationSpoofer-v3.1.6-global-64bit-arm64-v8a.apk) |
+
+### 模拟器 · AwesomeDroid
+
+| 平台 | 架构 | 安装包 |
+| --- | --- | --- |
+| Windows | x64（x86_64） | [下载 AwesomeDroid 0.2.28](https://github.com/HuangZhuoRui/LocationSpoofer/releases/download/v3.1.6/AwesomeDroid-0.2.28-Windows-x64-Setup.exe) |
+| macOS | ARM64 | 开发中 |
 
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
 [![Android](https://img.shields.io/badge/Android-8.0%2B-green.svg)](https://developer.android.com)
@@ -58,6 +75,44 @@
   • 真实路网拟合与红绿灯停候   • 空间反距离加权 (IDW) 插值    • Settings.Secure 开关覆写
   • 悬浮窗遥控阻尼摇杆         • 步频与计步传感器联动         • MultiDex 动态 Class 拦截
 ```
+LocationSpoofer 在用户授权的 Android 设备上提供位置、路线及设备环境测试能力。当前只维护全局方案，实际支持情况取决于系统、Root 方案及框架兼容性。
+
+### 开始使用
+
+1. 在客户端注册并登录账号，注册邮箱为选填。
+2. 打开“申请测试包名”，从应用列表选择需要测试的应用，填写测试用途。支持多选应用，共用一份用途说明；也可以使用 [申请网站](https://apply.awesomeedition.com/)。
+3. 每个账号最多保留 **10 个已批准或待审核的包名**，提交后会尽快审核；客户端可查看申请状态与审核结果。
+4. 申请通过后，在生效应用列表中选择需要模拟的应用。已申请的包名支持删除，以释放名额。
+
+### 功能与权限
+
+- **地图与搜索**：符合手机免费使用条件、已通过审核的账号可使用 OSM 地图与地点搜索；Google 平面图、卫星图、搜索、逆地理编码和道路规划需有效会员。
+- **位置与路线**：支持地图选点、收藏、定点模拟、路线模拟、路线录制、手绘路线和路线导入。循环路线从终点接回起点后继续，转弯采用平滑衔接。
+- **环境数据**：自己采集的 WiFi、基站数据可用于本地模拟；云端 WiFi、基站数据需有效会员。
+- **申请与会员**：已批准包名不因会员到期而失效。到期后仍可登录、检查更新及续费；符合条件的手机账号继续使用免费功能。
+- **设备限制**：模拟器及无 TEE／直接登录模式仍需有效会员才能使用地图、模拟等功能。具体状态以客户端显示为准。
+
+地图、传感器及其他系统能力的可用范围以设备实际运行情况为准。Google 服务需要网络连接。
+
+### 安装与更新
+
+64 位 Android 设备优先选择 ARM64，支持的 32 位设备选择 ARM32。使用全局方案需要相应的 Root 和框架支持，请按客户端提示配置推荐作用域。
+
+更新时保留数据覆盖安装，并重启设备加载模块。旧非全局版本保留兼容更新入口，更新后的实现统一为全局方案。客户端更新页面显示最新版更新日志；有新版时提供下载，已是最新版时可继续检查更新。
+
+## Windows 模拟器：AwesomeDroid
+
+AwesomeDroid 是独立的 Android 开发与测试模拟器，提供配套 Android 17 系统，以及应用安装与调试、位置和路线等测试能力。
+
+Windows **0.2.28** 提供完整 x64 安装包，包含客户端、Emulator、ADB、运行依赖和系统镜像，无需另行下载镜像。
+
+1. 下载并双击 Windows 安装程序，按提示完成安装。
+2. 缺少 WebView2 时，安装器会联网补装。
+3. 启动后按客户端提示登录或注册，按账号权益使用对应功能。
+
+设备和应用数据保存在独立目录中，安装和更新不会主动清空该目录。登录就绪后自动检查更新，发现新版会显示版本号和更新日志；下载与安装需用户确认。
+
+**macOS ARM64** 版本继续开发，公开下载时间以本仓库和 Telegram 公告为准。本次不提供 macOS 安装包。
 
 ### 1. 多地图引擎与坐标系适配
 * **三引擎自由切换**：集成高德 3D 地图 (AMap)、百度地图 (BaiduMap) 与 Google Maps，满足境内外不同场景下的路网检索与 POI 选点需求。
@@ -82,6 +137,7 @@
   $$\Delta L_{\text{lateral}} = 0.15 \cdot \mathcal{N}(0, 1) \quad (\text{米})$$
 
   模拟人类真实行走时身体左右晃动的步态特征。
+本仓库 LocationSpoofer 代码按 [LICENSE](LICENSE) 中声明的 GNU GPL v3.0 或更新版本提供。AwesomeDroid 及其随附组件以各自的许可声明为准；第三方组件的版权和许可按各自声明执行。
 
 * **高度（Altitude）与精度（Accuracy）慢漂移**：精度值与海拔高度动态波动，模拟大气对流层延迟与卫星几何分布的自然变化。
 
