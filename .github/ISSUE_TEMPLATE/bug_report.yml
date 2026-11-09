@@ -1,0 +1,116 @@
+name: 🐛 缺陷报告 (Bug Report)
+description: 反馈 LocationSpoofer 的异常、崩溃或模拟失效等问题
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你反馈问题！在提交前，请先阅读 [项目文档](README.md) 并搜索 [已有的 Issues](https://github.com/your-username/LocationSpoofer/issues) 确认是否已有相同反馈。
+
+  - type: input
+    id: app_version
+    attributes:
+      label: LocationSpoofer 版本 / Commit Hash
+      description: 你正在使用的 LocationSpoofer 版本或 Git Commit Hash 是什么？
+      placeholder: "例如：v1.2.0 或 commit abc1234"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: android_version
+    attributes:
+      label: Android 系统版本
+      description: 你的设备运行的 Android 系统版本是？
+      options:
+        - "Android 15 (API 35)"
+        - "Android 14 (API 34)"
+        - "Android 13 (API 33)"
+        - "Android 12 / 12L (API 31/32)"
+        - "Android 11 (API 30)"
+        - "Android 10 (API 29)"
+        - "Android 9.0 (API 28)"
+        - "Android 8.0 / 8.1 (API 26/27)"
+        - "其他"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: root_solution
+    attributes:
+      label: Root 方案与 LSPosed 框架
+      description: 你使用的是哪种 Root 管理器与 Xposed 框架？
+      options:
+        - "KernelSU + LSPosed (API 101+)"
+        - "APatch + LSPosed (API 101+)"
+        - "Magisk + LSPosed (API 101+)"
+        - "其他 Root / Xposed 环境"
+    validations:
+      required: true
+
+  - type: input
+    id: device_model
+    attributes:
+      label: 设备机型与系统 ROM
+      description: 你的设备型号与当前刷入的系统 ROM 是？
+      placeholder: "例如：小米 13 Pro (HyperOS 1.0) / Google Pixel 7 (LineageOS 21)"
+    validations:
+      required: false
+
+  - type: input
+    id: target_app
+    attributes:
+      label: 目标应用名称与版本
+      description: 发生定位或环境模拟问题的目标应用包名与版本号
+      placeholder: "例如：微信 (com.tencent.mm) v8.0.48 / 百度地图 (com.baidu.BaiduMap) v20.0"
+    validations:
+      required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 请清晰明确地描述遇到的问题、异常表现或崩溃现象。
+      placeholder: "请详细描述具体是哪个环节出现异常..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction_steps
+    attributes:
+      label: 复现步骤
+      description: 请提供详细的重现步骤。
+      value: |
+        1. 打开 LocationSpoofer 并配置...
+        2. 点击启动模拟...
+        3. 打开目标应用...
+        4. 观察到异常现象...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: 期望行为
+      description: 描述你期望的正常模拟效果或功能表现。
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 错误日志 / Logcat
+      description: 请在此处粘贴相关的 Logcat 日志或 LSPosed 模块运行日志。
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 自检清单
+      options:
+        - label: 我已检索过历史 Issues，确认这不是重复的问题。
+          required: true
+        - label: 我已授予 LocationSpoofer Root 权限，并在 LSPosed 模块作用域中勾选了目标 App。
+          required: true
