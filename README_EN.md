@@ -10,8 +10,8 @@ Two products for Android development and testing: the **LocationSpoofer** Androi
 
 | Edition | Architecture | Installer |
 | --- | --- | --- |
-| Global | 32-bit ARM | [Download ARM32 APK](https://github.com/HuangZhuoRui/LocationSpoofer/releases/download/v3.1.6/LocationSpoofer-v3.1.6-global-32bit-armeabi-v7a.apk) |
-| Global | 64-bit ARM | [Download ARM64 APK](https://github.com/HuangZhuoRui/LocationSpoofer/releases/download/v3.1.6/LocationSpoofer-v3.1.6-global-64bit-arm64-v8a.apk) |
+| Global | 32-bit ARM | [Download ARM32 APK](https://github.com/HuangZhuoRui/LocationSpoofer/releases/download/v3.1.7/LocationSpoofer-v3.1.7-global-32bit-armeabi-v7a.apk) |
+| Global | 64-bit ARM | [Download ARM64 APK](https://github.com/HuangZhuoRui/LocationSpoofer/releases/download/v3.1.7/LocationSpoofer-v3.1.7-global-64bit-arm64-v8a.apk) |
 
 ### Desktop emulator · AwesomeDroid
 
@@ -33,13 +33,13 @@ LocationSpoofer provides location, route, and device-environment testing on Andr
 
 ### Features and access
 
-- **Maps and search:** approved accounts on eligible phones can use OSM maps and place search for free. Google roadmap, satellite imagery, search, reverse geocoding, and road routing require an active membership.
+- **Maps and search:** approved accounts on eligible phones can use OSM maps and place search for free. AMap roadmap, satellite imagery, and place search require an active membership. A privacy notice and consent prompt are shown before first use.
 - **Location and routes:** map selection, favorites, fixed-location simulation, route simulation, physical route recording, freehand drawing, and route import. Looping routes connect the end back to the start and repeat in the original direction, with smooth turns.
 - **Environment data:** locally collected WiFi and cell data can be used for local simulation. Cloud WiFi and cell datasets require an active membership.
 - **Applications and membership:** approved packages remain approved after membership expires. Users can still sign in, check for updates, and renew; eligible phone accounts retain access to free features.
 - **Device restrictions:** emulators and devices using the no-TEE/direct-login mode still require an active membership for maps, simulation, and related features. Check the client for the device's current status.
 
-Map, sensor, and other system capabilities depend on the actual device environment. Google services require a network connection.
+Map, sensor, and other system capabilities depend on the actual device environment. Online maps and search require a network connection.
 
 ### Installation and updates
 

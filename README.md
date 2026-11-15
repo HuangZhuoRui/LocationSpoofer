@@ -10,8 +10,8 @@
 
 | 版本 | 架构 | 安装包 |
 | --- | --- | --- |
-| 全局 | 32 位 ARM | [下载 ARM32 安装包](https://github.com/HuangZhuoRui/LocationSpoofer/releases/download/v3.1.6/LocationSpoofer-v3.1.6-global-32bit-armeabi-v7a.apk) |
-| 全局 | 64 位 ARM | [下载 ARM64 安装包](https://github.com/HuangZhuoRui/LocationSpoofer/releases/download/v3.1.6/LocationSpoofer-v3.1.6-global-64bit-arm64-v8a.apk) |
+| 全局 | 32 位 ARM | [下载 ARM32 安装包](https://github.com/HuangZhuoRui/LocationSpoofer/releases/download/v3.1.7/LocationSpoofer-v3.1.7-global-32bit-armeabi-v7a.apk) |
+| 全局 | 64 位 ARM | [下载 ARM64 安装包](https://github.com/HuangZhuoRui/LocationSpoofer/releases/download/v3.1.7/LocationSpoofer-v3.1.7-global-64bit-arm64-v8a.apk) |
 
 ### 模拟器 · AwesomeDroid
 
@@ -33,13 +33,13 @@ LocationSpoofer 在用户授权的 Android 设备上提供位置、路线及设�
 
 ### 功能与权限
 
-- **地图与搜索**：符合手机免费使用条件、已通过审核的账号可使用 OSM 地图与地点搜索；Google 平面图、卫星图、搜索、逆地理编码和道路规划需有效会员。
+- **地图与搜索**：符合手机免费使用条件、已通过审核的账号可使用 OSM 地图与地点搜索；高德普通地图、卫星图和地点搜索需有效会员。首次使用前会展示高德服务隐私说明并征求同意。
 - **位置与路线**：支持地图选点、收藏、定点模拟、路线模拟、路线录制、手绘路线和路线导入。循环路线从终点接回起点后继续，转弯采用平滑衔接。
 - **环境数据**：自己采集的 WiFi、基站数据可用于本地模拟；云端 WiFi、基站数据需有效会员。
 - **申请与会员**：已批准包名不因会员到期而失效。到期后仍可登录、检查更新及续费；符合条件的手机账号继续使用免费功能。
 - **设备限制**：模拟器及无 TEE／直接登录模式仍需有效会员才能使用地图、模拟等功能。具体状态以客户端显示为准。
 
-地图、传感器及其他系统能力的可用范围以设备实际运行情况为准。Google 服务需要网络连接。
+地图、传感器及其他系统能力的可用范围以设备实际运行情况为准。在线地图和搜索需要网络连接。
 
 ### 安装与更新
 
