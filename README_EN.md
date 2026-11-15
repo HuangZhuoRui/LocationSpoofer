@@ -17,7 +17,7 @@ Two products for Android development and testing: the **LocationSpoofer** Androi
 
 | Platform | Architecture | Installer |
 | --- | --- | --- |
-| Windows | x64 (x86_64) | [Download AwesomeDroid 0.2.28](https://github.com/HuangZhuoRui/LocationSpoofer/releases/download/v3.1.6/AwesomeDroid-0.2.28-Windows-x64-Setup.exe) |
+| Windows | x64 (x86_64) | [Download AwesomeDroid 0.2.28](https://github.com/HuangZhuoRui/LocationSpoofer/releases/download/v3.1.7/AwesomeDroid-0.2.28-Windows-x64-Setup.exe) |
 | macOS | ARM64 | In development |
 
 ## Android client: LocationSpoofer
